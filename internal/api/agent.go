@@ -87,6 +87,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				Query string `json:"query"`
 			}
 			_ = json.Unmarshal([]byte(c.Args.String()), &args)
+			if q := strings.TrimSpace(args.Query); q != "" {
+				// Fremdriftssteg til tidslinjen i frontend.
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Søker: " + q})
+				emit("data: " + string(meta))
+			}
 			result, sources := s.runWebSearch(ctx, args.Query)
 			if len(sources) > 0 {
 				// Kildene sendes som metadata til frontend — de skal ikke stå i svaret.
