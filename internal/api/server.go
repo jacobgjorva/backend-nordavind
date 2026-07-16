@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/jacobgjorva/backend-nordavind/internal/config"
 	"github.com/jacobgjorva/backend-nordavind/internal/router"
+	"github.com/jacobgjorva/backend-nordavind/internal/search"
 )
 
 // Server ruter OpenAI-kompatible forespørsler videre til upstream-endepunktet.
@@ -19,6 +21,7 @@ type Server struct {
 	cfg    config.Config
 	client *http.Client
 	log    *slog.Logger
+	search *search.Client
 }
 
 func NewServer(cfg config.Config, log *slog.Logger) *Server {
@@ -27,7 +30,26 @@ func NewServer(cfg config.Config, log *slog.Logger) *Server {
 		// Ingen total timeout: streaming-svar kan stå åpne lenge.
 		client: &http.Client{Timeout: 0},
 		log:    log,
+		search: search.NewClient(),
 	}
+}
+
+// newUpstreamRequest lager en autentisert POST mot upstream chat/completions.
+func (s *Server) newUpstreamRequest(ctx context.Context, body io.Reader) (*http.Request, error) {
+	upstreamURL := strings.TrimSuffix(s.cfg.UpstreamBaseURL, "/") + "/chat/completions"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, upstreamURL, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if s.cfg.UpstreamAPIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+s.cfg.UpstreamAPIKey)
+	}
+	return req, nil
+}
+
+func formatSearchContext(query string, results []search.Result, pages []string) string {
+	return search.FormatContext(query, results, pages)
 }
 
 func (s *Server) Handler() http.Handler {
@@ -50,17 +72,18 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "kunne ikke lese request", http.StatusBadRequest)
 		return
 	}
-	body, pickedModel := withRoutingDefaults(body)
+	var parsed struct {
+		Messages []router.Message `json:"messages"`
+	}
+	_ = json.Unmarshal(body, &parsed)
+	searchCtx := s.maybeSearch(r.Context(), parsed.Messages)
 
-	upstreamURL := strings.TrimSuffix(s.cfg.UpstreamBaseURL, "/") + "/chat/completions"
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, upstreamURL, bytes.NewReader(body))
+	body, pickedModel := withRoutingDefaults(body, searchCtx)
+
+	req, err := s.newUpstreamRequest(r.Context(), bytes.NewReader(body))
 	if err != nil {
 		http.Error(w, "intern feil", http.StatusInternalServerError)
 		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if s.cfg.UpstreamAPIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+s.cfg.UpstreamAPIKey)
 	}
 
 	resp, err := s.client.Do(req)
@@ -86,7 +109,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 // spørsmålets kompleksitet, og sorterer leverandører på throughput hvis
 // klienten ikke har bedt om noe annet — enkelte leverandører har flere
 // sekunder høyere time-to-first-token for samme modell.
-func withRoutingDefaults(body []byte) ([]byte, string) {
+func withRoutingDefaults(body []byte, searchCtx string) ([]byte, string) {
 	var payload struct {
 		Model    string           `json:"model"`
 		Messages []router.Message `json:"messages"`
@@ -114,15 +137,33 @@ func withRoutingDefaults(body []byte) ([]byte, string) {
 				"role": "system",
 				"content": "Svar alltid så kort som mulig: færrest mulig setninger og ord. " +
 					"Hard grense: maks 5 setninger totalt. Ingen innledning, ingen oppsummering, " +
-					"ingen gjentakelse av spørsmålet. Bruk lister kun når det er strengt nødvendig.",
+					"ingen gjentakelse av spørsmålet. Bruk lister kun når det er strengt nødvendig. " +
+						"Aldri gjett eller dikt opp fakta: er du usikker på en person, bedrift eller " +
+						"hendelse, si at du ikke vet. " +
+						"Er forespørselen vag eller underspesifisert: IKKE gi et generisk svar og IKKE " +
+						"still en liste med spørsmål. Still NØYAKTIG ETT oppfølgingsspørsmål — kun det " +
+						"aller viktigste som mangler. Ett spørsmålstegn totalt i hele svaret.",
 			}
 			full["messages"] = append([]any{system}, raw...)
+		}
+	}
+
+	if searchCtx != "" {
+		if raw, ok := full["messages"].([]any); ok {
+			full["messages"] = append([]any{map[string]any{
+				"role":    "system",
+				"content": searchCtx,
+			}}, raw...)
 		}
 	}
 
 	model := payload.Model
 	if model == "auto" {
 		model = router.Pick(payload.Messages)
+		if searchCtx != "" && model == router.LightModel {
+			// Kildesyntese fra websøk er for tungt for flash.
+			model = router.MidModel
+		}
 		full["model"] = model
 		if model == router.HeavyModel {
 			// Tyngre spørsmål får resonnering uansett hva klienten ba om.

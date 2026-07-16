@@ -5,6 +5,9 @@ import "strings"
 // Modellvalg for auto-ruting.
 const (
 	LightModel = "glm-4.7-flash"
+	// MidModel brukes når websøk-kontekst skal syntetiseres — for tungt for flash,
+	// og kimi-modellene ignorerer reasoning-av og bruker 20s+ på trivielle oppslag.
+	MidModel   = "glm-5-turbo"
 	HeavyModel = "glm-5.2"
 )
 
