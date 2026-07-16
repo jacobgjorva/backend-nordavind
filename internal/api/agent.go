@@ -70,10 +70,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			return
 		}
 
-		calls, done := s.relayUntilToolCalls(resp, emit)
+		calls := s.relayRound(resp, emit)
 		resp.Body.Close()
-		if done || len(calls) == 0 {
+		if len(calls) == 0 {
 			// Svaret er streamet ferdig til klienten.
+			emit("data: [DONE]")
 			return
 		}
 
@@ -117,38 +118,28 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	emit("data: [DONE]")
 }
 
-// relayUntilToolCalls leser SSE-strømmen fra upstream. Reasoning- og
-// modellinfo videresendes til klienten. Kommer det innhold, pipes resten
-// gjennom (done=true). Kommer det tool_calls, samles de og returneres.
-func (s *Server) relayUntilToolCalls(resp *http.Response, emit func(string)) (map[int]*toolCall, bool) {
+// relayRound leser én SSE-runde fra upstream. Innhold, reasoning og
+// modellinfo videresendes til klienten; tool_calls samles og returneres
+// (aldri videresendt). Upstreams [DONE] svelges — løkka eier avslutningen.
+func (s *Server) relayRound(resp *http.Response, emit func(string)) map[int]*toolCall {
 	calls := map[int]*toolCall{}
-	piping := false
 
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if piping {
-			emit(line)
-			continue
-		}
 		trimmed := strings.TrimSpace(line)
 		if !strings.HasPrefix(trimmed, "data:") {
 			continue
 		}
 		data := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
 		if data == "[DONE]" {
-			if len(calls) > 0 {
-				return calls, false
-			}
-			emit("data: [DONE]")
-			return nil, true
+			break
 		}
 
 		var chunk struct {
 			Choices []struct {
 				Delta struct {
-					Content   string `json:"content"`
 					ToolCalls []struct {
 						Index    int    `json:"index"`
 						ID       string `json:"id"`
@@ -164,11 +155,9 @@ func (s *Server) relayUntilToolCalls(resp *http.Response, emit func(string)) (ma
 			emit(line)
 			continue
 		}
-		delta := chunk.Choices[0].Delta
 
-		switch {
-		case len(delta.ToolCalls) > 0:
-			for _, tc := range delta.ToolCalls {
+		if tcs := chunk.Choices[0].Delta.ToolCalls; len(tcs) > 0 {
+			for _, tc := range tcs {
 				c, ok := calls[tc.Index]
 				if !ok {
 					c = &toolCall{}
@@ -182,20 +171,12 @@ func (s *Server) relayUntilToolCalls(resp *http.Response, emit func(string)) (ma
 				}
 				c.Args.WriteString(tc.Function.Arguments)
 			}
-		case delta.Content != "":
-			// Selve svaret har startet — pipe resten rått.
-			emit(line)
-			piping = true
-		default:
-			// Reasoning/modellinfo — videresend for thinking-UI.
-			emit(line)
+			continue
 		}
+		// Innhold, reasoning og modellinfo går rett til klienten.
+		emit(line)
 	}
-	if piping {
-		emit("data: [DONE]")
-		return nil, true
-	}
-	return calls, len(calls) == 0
+	return calls
 }
 
 // runWebSearch utfører søk + sidehenting og formaterer kildekontekst.
