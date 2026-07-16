@@ -59,7 +59,7 @@ func (c *Client) fetchPage(ctx context.Context, url string, maxChars int) string
 		if err != nil {
 			return ""
 		}
-		return extractPDF(raw, maxChars)
+		return ExtractPDF(raw, maxChars)
 	}
 	if ct != "" && !strings.Contains(ct, "text/html") && !strings.Contains(ct, "text/plain") {
 		return ""
@@ -87,7 +87,7 @@ func (c *Client) fetchPage(ctx context.Context, url string, maxChars int) string
 
 // extractPDF henter ren tekst fra en PDF — norske regnskaps- og offentlige
 // data ligger ofte kun i PDF.
-func extractPDF(raw []byte, maxChars int) (out string) {
+func ExtractPDF(raw []byte, maxChars int) (out string) {
 	// pdf-biblioteket kan panikke på korrupte filer.
 	defer func() {
 		if recover() != nil {
