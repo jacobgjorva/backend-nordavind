@@ -25,6 +25,7 @@ type Server struct {
 	search  *search.Client
 	store   *store.Store
 	pricing *pricing
+	rates   *usdNok
 }
 
 func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
@@ -36,6 +37,7 @@ func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 		search:  search.NewClient(),
 		store:   st,
 		pricing: newPricing(),
+		rates:   &usdNok{},
 	}
 	go s.pricing.refreshLoop(&http.Client{Timeout: 30 * time.Second}, cfg.UpstreamBaseURL, cfg.UpstreamAPIKey)
 	return s
