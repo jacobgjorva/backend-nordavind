@@ -1,6 +1,7 @@
 package search
 
 import (
+	"bytes"
 	"context"
 	"html"
 	"io"
@@ -8,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+
+	"github.com/ledongthuc/pdf"
 )
 
 var (
@@ -39,7 +42,7 @@ func (c *Client) fetchPage(ctx context.Context, url string, maxChars int) string
 		return ""
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
-	req.Header.Set("Accept", "text/html")
+	req.Header.Set("Accept", "text/html,application/pdf")
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -49,7 +52,15 @@ func (c *Client) fetchPage(ctx context.Context, url string, maxChars int) string
 	if resp.StatusCode != http.StatusOK {
 		return ""
 	}
+
 	ct := resp.Header.Get("Content-Type")
+	if strings.Contains(ct, "application/pdf") || strings.HasSuffix(strings.ToLower(url), ".pdf") {
+		raw, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+		if err != nil {
+			return ""
+		}
+		return extractPDF(raw, maxChars)
+	}
 	if ct != "" && !strings.Contains(ct, "text/html") && !strings.Contains(ct, "text/plain") {
 		return ""
 	}
@@ -66,9 +77,64 @@ func (c *Client) fetchPage(ctx context.Context, url string, maxChars int) string
 	text = html.UnescapeString(text)
 	text = reSpace.ReplaceAllString(text, " ")
 	text = reLines.ReplaceAllString(strings.TrimSpace(text), "\n")
+	text = stripBoilerplate(text)
 
 	if r := []rune(text); len(r) > maxChars {
 		text = string(r[:maxChars])
 	}
 	return text
+}
+
+// extractPDF henter ren tekst fra en PDF — norske regnskaps- og offentlige
+// data ligger ofte kun i PDF.
+func extractPDF(raw []byte, maxChars int) (out string) {
+	// pdf-biblioteket kan panikke på korrupte filer.
+	defer func() {
+		if recover() != nil {
+			out = ""
+		}
+	}()
+	r, err := pdf.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	if err != nil {
+		return ""
+	}
+	var b strings.Builder
+	for i := 1; i <= r.NumPage() && b.Len() < maxChars*2; i++ {
+		p := r.Page(i)
+		if p.V.IsNull() {
+			continue
+		}
+		txt, err := p.GetPlainText(nil)
+		if err != nil {
+			continue
+		}
+		b.WriteString(txt)
+		b.WriteString("\n")
+	}
+	text := reSpace.ReplaceAllString(b.String(), " ")
+	text = reLines.ReplaceAllString(strings.TrimSpace(text), "\n")
+	if r2 := []rune(text); len(r2) > maxChars {
+		text = string(r2[:maxChars])
+	}
+	return text
+}
+
+// stripBoilerplate fjerner meny/nav-støy: korte linjer uten tall (typisk
+// lenkelister) droppes, slik at tegnbudsjettet brukes på innhold og tabeller.
+func stripBoilerplate(text string) string {
+	var keep []string
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if len(strings.Fields(trimmed)) < 4 && !strings.ContainsAny(trimmed, "0123456789") {
+			continue
+		}
+		keep = append(keep, trimmed)
+	}
+	if len(keep) == 0 {
+		return text
+	}
+	return strings.Join(keep, "\n")
 }

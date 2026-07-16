@@ -18,7 +18,8 @@ var webSearchTool = map[string]any{
 		"name": "web_search",
 		"description": "Søk på nettet. Bruk når svaret krever fersk informasjon eller fakta om " +
 			"spesifikke entiteter (personer, selskaper, produkter, steder, hendelser) du ikke er " +
-			"sikker på. Gjør ett kall per entitet/tema.",
+			"sikker på. Gjør ett kall per entitet/tema. Ga ikke resultatene svaret: søk igjen " +
+			"med en annen formulering før du gir opp.",
 		"parameters": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -86,7 +87,12 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				Query string `json:"query"`
 			}
 			_ = json.Unmarshal([]byte(c.Args.String()), &args)
-			result := s.runWebSearch(ctx, args.Query)
+			result, sources := s.runWebSearch(ctx, args.Query)
+			if len(sources) > 0 {
+				// Kildene sendes som metadata til frontend — de skal ikke stå i svaret.
+				meta, _ := json.Marshal(map[string]any{"nordavind_sources": sources})
+				emit("data: " + string(meta))
+			}
 			assistantCalls = append(assistantCalls, map[string]any{
 				"id":   c.ID,
 				"type": "function",
@@ -179,20 +185,31 @@ func (s *Server) relayRound(resp *http.Response, emit func(string)) map[int]*too
 	return calls
 }
 
+// sourceRef er kildemetadata som streames til frontend.
+type sourceRef struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
+}
+
 // runWebSearch utfører søk + sidehenting og formaterer kildekontekst.
-func (s *Server) runWebSearch(ctx context.Context, query string) string {
+func (s *Server) runWebSearch(ctx context.Context, query string) (string, []sourceRef) {
 	if strings.TrimSpace(query) == "" {
-		return "Tomt søk."
+		return "Tomt søk.", nil
 	}
 	results, err := s.search.Search(ctx, query)
 	if err != nil || len(results) == 0 {
 		s.log.Warn("websøk feilet", "query", query, "err", err)
-		return "Søket ga ingen resultater."
+		return "Søket ga ingen resultater.", nil
 	}
 	if len(results) > 3 {
 		results = results[:3]
 	}
-	pages := s.search.FetchPages(ctx, results, 2000)
+	pages := s.search.FetchPages(ctx, results, 3000)
 	s.log.Info("websøk", "query", query, "treff", len(results))
-	return search.FormatContext(query, results, pages)
+
+	refs := make([]sourceRef, 0, len(results))
+	for _, r := range results {
+		refs = append(refs, sourceRef{Title: r.Title, URL: r.URL})
+	}
+	return search.FormatContext(query, results, pages), refs
 }

@@ -140,8 +140,9 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 					"Hard grense: maks 5 setninger totalt. Ingen innledning, ingen oppsummering, " +
 					"ingen gjentakelse av spørsmålet. Bruk lister kun når det er strengt nødvendig. " +
 						"Aldri gjett eller dikt opp fakta: bruk web_search-verktøyet når svaret krever " +
-						"fersk eller spesifikk faktainformasjon, og oppgi kilde-URL. Finner du ikke svaret " +
-						"i kildene, si det. " +
+						"fersk eller spesifikk faktainformasjon. Finner du ikke svaret i kildene, si det. " +
+						"Skriv ALDRI URL-er, lenker eller 'Kilde:'-henvisninger i svaret — kildene vises " +
+						"automatisk for brukeren. " +
 						"Er forespørselen vag eller underspesifisert: IKKE gi et generisk svar og IKKE " +
 						"still en liste med spørsmål. Still NØYAKTIG ETT oppfølgingsspørsmål — kun det " +
 						"aller viktigste som mangler. Ett spørsmålstegn totalt i hele svaret.",
@@ -160,7 +161,13 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 		}
 	}
 	if _, ok := full["provider"]; !ok {
-		full["provider"] = map[string]any{"sort": "throughput"}
+		if model == router.MidModel {
+			// Enkelte tredjeparts-leverandører (f.eks. nebul) feiler på
+			// tool-streaming for Mistral — bruk Mistrals egen.
+			full["provider"] = map[string]any{"order": []string{"mistral"}}
+		} else {
+			full["provider"] = map[string]any{"sort": "throughput"}
+		}
 	}
 
 	patched, err := json.Marshal(full)

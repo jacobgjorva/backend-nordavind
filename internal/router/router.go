@@ -3,10 +3,11 @@ package router
 import "strings"
 
 // Modellvalg for auto-ruting. Standardmodellen må håndtere tool-calling
-// (web_search) pålitelig; kimi-modellene ignorerer reasoning-av og flash er
-// for svak til verktøybruk og kildesyntese.
+// (web_search) pålitelig og skrive korrekt norsk; kimi-modellene ignorerer
+// reasoning-av, flash er for svak til verktøybruk, og glm-5-turbo lekker
+// engelsk resonnering i norske svar. Mistral er også 58 % billigere.
 const (
-	MidModel   = "glm-5-turbo"
+	MidModel   = "mistral-large-3"
 	HeavyModel = "glm-5.2"
 )
 
