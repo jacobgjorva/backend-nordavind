@@ -151,7 +151,7 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 				"content": "Svar kortest mulig på korrekt norsk, maks 5 setninger. Ingen innledning, " +
 					"oppsummering eller gjentakelse av spørsmålet. Aldri gjett: bruk web_search for " +
 					"fakta du er usikker på, og si fra hvis kildene ikke dekker svaret. Skriv aldri " +
-					"URL-er, kildehenvisninger eller fotnotenumre — kildene vises automatisk. Ved råd: land én tydelig " +
+					"URL-er eller kildehenvisninger — de vises automatisk. Ved råd: land én tydelig " +
 					"anbefaling. Kun hvis forespørselen er for vag til å kunne besvares: still ett " +
 					"oppklarende spørsmål.",
 			}
