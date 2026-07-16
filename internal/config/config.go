@@ -12,6 +12,8 @@ type Config struct {
 	UpstreamBaseURL string // OpenAI-kompatibelt endepunkt, f.eks. https://api.eurouter.ai/v1
 	UpstreamAPIKey  string
 	AllowedOrigins  []string // CORS-origins for frontend (kommaseparert i env)
+	DBPath          string   // SQLite-fil for tenants/brukere/sesjoner
+	AuthRequired    bool     // krev innlogging på chat/extract (av i dev til frontend er klar)
 }
 
 func Load() (Config, error) {
@@ -21,6 +23,8 @@ func Load() (Config, error) {
 		UpstreamBaseURL: getenv("UPSTREAM_BASE_URL", "https://api.eurouter.ai/api/v1"),
 		UpstreamAPIKey:  os.Getenv("EUROUTER_API_KEY"),
 		AllowedOrigins:  strings.Split(getenv("ALLOWED_ORIGIN", "http://localhost:5173,http://127.0.0.1:5173"), ","),
+		DBPath:          getenv("DB_PATH", "data/nordavind.db"),
+		AuthRequired:    getenv("AUTH_REQUIRED", "false") == "true",
 	}
 	if cfg.UpstreamAPIKey == "" {
 		return cfg, fmt.Errorf("EUROUTER_API_KEY må være satt")

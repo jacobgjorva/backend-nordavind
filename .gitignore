@@ -2,3 +2,4 @@
 .env.local
 bin/
 git_rules.md
+data/

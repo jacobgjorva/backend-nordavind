@@ -14,6 +14,7 @@ import (
 	"github.com/jacobgjorva/backend-nordavind/internal/config"
 	"github.com/jacobgjorva/backend-nordavind/internal/router"
 	"github.com/jacobgjorva/backend-nordavind/internal/search"
+	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
 
 // Server ruter OpenAI-kompatible forespørsler videre til upstream-endepunktet.
@@ -22,15 +23,17 @@ type Server struct {
 	client *http.Client
 	log    *slog.Logger
 	search *search.Client
+	store  *store.Store
 }
 
-func NewServer(cfg config.Config, log *slog.Logger) *Server {
+func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 	return &Server{
 		cfg: cfg,
 		// Ingen total timeout: streaming-svar kan stå åpne lenge.
 		client: &http.Client{Timeout: 0},
 		log:    log,
 		search: search.NewClient(),
+		store:  st,
 	}
 }
 
@@ -51,8 +54,11 @@ func (s *Server) newUpstreamRequest(ctx context.Context, body io.Reader) (*http.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
-	mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
-	mux.HandleFunc("POST /v1/extract", s.handleExtract)
+	mux.HandleFunc("POST /v1/auth/request-code", s.handleRequestCode)
+	mux.HandleFunc("POST /v1/auth/verify", s.handleVerifyCode)
+	mux.HandleFunc("GET /v1/auth/me", s.requireAuth(s.handleMe))
+	mux.HandleFunc("POST /v1/chat/completions", s.requireAuth(s.handleChatCompletions))
+	mux.HandleFunc("POST /v1/extract", s.requireAuth(s.handleExtract))
 	return s.cors(mux)
 }
 
