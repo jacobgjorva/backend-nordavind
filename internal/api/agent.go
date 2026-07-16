@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/search"
+	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
 
 // Modellen bestemmer selv når den trenger nettet — ingen forhåndsdommer.
@@ -44,6 +46,8 @@ type toolCall struct {
 func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full map[string]any) {
 	full["tools"] = []any{webSearchTool}
 	full["stream"] = true
+	// Be upstream om tokenforbruk i streamen.
+	full["stream_options"] = map[string]any{"include_usage": true}
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	flusher, _ := w.(http.Flusher)
@@ -53,6 +57,12 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			flusher.Flush()
 		}
 	}
+
+	start := time.Now()
+	var promptTokens, completionTokens, searches int
+	defer func() {
+		s.recordUsage(ctx, full, promptTokens, completionTokens, searches, time.Since(start))
+	}()
 
 	for round := 0; round <= maxToolRounds; round++ {
 		body, err := json.Marshal(full)
@@ -71,8 +81,10 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			return
 		}
 
-		calls := s.relayRound(resp, emit)
+		calls, usage := s.relayRound(resp, emit)
 		resp.Body.Close()
+		promptTokens += usage.PromptTokens
+		completionTokens += usage.CompletionTokens
 		if len(calls) == 0 {
 			// Svaret er streamet ferdig til klienten.
 			emit("data: [DONE]")
@@ -92,6 +104,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Søker: " + q})
 				emit("data: " + string(meta))
 			}
+			searches++
 			result, sources := s.runWebSearch(ctx, args.Query)
 			if len(sources) > 0 {
 				// Kildene sendes som metadata til frontend — de skal ikke stå i svaret.
@@ -129,11 +142,18 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	emit("data: [DONE]")
 }
 
+// roundUsage er tokenforbruket rapportert i én streaming-runde.
+type roundUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+}
+
 // relayRound leser én SSE-runde fra upstream. Innhold, reasoning og
 // modellinfo videresendes til klienten; tool_calls samles og returneres
 // (aldri videresendt). Upstreams [DONE] svelges — løkka eier avslutningen.
-func (s *Server) relayRound(resp *http.Response, emit func(string)) map[int]*toolCall {
+func (s *Server) relayRound(resp *http.Response, emit func(string)) (map[int]*toolCall, roundUsage) {
 	calls := map[int]*toolCall{}
+	var usage roundUsage
 
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
@@ -149,6 +169,7 @@ func (s *Server) relayRound(resp *http.Response, emit func(string)) map[int]*too
 		}
 
 		var chunk struct {
+			Usage   *roundUsage `json:"usage"`
 			Choices []struct {
 				Delta struct {
 					ToolCalls []struct {
@@ -163,6 +184,9 @@ func (s *Server) relayRound(resp *http.Response, emit func(string)) map[int]*too
 			} `json:"choices"`
 		}
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil || len(chunk.Choices) == 0 {
+			if err == nil && chunk.Usage != nil {
+				usage = *chunk.Usage
+			}
 			emit(line)
 			continue
 		}
@@ -187,7 +211,31 @@ func (s *Server) relayRound(resp *http.Response, emit func(string)) map[int]*too
 		// Innhold, reasoning og modellinfo går rett til klienten.
 		emit(line)
 	}
-	return calls
+	return calls, usage
+}
+
+// recordUsage lagrer forbruket for forespørselen. Uinnlogget (dev) logges
+// uten tenant/bruker.
+func (s *Server) recordUsage(ctx context.Context, full map[string]any, promptTokens, completionTokens, searches int, dur time.Duration) {
+	if promptTokens == 0 && completionTokens == 0 {
+		return
+	}
+	model, _ := full["model"].(string)
+	event := store.UsageEvent{
+		Model:            model,
+		PromptTokens:     promptTokens,
+		CompletionTokens: completionTokens,
+		CostUSD:          s.pricing.cost(model, promptTokens, completionTokens),
+		Searches:         searches,
+		DurationMS:       dur.Milliseconds(),
+	}
+	if user, ok := ctx.Value(userKey).(store.User); ok {
+		event.TenantID = user.TenantID
+		event.UserID = user.ID
+	}
+	if err := s.store.InsertUsage(event); err != nil {
+		s.log.Warn("kunne ikke lagre usage", "err", err)
+	}
 }
 
 // sourceRef er kildemetadata som streames til frontend.

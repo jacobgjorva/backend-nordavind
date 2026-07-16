@@ -19,22 +19,26 @@ import (
 
 // Server ruter OpenAI-kompatible forespørsler videre til upstream-endepunktet.
 type Server struct {
-	cfg    config.Config
-	client *http.Client
-	log    *slog.Logger
-	search *search.Client
-	store  *store.Store
+	cfg     config.Config
+	client  *http.Client
+	log     *slog.Logger
+	search  *search.Client
+	store   *store.Store
+	pricing *pricing
 }
 
 func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
-	return &Server{
+	s := &Server{
 		cfg: cfg,
 		// Ingen total timeout: streaming-svar kan stå åpne lenge.
-		client: &http.Client{Timeout: 0},
-		log:    log,
-		search: search.NewClient(),
-		store:  st,
+		client:  &http.Client{Timeout: 0},
+		log:     log,
+		search:  search.NewClient(),
+		store:   st,
+		pricing: newPricing(),
 	}
+	go s.pricing.refreshLoop(&http.Client{Timeout: 30 * time.Second}, cfg.UpstreamBaseURL, cfg.UpstreamAPIKey)
+	return s
 }
 
 // newUpstreamRequest lager en autentisert POST mot upstream chat/completions.
@@ -57,6 +61,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/auth/request-code", s.handleRequestCode)
 	mux.HandleFunc("POST /v1/auth/verify", s.handleVerifyCode)
 	mux.HandleFunc("GET /v1/auth/me", s.requireAuth(s.handleMe))
+	mux.HandleFunc("GET /v1/usage/daily", s.requireAuth(s.handleUsageDaily))
 	mux.HandleFunc("POST /v1/chat/completions", s.requireAuth(s.handleChatCompletions))
 	mux.HandleFunc("POST /v1/extract", s.requireAuth(s.handleExtract))
 	return s.cors(mux)
