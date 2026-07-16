@@ -151,7 +151,10 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 		}
 	}
 
-	model := payload.Model
+	model := router.Resolve(payload.Model)
+	if model != payload.Model {
+		full["model"] = model
+	}
 	if model == "auto" {
 		model = router.Pick(payload.Messages)
 		full["model"] = model

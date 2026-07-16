@@ -11,6 +11,21 @@ const (
 	HeavyModel = "glm-5.2"
 )
 
+// Nordavind-aliaser: vindskalaen navngir modellnivåene utad.
+var Aliases = map[string]string{
+	"bris":  MidModel,
+	"storm": HeavyModel,
+}
+
+// Resolve oversetter et alias til faktisk modellnavn; ukjente navn
+// returneres uendret.
+func Resolve(model string) string {
+	if real, ok := Aliases[strings.ToLower(model)]; ok {
+		return real
+	}
+	return model
+}
+
 // heavyMarkers er signaler på at spørsmålet krever tolkning, analyse
 // eller flerstegs resonnering.
 var heavyMarkers = []string{
