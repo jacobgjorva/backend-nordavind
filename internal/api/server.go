@@ -48,10 +48,6 @@ func (s *Server) newUpstreamRequest(ctx context.Context, body io.Reader) (*http.
 	return req, nil
 }
 
-func formatSearchContext(query string, results []search.Result, pages []string) string {
-	return search.FormatContext(query, results, pages)
-}
-
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
@@ -72,15 +68,20 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "kunne ikke lese request", http.StatusBadRequest)
 		return
 	}
-	var parsed struct {
-		Messages []router.Message `json:"messages"`
+	patched, full, pickedModel := withRoutingDefaults(body)
+
+	// Streaming-forespørsler kjøres i agent-løkken (web_search som verktøy).
+	if wantsStream, _ := full["stream"].(bool); wantsStream {
+		s.runAgentLoop(r.Context(), w, full)
+		s.log.Info("chat/completions",
+			"mode", "agent",
+			"model", pickedModel,
+			"dur", time.Since(start).Round(time.Millisecond),
+		)
+		return
 	}
-	_ = json.Unmarshal(body, &parsed)
-	searchCtx := s.maybeSearch(r.Context(), parsed.Messages)
 
-	body, pickedModel := withRoutingDefaults(body, searchCtx)
-
-	req, err := s.newUpstreamRequest(r.Context(), bytes.NewReader(body))
+	req, err := s.newUpstreamRequest(r.Context(), bytes.NewReader(patched))
 	if err != nil {
 		http.Error(w, "intern feil", http.StatusInternalServerError)
 		return
@@ -109,17 +110,17 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 // spørsmålets kompleksitet, og sorterer leverandører på throughput hvis
 // klienten ikke har bedt om noe annet — enkelte leverandører har flere
 // sekunder høyere time-to-first-token for samme modell.
-func withRoutingDefaults(body []byte, searchCtx string) ([]byte, string) {
+func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 	var payload struct {
 		Model    string           `json:"model"`
 		Messages []router.Message `json:"messages"`
 	}
 	var full map[string]any
 	if err := json.Unmarshal(body, &full); err != nil {
-		return body, ""
+		return body, map[string]any{}, ""
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return body, ""
+		return body, full, ""
 	}
 
 	// Hard stil-grense: korte svar, maks 5 setninger. Legges først hvis
@@ -138,8 +139,9 @@ func withRoutingDefaults(body []byte, searchCtx string) ([]byte, string) {
 				"content": "Svar alltid så kort som mulig: færrest mulig setninger og ord. " +
 					"Hard grense: maks 5 setninger totalt. Ingen innledning, ingen oppsummering, " +
 					"ingen gjentakelse av spørsmålet. Bruk lister kun når det er strengt nødvendig. " +
-						"Aldri gjett eller dikt opp fakta: er du usikker på en person, bedrift eller " +
-						"hendelse, si at du ikke vet. " +
+						"Aldri gjett eller dikt opp fakta: bruk web_search-verktøyet når svaret krever " +
+						"fersk eller spesifikk faktainformasjon, og oppgi kilde-URL. Finner du ikke svaret " +
+						"i kildene, si det. " +
 						"Er forespørselen vag eller underspesifisert: IKKE gi et generisk svar og IKKE " +
 						"still en liste med spørsmål. Still NØYAKTIG ETT oppfølgingsspørsmål — kun det " +
 						"aller viktigste som mangler. Ett spørsmålstegn totalt i hele svaret.",
@@ -148,22 +150,9 @@ func withRoutingDefaults(body []byte, searchCtx string) ([]byte, string) {
 		}
 	}
 
-	if searchCtx != "" {
-		if raw, ok := full["messages"].([]any); ok {
-			full["messages"] = append([]any{map[string]any{
-				"role":    "system",
-				"content": searchCtx,
-			}}, raw...)
-		}
-	}
-
 	model := payload.Model
 	if model == "auto" {
 		model = router.Pick(payload.Messages)
-		if searchCtx != "" && model == router.LightModel {
-			// Kildesyntese fra websøk er for tungt for flash.
-			model = router.MidModel
-		}
 		full["model"] = model
 		if model == router.HeavyModel {
 			// Tyngre spørsmål får resonnering uansett hva klienten ba om.
@@ -176,9 +165,9 @@ func withRoutingDefaults(body []byte, searchCtx string) ([]byte, string) {
 
 	patched, err := json.Marshal(full)
 	if err != nil {
-		return body, model
+		return body, full, model
 	}
-	return patched, model
+	return patched, full, model
 }
 
 // flushCopy kopierer upstream-responsen til klienten og flusher fortløpende,

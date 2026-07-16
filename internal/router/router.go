@@ -2,11 +2,10 @@ package router
 
 import "strings"
 
-// Modellvalg for auto-ruting.
+// Modellvalg for auto-ruting. Standardmodellen må håndtere tool-calling
+// (web_search) pålitelig; kimi-modellene ignorerer reasoning-av og flash er
+// for svak til verktøybruk og kildesyntese.
 const (
-	LightModel = "glm-4.7-flash"
-	// MidModel brukes når websøk-kontekst skal syntetiseres — for tungt for flash,
-	// og kimi-modellene ignorerer reasoning-av og bruker 20s+ på trivielle oppslag.
 	MidModel   = "glm-5-turbo"
 	HeavyModel = "glm-5.2"
 )
@@ -39,7 +38,7 @@ func Pick(messages []Message) string {
 	if isHeavy(last) {
 		return HeavyModel
 	}
-	return LightModel
+	return MidModel
 }
 
 func isHeavy(text string) bool {

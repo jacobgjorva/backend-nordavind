@@ -1,0 +1,217 @@
+package api
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http"
+	"strings"
+
+	"github.com/jacobgjorva/backend-nordavind/internal/search"
+)
+
+// Modellen bestemmer selv når den trenger nettet — ingen forhåndsdommer.
+var webSearchTool = map[string]any{
+	"type": "function",
+	"function": map[string]any{
+		"name": "web_search",
+		"description": "Søk på nettet. Bruk når svaret krever fersk informasjon eller fakta om " +
+			"spesifikke entiteter (personer, selskaper, produkter, steder, hendelser) du ikke er " +
+			"sikker på. Gjør ett kall per entitet/tema.",
+		"parameters": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"query": map[string]any{"type": "string", "description": "Selvstendig søkestreng"},
+			},
+			"required": []string{"query"},
+		},
+	},
+}
+
+const maxToolRounds = 3
+
+type toolCall struct {
+	ID   string
+	Name string
+	Args strings.Builder
+}
+
+// runAgentLoop kjører chat-forespørselen med web_search som verktøy.
+// Reasoning og modell-chunks streames til klienten underveis; når modellen
+// begynner på selve svaret, pipes resten rått gjennom.
+func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full map[string]any) {
+	full["tools"] = []any{webSearchTool}
+	full["stream"] = true
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	flusher, _ := w.(http.Flusher)
+	emit := func(line string) {
+		w.Write([]byte(line + "\n"))
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+
+	for round := 0; round <= maxToolRounds; round++ {
+		body, err := json.Marshal(full)
+		if err != nil {
+			return
+		}
+		req, err := s.newUpstreamRequest(ctx, bytes.NewReader(body))
+		if err != nil {
+			return
+		}
+		resp, err := s.client.Do(req)
+		if err != nil {
+			s.log.Error("upstream-kall feilet", "err", err)
+			emit(`data: {"error":"upstream utilgjengelig"}`)
+			emit("data: [DONE]")
+			return
+		}
+
+		calls, done := s.relayUntilToolCalls(resp, emit)
+		resp.Body.Close()
+		if done || len(calls) == 0 {
+			// Svaret er streamet ferdig til klienten.
+			return
+		}
+
+		// Utfør verktøykallene og legg resultatene inn i samtalen.
+		assistantCalls := make([]any, 0, len(calls))
+		toolMsgs := make([]any, 0, len(calls))
+		for _, c := range calls {
+			var args struct {
+				Query string `json:"query"`
+			}
+			_ = json.Unmarshal([]byte(c.Args.String()), &args)
+			result := s.runWebSearch(ctx, args.Query)
+			assistantCalls = append(assistantCalls, map[string]any{
+				"id":   c.ID,
+				"type": "function",
+				"function": map[string]any{
+					"name":      c.Name,
+					"arguments": c.Args.String(),
+				},
+			})
+			toolMsgs = append(toolMsgs, map[string]any{
+				"role":         "tool",
+				"tool_call_id": c.ID,
+				"content":      result,
+			})
+		}
+		msgs, _ := full["messages"].([]any)
+		msgs = append(msgs, map[string]any{
+			"role":       "assistant",
+			"content":    "",
+			"tool_calls": assistantCalls,
+		})
+		msgs = append(msgs, toolMsgs...)
+		full["messages"] = msgs
+
+		if round == maxToolRounds-1 {
+			// Siste runde: tving frem et svar uten flere verktøykall.
+			full["tool_choice"] = "none"
+		}
+	}
+	emit("data: [DONE]")
+}
+
+// relayUntilToolCalls leser SSE-strømmen fra upstream. Reasoning- og
+// modellinfo videresendes til klienten. Kommer det innhold, pipes resten
+// gjennom (done=true). Kommer det tool_calls, samles de og returneres.
+func (s *Server) relayUntilToolCalls(resp *http.Response, emit func(string)) (map[int]*toolCall, bool) {
+	calls := map[int]*toolCall{}
+	piping := false
+
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if piping {
+			emit(line)
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
+		if data == "[DONE]" {
+			if len(calls) > 0 {
+				return calls, false
+			}
+			emit("data: [DONE]")
+			return nil, true
+		}
+
+		var chunk struct {
+			Choices []struct {
+				Delta struct {
+					Content   string `json:"content"`
+					ToolCalls []struct {
+						Index    int    `json:"index"`
+						ID       string `json:"id"`
+						Function struct {
+							Name      string `json:"name"`
+							Arguments string `json:"arguments"`
+						} `json:"function"`
+					} `json:"tool_calls"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil || len(chunk.Choices) == 0 {
+			emit(line)
+			continue
+		}
+		delta := chunk.Choices[0].Delta
+
+		switch {
+		case len(delta.ToolCalls) > 0:
+			for _, tc := range delta.ToolCalls {
+				c, ok := calls[tc.Index]
+				if !ok {
+					c = &toolCall{}
+					calls[tc.Index] = c
+				}
+				if tc.ID != "" {
+					c.ID = tc.ID
+				}
+				if tc.Function.Name != "" {
+					c.Name = tc.Function.Name
+				}
+				c.Args.WriteString(tc.Function.Arguments)
+			}
+		case delta.Content != "":
+			// Selve svaret har startet — pipe resten rått.
+			emit(line)
+			piping = true
+		default:
+			// Reasoning/modellinfo — videresend for thinking-UI.
+			emit(line)
+		}
+	}
+	if piping {
+		emit("data: [DONE]")
+		return nil, true
+	}
+	return calls, len(calls) == 0
+}
+
+// runWebSearch utfører søk + sidehenting og formaterer kildekontekst.
+func (s *Server) runWebSearch(ctx context.Context, query string) string {
+	if strings.TrimSpace(query) == "" {
+		return "Tomt søk."
+	}
+	results, err := s.search.Search(ctx, query)
+	if err != nil || len(results) == 0 {
+		s.log.Warn("websøk feilet", "query", query, "err", err)
+		return "Søket ga ingen resultater."
+	}
+	if len(results) > 3 {
+		results = results[:3]
+	}
+	pages := s.search.FetchPages(ctx, results, 2000)
+	s.log.Info("websøk", "query", query, "treff", len(results))
+	return search.FormatContext(query, results, pages)
+}

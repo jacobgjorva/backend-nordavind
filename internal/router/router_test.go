@@ -8,8 +8,8 @@ func TestPick(t *testing.T) {
 		text string
 		want string
 	}{
-		{"trivielt", "Hva er hovedstaden i Norge?", LightModel},
-		{"smalltalk", "hei, hvordan går det?", LightModel},
+		{"trivielt", "Hva er hovedstaden i Norge?", MidModel},
+		{"smalltalk", "hei, hvordan går det?", MidModel},
 		{"analyse", "Analyser salgstallene våre for Q2", HeavyModel},
 		{"sammenligning", "Sammenlign React og SolidJS for vår bruk", HeavyModel},
 		{"hvorfor", "Hvorfor faller marginen når volumet øker?", HeavyModel},
