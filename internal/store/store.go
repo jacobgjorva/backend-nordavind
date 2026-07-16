@@ -46,7 +46,10 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1) // SQLite: én skriver
 	s := &Store{db: db}
-	return s, s.migrate()
+	if err := s.migrate(); err != nil {
+		return nil, err
+	}
+	return s, s.migrateUsage()
 }
 
 func (s *Store) Close() error { return s.db.Close() }
