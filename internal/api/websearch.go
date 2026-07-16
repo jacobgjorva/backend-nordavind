@@ -62,7 +62,7 @@ func (s *Server) maybeSearch(ctx context.Context, messages []router.Message) str
 	if len(results) > 3 {
 		results = results[:3]
 	}
-	pages := s.search.FetchPages(ctx, results, 3500)
+	pages := s.search.FetchPages(ctx, results, 2000)
 	s.log.Info("websøk", "query", query, "treff", len(results))
 	return formatSearchContext(query, results, pages)
 }
