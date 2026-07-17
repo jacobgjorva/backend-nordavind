@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/config"
+	"github.com/jacobgjorva/backend-nordavind/internal/connector"
 	"github.com/jacobgjorva/backend-nordavind/internal/router"
 	"github.com/jacobgjorva/backend-nordavind/internal/search"
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
@@ -19,25 +20,31 @@ import (
 
 // Server ruter OpenAI-kompatible forespørsler videre til upstream-endepunktet.
 type Server struct {
-	cfg     config.Config
-	client  *http.Client
-	log     *slog.Logger
-	search  *search.Client
-	store   *store.Store
-	pricing *pricing
-	rates   *usdNok
+	cfg      config.Config
+	client   *http.Client
+	log      *slog.Logger
+	search   *search.Client
+	store    *store.Store
+	pricing  *pricing
+	rates    *usdNok
+	credsKey []byte // krypteringsnøkkel for kundens databasekredensialer
 }
 
 func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
+	key, err := connector.LoadKey(cfg.DBPath)
+	if err != nil {
+		log.Error("kunne ikke laste krypteringsnøkkel", "err", err)
+	}
 	s := &Server{
 		cfg: cfg,
 		// Ingen total timeout: streaming-svar kan stå åpne lenge.
-		client:  &http.Client{Timeout: 0},
-		log:     log,
-		search:  search.NewClient(),
-		store:   st,
-		pricing: newPricing(),
-		rates:   &usdNok{},
+		client:   &http.Client{Timeout: 0},
+		log:      log,
+		search:   search.NewClient(),
+		store:    st,
+		pricing:  newPricing(),
+		rates:    &usdNok{},
+		credsKey: key,
 	}
 	go s.pricing.refreshLoop(&http.Client{Timeout: 30 * time.Second}, cfg.UpstreamBaseURL, cfg.UpstreamAPIKey)
 	return s
@@ -70,6 +77,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/chats/{id}/messages", s.requireAuth(s.handleAppendChatMessage))
 	mux.HandleFunc("DELETE /v1/chats/{id}", s.requireAuth(s.handleDeleteChat))
 	mux.HandleFunc("POST /v1/chats/{id}/title", s.requireAuth(s.handleGenerateChatTitle))
+	mux.HandleFunc("GET /v1/connections", s.requireAdmin(s.handleListConnections))
+	mux.HandleFunc("POST /v1/connections", s.requireAdmin(s.handleCreateConnection))
+	mux.HandleFunc("DELETE /v1/connections/{id}", s.requireAdmin(s.handleDeleteConnection))
+	mux.HandleFunc("GET /v1/connections/{id}/schema", s.requireAdmin(s.handleConnectionSchema))
+	mux.HandleFunc("PUT /v1/connections/{id}/config", s.requireAdmin(s.handleSaveConnectionConfig))
 	mux.HandleFunc("GET /v1/admin/users", s.requireAdmin(s.handleAdminListUsers))
 	mux.HandleFunc("POST /v1/admin/users", s.requireAdmin(s.handleAdminCreateUser))
 	mux.HandleFunc("DELETE /v1/admin/users/{id}", s.requireAdmin(s.handleAdminDeleteUser))
@@ -225,7 +237,7 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 		if slices.Contains(s.cfg.AllowedOrigins, origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		}
 		if r.Method == http.MethodOptions {

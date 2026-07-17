@@ -52,7 +52,10 @@ func Open(path string) (*Store, error) {
 	if err := s.migrateUsage(); err != nil {
 		return nil, err
 	}
-	return s, s.migrateChats()
+	if err := s.migrateChats(); err != nil {
+		return nil, err
+	}
+	return s, s.migrateConnections()
 }
 
 func (s *Store) Close() error { return s.db.Close() }

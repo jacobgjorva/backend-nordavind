@@ -45,7 +45,12 @@ type toolCall struct {
 // Reasoning og modell-chunks streames til klienten underveis; når modellen
 // begynner på selve svaret, pipes resten rått gjennom.
 func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full map[string]any) {
-	full["tools"] = []any{webSearchTool}
+	tools := []any{webSearchTool}
+	dbCtx := s.dbToolContext(ctx)
+	if dbCtx != nil {
+		tools = append(tools, dbCtx.tool)
+	}
+	full["tools"] = tools
 	full["stream"] = true
 	// Be upstream om tokenforbruk i streamen.
 	full["stream_options"] = map[string]any{"include_usage": true}
@@ -97,20 +102,31 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		toolMsgs := make([]any, 0, len(calls))
 		for _, c := range calls {
 			var args struct {
-				Query string `json:"query"`
+				Query        string `json:"query"`
+				ConnectionID string `json:"connection_id"`
+				SQL          string `json:"sql"`
 			}
 			_ = json.Unmarshal([]byte(c.Args.String()), &args)
-			if q := strings.TrimSpace(args.Query); q != "" {
-				// Fremdriftssteg til tidslinjen i frontend.
-				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Søker: " + q})
+
+			var result string
+			if c.Name == "query_database" {
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Spør databasen"})
 				emit("data: " + string(meta))
-			}
-			searches++
-			result, sources := s.runWebSearch(ctx, args.Query)
-			if len(sources) > 0 {
-				// Kildene sendes som metadata til frontend — de skal ikke stå i svaret.
-				meta, _ := json.Marshal(map[string]any{"nordavind_sources": sources})
-				emit("data: " + string(meta))
+				result = s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL)
+			} else {
+				if q := strings.TrimSpace(args.Query); q != "" {
+					// Fremdriftssteg til tidslinjen i frontend.
+					meta, _ := json.Marshal(map[string]any{"nordavind_step": "Søker: " + q})
+					emit("data: " + string(meta))
+				}
+				searches++
+				var sources []sourceRef
+				result, sources = s.runWebSearch(ctx, args.Query)
+				if len(sources) > 0 {
+					// Kildene sendes som metadata til frontend — de skal ikke stå i svaret.
+					meta, _ := json.Marshal(map[string]any{"nordavind_sources": sources})
+					emit("data: " + string(meta))
+				}
 			}
 			assistantCalls = append(assistantCalls, map[string]any{
 				"id":   c.ID,
