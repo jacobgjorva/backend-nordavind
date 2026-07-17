@@ -133,11 +133,16 @@ func (s *Server) handleConnectionSchema(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "intern feil", http.StatusInternalServerError)
 		return
 	}
+	views, err := s.store.ConnectionViews(conn.ID)
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
 	writeJSON(w, map[string]any{
 		"connection":      conn,
 		"tables":          tables,
 		"suggested_links": fks,
-		"config":          map[string]any{"tables": saved, "links": links},
+		"config":          map[string]any{"tables": saved, "links": links, "views": views},
 	})
 }
 
@@ -152,6 +157,7 @@ func (s *Server) handleSaveConnectionConfig(w http.ResponseWriter, r *http.Reque
 	var req struct {
 		Tables []store.TableConfig `json:"tables"`
 		Links  []store.LinkConfig  `json:"links"`
+		Views  []store.ViewConfig  `json:"views"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "ugyldig request", http.StatusBadRequest)
@@ -180,7 +186,7 @@ func (s *Server) handleSaveConnectionConfig(w http.ResponseWriter, r *http.Reque
 		colTypes[t.Name] = m
 	}
 
-	if err := s.store.SaveConnectionConfig(id, req.Tables, req.Links, colTypes); err != nil {
+	if err := s.store.SaveConnectionConfig(id, req.Tables, req.Links, req.Views, colTypes); err != nil {
 		http.Error(w, "kunne ikke lagre", http.StatusInternalServerError)
 		return
 	}

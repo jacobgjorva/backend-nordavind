@@ -31,6 +31,14 @@ type ColumnInfo struct {
 	Description string
 }
 
+// ViewConfig er en admin-definert SQL-spørring (custom join e.l.) som
+// AI-en får se som en ferdig oppskrift.
+type ViewConfig struct {
+	Name        string `json:"name"`
+	SQL         string `json:"sql"`
+	Description string `json:"description"`
+}
+
 // LinkConfig er en join-nøkkel mellom to tabeller.
 type LinkConfig struct {
 	FromTable  string `json:"from_table"`
@@ -68,6 +76,13 @@ func (s *Store) migrateConnections() error {
 			table_name    TEXT NOT NULL,
 			user_id       TEXT NOT NULL,
 			PRIMARY KEY (connection_id, table_name, user_id)
+		);
+		CREATE TABLE IF NOT EXISTS connection_views (
+			connection_id TEXT NOT NULL,
+			name          TEXT NOT NULL,
+			sql_text      TEXT NOT NULL,
+			description   TEXT NOT NULL DEFAULT '',
+			PRIMARY KEY (connection_id, name)
 		);
 		CREATE TABLE IF NOT EXISTS connection_links (
 			connection_id TEXT NOT NULL,
@@ -146,14 +161,14 @@ func (s *Store) DeleteConnection(tenantID, id string) error {
 // SaveConnectionConfig erstatter hele kurateringen for en tilkobling.
 // colTypes er live-introspekterte kolonner per tabell (navn -> type) —
 // alle lagres slik at AI-en ser hele skjemaet, ikke bare beskrevne felt.
-func (s *Store) SaveConnectionConfig(connID string, tables []TableConfig, links []LinkConfig, colTypes map[string]map[string]string) error {
+func (s *Store) SaveConnectionConfig(connID string, tables []TableConfig, links []LinkConfig, views []ViewConfig, colTypes map[string]map[string]string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
-	for _, t := range []string{"connection_tables", "connection_columns", "connection_access", "connection_links"} {
+	for _, t := range []string{"connection_tables", "connection_columns", "connection_access", "connection_links", "connection_views"} {
 		if _, err := tx.Exec(`DELETE FROM `+t+` WHERE connection_id = ?`, connID); err != nil {
 			return err
 		}
@@ -190,7 +205,35 @@ func (s *Store) SaveConnectionConfig(connID string, tables []TableConfig, links 
 			return err
 		}
 	}
+	for _, v := range views {
+		if _, err := tx.Exec(
+			`INSERT INTO connection_views (connection_id, name, sql_text, description) VALUES (?, ?, ?, ?)`,
+			connID, v.Name, v.SQL, v.Description,
+		); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
+}
+
+// ConnectionViews returnerer de lagrede custom-spørringene.
+func (s *Store) ConnectionViews(connID string) ([]ViewConfig, error) {
+	rows, err := s.db.Query(
+		`SELECT name, sql_text, description FROM connection_views WHERE connection_id = ? ORDER BY rowid`, connID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ViewConfig
+	for rows.Next() {
+		var v ViewConfig
+		if err := rows.Scan(&v.Name, &v.SQL, &v.Description); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
 }
 
 // ConnectionConfig returnerer lagret kuratering for en tilkobling.

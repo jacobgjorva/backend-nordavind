@@ -174,6 +174,19 @@ var (
 
 const maxRows = 100
 
+// ReferencedTables plukker ut tabellnavnene en spørring refererer til.
+func ReferencedTables(query string) []string {
+	var out []string
+	for _, m := range tableRefRe.FindAllStringSubmatch(query, -1) {
+		ref := strings.ToLower(strings.Trim(m[1], `"`))
+		if i := strings.LastIndex(ref, "."); i >= 0 {
+			ref = ref[i+1:]
+		}
+		out = append(out, ref)
+	}
+	return out
+}
+
 // SafeQuery kjører kun én SELECT-setning mot tillatte tabeller.
 // Radgrensen håndheves alltid ved lesing; LIMIT legges kun på for
 // dialekter som støtter det (SQL Server bruker TOP og hopper over).

@@ -38,7 +38,11 @@ func (s *Server) dbToolContext(ctx context.Context) *dbToolCtx {
 	var schema strings.Builder
 	for _, c := range conns {
 		tables, links, err := s.store.AccessibleTables(c.ID, user.ID)
-		if err != nil || len(tables) == 0 {
+		if err != nil {
+			continue
+		}
+		views, _ := s.store.ConnectionViews(c.ID)
+		if len(tables) == 0 && len(views) == 0 {
 			continue
 		}
 		_, enc, err := s.store.ConnectionCreds(user.TenantID, c.ID)
@@ -73,6 +77,16 @@ func (s *Server) dbToolContext(ctx context.Context) *dbToolCtx {
 		}
 		for _, l := range links {
 			fmt.Fprintf(&schema, "JOIN: %s.%s = %s.%s\n", l.FromTable, l.FromColumn, l.ToTable, l.ToColumn)
+		}
+		for _, v := range views {
+			fmt.Fprintf(&schema, "Ferdig spørring %q", v.Name)
+			if v.Description != "" {
+				fmt.Fprintf(&schema, " (%s)", v.Description)
+			}
+			fmt.Fprintf(&schema, ": %s\n", v.SQL)
+			// Tabellene spørringen bruker må være kjørbare selv om de
+			// ikke er valgt enkeltvis.
+			allowed = append(allowed, connector.ReferencedTables(v.SQL)...)
 		}
 		t.conns[c.ID] = dbConn{conn: c, creds: creds, allowed: allowed}
 	}
