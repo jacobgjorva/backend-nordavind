@@ -186,3 +186,40 @@ func (s *Store) UserBySession(token string) (User, error) {
 	}
 	return u, err
 }
+
+// ListUsers returnerer alle brukere i en tenant.
+func (s *Store) ListUsers(tenantID string) ([]User, error) {
+	rows, err := s.db.Query(
+		`SELECT id, tenant_id, email, role FROM users WHERE tenant_id = ? ORDER BY created_at`,
+		tenantID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.TenantID, &u.Email, &u.Role); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// DeleteUser fjerner en bruker og alle sesjonene deres.
+func (s *Store) DeleteUser(tenantID, userID string) error {
+	if _, err := s.db.Exec(`DELETE FROM sessions WHERE user_id = ?`, userID); err != nil {
+		return err
+	}
+	res, err := s.db.Exec(`DELETE FROM users WHERE id = ? AND tenant_id = ?`, userID, tenantID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}

@@ -87,3 +87,38 @@ func (s *Store) DailyUsage(tenantID, userID string, days int) ([]DailyUsage, err
 	}
 	return out, rows.Err()
 }
+
+// UserUsage er aggregert forbruk per bruker.
+type UserUsage struct {
+	UserID           string  `json:"user_id"`
+	Requests         int     `json:"requests"`
+	PromptTokens     int     `json:"prompt_tokens"`
+	CompletionTokens int     `json:"completion_tokens"`
+	CostUSD          float64 `json:"cost_usd"`
+}
+
+// PerUserUsage aggregerer forbruk per bruker i tenanten siste N dager.
+func (s *Store) PerUserUsage(tenantID string, days int) (map[string]UserUsage, error) {
+	since := time.Now().AddDate(0, 0, -days)
+	rows, err := s.db.Query(
+		`SELECT user_id, COUNT(*), SUM(prompt_tokens), SUM(completion_tokens), SUM(cost_usd)
+		 FROM usage_events
+		 WHERE tenant_id = ? AND created_at >= ?
+		 GROUP BY user_id`,
+		tenantID, since,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]UserUsage{}
+	for rows.Next() {
+		var u UserUsage
+		if err := rows.Scan(&u.UserID, &u.Requests, &u.PromptTokens, &u.CompletionTokens, &u.CostUSD); err != nil {
+			return nil, err
+		}
+		out[u.UserID] = u
+	}
+	return out, rows.Err()
+}
