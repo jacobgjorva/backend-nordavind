@@ -79,6 +79,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/chats/{id}/title", s.requireAuth(s.handleGenerateChatTitle))
 	mux.HandleFunc("GET /v1/connections", s.requireAdmin(s.handleListConnections))
 	mux.HandleFunc("POST /v1/connections", s.requireAdmin(s.handleCreateConnection))
+	mux.HandleFunc("POST /v1/connections/test", s.requireAdmin(s.handleTestConnection))
 	mux.HandleFunc("DELETE /v1/connections/{id}", s.requireAdmin(s.handleDeleteConnection))
 	mux.HandleFunc("GET /v1/connections/{id}/schema", s.requireAdmin(s.handleConnectionSchema))
 	mux.HandleFunc("PUT /v1/connections/{id}/config", s.requireAdmin(s.handleSaveConnectionConfig))

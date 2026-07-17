@@ -10,6 +10,22 @@ import (
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
 
+// handleTestConnection prøver å koble til uten å lagre noe.
+func (s *Server) handleTestConnection(w http.ResponseWriter, r *http.Request) {
+	var creds connector.Creds
+	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+		http.Error(w, "ugyldig request", http.StatusBadRequest)
+		return
+	}
+	db, err := connector.Open(r.Context(), creds)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	db.Close()
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleCreateConnection tester tilkoblingen og lagrer kredensialene kryptert.
 func (s *Server) handleCreateConnection(w http.ResponseWriter, r *http.Request) {
 	user, _ := r.Context().Value(userKey).(store.User)
