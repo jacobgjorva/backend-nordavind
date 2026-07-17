@@ -124,7 +124,7 @@ func (s *Server) runDBQuery(ctx context.Context, t *dbToolCtx, connID, query str
 	}
 	defer db.Close()
 
-	cols, rows, err := connector.SafeQuery(ctx, db, query, dc.allowed)
+	cols, rows, err := connector.SafeQuery(ctx, db, dc.creds.Driver, query, dc.allowed)
 	if err != nil {
 		return "Spørringen feilet: " + err.Error()
 	}

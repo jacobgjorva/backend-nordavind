@@ -14,11 +14,12 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/microsoft/go-mssqldb"
 )
 
 // Creds er tilkoblingsdetaljene kunden oppgir. Lagres kun kryptert.
 type Creds struct {
-	Driver   string `json:"driver"` // "postgres" | "mysql"
+	Driver   string `json:"driver"` // "postgres" | "mysql" | "mssql"
 	Host     string `json:"host"`
 	Port     int    `json:"port"`
 	Database string `json:"database"`
@@ -60,6 +61,10 @@ func Open(ctx context.Context, c Creds) (*sql.DB, error) {
 		driver = "mysql"
 		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?timeout=5s&readTimeout=15s",
 			c.User, c.Password, c.Host, c.Port, c.Database)
+	case "mssql":
+		driver = "sqlserver"
+		dsn = fmt.Sprintf("sqlserver://%s:%s@%s:%d?database=%s&dial+timeout=5",
+			url.QueryEscape(c.User), url.QueryEscape(c.Password), c.Host, c.Port, url.QueryEscape(c.Database))
 	default:
 		return nil, fmt.Errorf("ukjent databasetype: %q", c.Driver)
 	}
@@ -101,6 +106,17 @@ func Introspect(ctx context.Context, db *sql.DB, c Creds) ([]Table, []Link, erro
 		fksQ = `SELECT table_name, column_name, referenced_table_name, referenced_column_name
 			 FROM information_schema.key_column_usage
 			 WHERE table_schema = DATABASE() AND referenced_table_name IS NOT NULL`
+	case "mssql":
+		colsQ = `SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE
+			 FROM INFORMATION_SCHEMA.COLUMNS
+			 WHERE TABLE_SCHEMA = 'dbo' ORDER BY TABLE_NAME, ORDINAL_POSITION`
+		fksQ = `SELECT kcu1.TABLE_NAME, kcu1.COLUMN_NAME, kcu2.TABLE_NAME, kcu2.COLUMN_NAME
+			 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+			 JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu1
+			   ON kcu1.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
+			 JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu2
+			   ON kcu2.CONSTRAINT_NAME = rc.UNIQUE_CONSTRAINT_NAME
+			  AND kcu2.ORDINAL_POSITION = kcu1.ORDINAL_POSITION`
 	default:
 		return nil, nil, fmt.Errorf("ukjent databasetype: %q", c.Driver)
 	}
@@ -159,7 +175,9 @@ var (
 const maxRows = 100
 
 // SafeQuery kjører kun én SELECT-setning mot tillatte tabeller.
-func SafeQuery(ctx context.Context, db *sql.DB, query string, allowed []string) ([]string, [][]string, error) {
+// Radgrensen håndheves alltid ved lesing; LIMIT legges kun på for
+// dialekter som støtter det (SQL Server bruker TOP og hopper over).
+func SafeQuery(ctx context.Context, db *sql.DB, driver, query string, allowed []string) ([]string, [][]string, error) {
 	q := strings.TrimSpace(commentRe.ReplaceAllString(query, " "))
 	q = strings.TrimSuffix(q, ";")
 	if strings.Contains(q, ";") {
@@ -191,7 +209,7 @@ func SafeQuery(ctx context.Context, db *sql.DB, query string, allowed []string) 
 		}
 	}
 
-	if !limitRe.MatchString(q) {
+	if driver != "mssql" && !limitRe.MatchString(q) {
 		q = fmt.Sprintf("%s LIMIT %d", q, maxRows)
 	}
 
