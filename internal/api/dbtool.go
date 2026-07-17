@@ -63,8 +63,12 @@ func (s *Server) dbToolContext(ctx context.Context) *dbToolCtx {
 				fmt.Fprintf(&schema, ": %s", tb.Description)
 			}
 			schema.WriteString("\n")
-			for col, desc := range tb.Columns {
-				fmt.Fprintf(&schema, "  - %s: %s\n", col, desc)
+			for _, col := range tb.ColumnList {
+				fmt.Fprintf(&schema, "  - %s (%s)", col.Name, col.Type)
+				if col.Description != "" {
+					fmt.Fprintf(&schema, ": %s", col.Description)
+				}
+				schema.WriteString("\n")
 			}
 		}
 		for _, l := range links {

@@ -141,7 +141,30 @@ func (s *Server) handleSaveConnectionConfig(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "ugyldig request", http.StatusBadRequest)
 		return
 	}
-	if err := s.store.SaveConnectionConfig(id, req.Tables, req.Links); err != nil {
+
+	// Introspekter live slik at hele kolonnelisten (med typer) lagres —
+	// AI-en skal se hele skjemaet, ikke bare feltene med beskrivelse.
+	_, creds, db, err := s.openConnection(r, id)
+	if err != nil {
+		http.Error(w, "kunne ikke koble til: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer db.Close()
+	live, _, err := connector.Introspect(r.Context(), db, creds)
+	if err != nil {
+		http.Error(w, "introspeksjon feilet: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	colTypes := map[string]map[string]string{}
+	for _, t := range live {
+		m := map[string]string{}
+		for _, c := range t.Columns {
+			m[c.Name] = c.Type
+		}
+		colTypes[t.Name] = m
+	}
+
+	if err := s.store.SaveConnectionConfig(id, req.Tables, req.Links, colTypes); err != nil {
 		http.Error(w, "kunne ikke lagre", http.StatusInternalServerError)
 		return
 	}

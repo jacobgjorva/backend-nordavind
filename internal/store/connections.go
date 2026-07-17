@@ -19,6 +19,16 @@ type TableConfig struct {
 	Description string            `json:"description"`
 	Columns     map[string]string `json:"columns"`  // kolonnenavn -> beskrivelse (valgfri)
 	UserIDs     []string          `json:"user_ids"` // tom = alle brukere
+	// Full kolonneliste (navn + type) lagret ved siste introspeksjon —
+	// dette er skjemaet AI-en får se.
+	ColumnList []ColumnInfo `json:"-"`
+}
+
+// ColumnInfo er navn/type/beskrivelse for ett felt, slik AI-en ser det.
+type ColumnInfo struct {
+	Name        string
+	Type        string
+	Description string
 }
 
 // LinkConfig er en join-nøkkel mellom to tabeller.
@@ -49,6 +59,7 @@ func (s *Store) migrateConnections() error {
 			connection_id TEXT NOT NULL,
 			table_name    TEXT NOT NULL,
 			column_name   TEXT NOT NULL,
+			col_type      TEXT NOT NULL DEFAULT '',
 			description   TEXT NOT NULL DEFAULT '',
 			PRIMARY KEY (connection_id, table_name, column_name)
 		);
@@ -67,7 +78,12 @@ func (s *Store) migrateConnections() error {
 			PRIMARY KEY (connection_id, from_table, from_column, to_table, to_column)
 		);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	// Eldre dev-databaser mangler col_type — legg til om nødvendig.
+	s.db.Exec(`ALTER TABLE connection_columns ADD COLUMN col_type TEXT NOT NULL DEFAULT ''`)
+	return nil
 }
 
 func (s *Store) CreateConnection(tenantID, name, driver string, credsEnc []byte) (Connection, error) {
@@ -128,7 +144,9 @@ func (s *Store) DeleteConnection(tenantID, id string) error {
 }
 
 // SaveConnectionConfig erstatter hele kurateringen for en tilkobling.
-func (s *Store) SaveConnectionConfig(connID string, tables []TableConfig, links []LinkConfig) error {
+// colTypes er live-introspekterte kolonner per tabell (navn -> type) —
+// alle lagres slik at AI-en ser hele skjemaet, ikke bare beskrevne felt.
+func (s *Store) SaveConnectionConfig(connID string, tables []TableConfig, links []LinkConfig, colTypes map[string]map[string]string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -147,13 +165,10 @@ func (s *Store) SaveConnectionConfig(connID string, tables []TableConfig, links 
 		); err != nil {
 			return err
 		}
-		for col, desc := range t.Columns {
-			if desc == "" {
-				continue
-			}
+		for col, typ := range colTypes[t.Name] {
 			if _, err := tx.Exec(
-				`INSERT INTO connection_columns (connection_id, table_name, column_name, description) VALUES (?, ?, ?, ?)`,
-				connID, t.Name, col, desc,
+				`INSERT INTO connection_columns (connection_id, table_name, column_name, col_type, description) VALUES (?, ?, ?, ?, ?)`,
+				connID, t.Name, col, typ, t.Columns[col],
 			); err != nil {
 				return err
 			}
@@ -202,19 +217,22 @@ func (s *Store) ConnectionConfig(connID string) ([]TableConfig, []LinkConfig, er
 	}
 
 	colRows, err := s.db.Query(
-		`SELECT table_name, column_name, description FROM connection_columns WHERE connection_id = ?`, connID,
+		`SELECT table_name, column_name, col_type, description FROM connection_columns WHERE connection_id = ? ORDER BY rowid`, connID,
 	)
 	if err != nil {
 		return nil, nil, err
 	}
 	defer colRows.Close()
 	for colRows.Next() {
-		var tn, cn, d string
-		if err := colRows.Scan(&tn, &cn, &d); err != nil {
+		var tn, cn, ct, d string
+		if err := colRows.Scan(&tn, &cn, &ct, &d); err != nil {
 			return nil, nil, err
 		}
 		if t, ok := byName[tn]; ok {
-			t.Columns[cn] = d
+			t.ColumnList = append(t.ColumnList, ColumnInfo{Name: cn, Type: ct, Description: d})
+			if d != "" {
+				t.Columns[cn] = d
+			}
 		}
 	}
 
