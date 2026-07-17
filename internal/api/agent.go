@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jacobgjorva/backend-nordavind/internal/router"
 	"github.com/jacobgjorva/backend-nordavind/internal/search"
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
@@ -265,4 +266,53 @@ func (s *Server) runWebSearch(ctx context.Context, query string) (string, []sour
 		refs = append(refs, sourceRef{Title: r.Title, URL: r.URL})
 	}
 	return search.FormatContext(query, results, pages), refs
+}
+
+// generateTitle ber standardmodellen om en kort samtaletittel.
+func (s *Server) generateTitle(r *http.Request, question, answer string) string {
+	if a := []rune(answer); len(a) > 500 {
+		answer = string(a[:500])
+	}
+	payload := map[string]any{
+		"model": router.MidModel,
+		"messages": []map[string]string{
+			{
+				"role": "system",
+				"content": "Lag en kort, forklarende tittel på norsk for samtalen, 3-5 ord. " +
+					"Svar KUN med tittelen — ingen anførselstegn eller punktum.",
+			},
+			{"role": "user", "content": "Spørsmål: " + question + "\n\nSvar: " + answer},
+		},
+		"max_tokens":  25,
+		"temperature": 0.3,
+		"reasoning":   map[string]any{"enabled": false},
+		"provider":    map[string]any{"order": []string{"mistral"}},
+	}
+	body, _ := json.Marshal(payload)
+
+	req, err := s.newUpstreamRequest(r.Context(), bytes.NewReader(body))
+	if err != nil {
+		return ""
+	}
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	var out struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil || len(out.Choices) == 0 {
+		return ""
+	}
+	title := strings.Trim(strings.TrimSpace(out.Choices[0].Message.Content), `"'.«»`)
+	if t := []rune(title); len(t) > 60 {
+		title = string(t[:60])
+	}
+	return title
 }

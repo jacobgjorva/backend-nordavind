@@ -130,3 +130,42 @@ func (s *Server) handleDeleteChat(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// handleGenerateChatTitle lager en kort tittel fra første utveksling og
+// lagrer den på samtalen.
+func (s *Server) handleGenerateChatTitle(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.currentUser(r)
+	if !ok {
+		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
+		return
+	}
+	var req struct {
+		Question string `json:"question"`
+		Answer   string `json:"answer"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Question == "" {
+		http.Error(w, "ugyldig request", http.StatusBadRequest)
+		return
+	}
+
+	title := s.generateTitle(r, req.Question, req.Answer)
+	if title == "" {
+		// Fallback: første del av spørsmålet
+		title = req.Question
+		if t := []rune(title); len(t) > 60 {
+			title = string(t[:60])
+		}
+	}
+
+	err := s.store.UpdateChatTitle(r.PathValue("id"), user.ID, title)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"title": title})
+}

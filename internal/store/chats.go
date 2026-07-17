@@ -138,3 +138,12 @@ func (s *Store) DeleteChat(chatID, userID string) error {
 	_, err := s.db.Exec(`DELETE FROM chats WHERE id = ?`, chatID)
 	return err
 }
+
+// UpdateChatTitle setter ny tittel på en samtale brukeren eier.
+func (s *Store) UpdateChatTitle(chatID, userID, title string) error {
+	if err := s.chatOwned(chatID, userID); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`UPDATE chats SET title = ? WHERE id = ?`, title, chatID)
+	return err
+}
