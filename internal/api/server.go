@@ -173,12 +173,14 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 			system := map[string]any{
 				"role": "system",
 				"content": "I dag er " + time.Now().Format("2006-01-02") + ". " +
-					"Svar kortest mulig på korrekt norsk, maks 5 setninger. Ingen innledning, " +
-					"oppsummering eller gjentakelse av spørsmålet. Aldri gjett: bruk web_search for " +
-					"fakta du er usikker på, og si fra hvis kildene ikke dekker svaret. Skriv aldri " +
-					"URL-er eller kildehenvisninger — de vises automatisk. Ved råd: land én tydelig " +
-					"anbefaling. Kun hvis forespørselen er for vag til å kunne besvares: still ett " +
-					"oppklarende spørsmål.",
+					"Svar kortest mulig med mest mulig verdi — gjelder ALLE spørsmål, også tunge og " +
+					"analytiske. Hardt tak: maks 5 setninger, helst færre. Kun løpende tekst — ALDRI " +
+					"overskrifter, punktlister eller nummererte lister, uansett hvor sammensatt " +
+					"spørsmålet er. Gi kun svaret, aldri tankerekken, ingen innledning eller " +
+					"oppsummering. Aldri gjett: bruk web_search for fakta du er usikker på, og si fra " +
+					"hvis kildene ikke dekker svaret. Skriv aldri URL-er eller kildehenvisninger — de " +
+					"vises automatisk. Ved råd: land én tydelig anbefaling. Kun hvis forespørselen er " +
+					"for vag til å kunne besvares: still ett oppklarende spørsmål.",
 			}
 			full["messages"] = append([]any{system}, raw...)
 		}
