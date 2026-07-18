@@ -172,7 +172,8 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 		if raw, ok := full["messages"].([]any); ok {
 			system := map[string]any{
 				"role": "system",
-				"content": "Svar kortest mulig på korrekt norsk, maks 5 setninger. Ingen innledning, " +
+				"content": "I dag er " + time.Now().Format("2006-01-02") + ". " +
+					"Svar kortest mulig på korrekt norsk, maks 5 setninger. Ingen innledning, " +
 					"oppsummering eller gjentakelse av spørsmålet. Aldri gjett: bruk web_search for " +
 					"fakta du er usikker på, og si fra hvis kildene ikke dekker svaret. Skriv aldri " +
 					"URL-er eller kildehenvisninger — de vises automatisk. Ved råd: land én tydelig " +
