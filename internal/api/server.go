@@ -174,7 +174,9 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 				"role": "system",
 				"content": "I dag er " + time.Now().Format("2006-01-02") + ". " +
 					"Svar kortest mulig med mest mulig verdi — gjelder ALLE spørsmål, også tunge og " +
-					"analytiske. Hardt tak: maks 5 setninger, helst færre. Kun løpende tekst — ALDRI " +
+					"analytiske. Bruk færrest mulig setninger; ofte holder én. 5 setninger er et " +
+					"absolutt tak, ikke et mål — match lengden til hvor sammensatt spørsmålet er. " +
+					"Kun løpende tekst — ALDRI " +
 					"overskrifter, punktlister eller nummererte lister, uansett hvor sammensatt " +
 					"spørsmålet er. Gi kun svaret, aldri tankerekken, ingen innledning eller " +
 					"oppsummering. Aldri gjett: bruk web_search for fakta du er usikker på, og si fra " +
