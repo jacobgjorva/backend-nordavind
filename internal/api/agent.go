@@ -313,21 +313,3 @@ func (s *Server) runWebSearch(ctx context.Context, query string) (string, []sour
 	}
 	return search.FormatContext(query, results, pages), refs
 }
-
-// generateTitle ber standardmodellen om en kort samtaletittel.
-func (s *Server) generateTitle(r *http.Request, question, answer string) string {
-	if a := []rune(answer); len(a) > 500 {
-		answer = string(a[:500])
-	}
-	system := "Lag en kort, forklarende tittel på norsk for samtalen, 3-5 ord. " +
-		"Svar KUN med tittelen — ingen anførselstegn eller punktum."
-	raw, err := s.llmComplete(r.Context(), system, "Spørsmål: "+question+"\n\nSvar: "+answer)
-	if err != nil {
-		return ""
-	}
-	title := strings.Trim(strings.TrimSpace(raw), `"'.«»`)
-	if t := []rune(title); len(t) > 60 {
-		title = string(t[:60])
-	}
-	return title
-}

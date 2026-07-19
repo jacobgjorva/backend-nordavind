@@ -9,6 +9,26 @@ import (
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
 
+// titleFromText lager en kort samtaletittel uten LLM: første setning eller de
+// første ordene av brukerens melding, trimmet til 60 tegn. Deterministisk =
+// null tokens.
+func titleFromText(question string) string {
+	t := strings.TrimSpace(question)
+	// Kutt ved første setningsslutt hvis den kommer tidlig.
+	if i := strings.IndexAny(t, ".!?\n"); i > 0 && i < 60 {
+		t = t[:i]
+	}
+	t = strings.TrimSpace(t)
+	// Ellers: begrens til de første ~8 ordene.
+	if fields := strings.Fields(t); len(fields) > 8 {
+		t = strings.Join(fields[:8], " ")
+	}
+	if r := []rune(t); len(r) > 60 {
+		t = strings.TrimSpace(string(r[:60]))
+	}
+	return t
+}
+
 // handleListChats returnerer brukerens samtaler.
 func (s *Server) handleListChats(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.user(w, r)
@@ -171,14 +191,7 @@ func (s *Server) handleGenerateChatTitle(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	title := s.generateTitle(r, req.Question, req.Answer)
-	if title == "" {
-		// Fallback: første del av spørsmålet
-		title = req.Question
-		if t := []rune(title); len(t) > 60 {
-			title = string(t[:60])
-		}
-	}
+	title := titleFromText(req.Question)
 
 	err := s.store.UpdateChatTitle(r.PathValue("id"), user.ID, title)
 	if errors.Is(err, store.ErrNotFound) {
