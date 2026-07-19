@@ -186,13 +186,12 @@ func threadText(msgs []mail.Message) string {
 
 const mailAnalyzeSystem = "Du er en norsk e-postassistent. Du får en e-posttråd. Svar KUN med JSON " +
 	"(ingen prat, ingen ```): {\"summary\": \"\", \"essences\": [\"<melding 1 forenklet>\", ...], " +
-	"\"proposal\": \"<forslag til brukeren>\", \"draft\": \"<svarutkast på norsk, uten signatur>\"}. " +
+	"\"proposal\": \"<forslag til brukeren>\"}. " +
 	"essences skal ha ett element per melding, i samme rekkefølge. Hver essence er en KRAFTIG forenklet " +
 	"versjon av selve meldingen, skrevet i FØRSTEPERSON som om avsenderen sier det selv (ikke et " +
 	"tredjeperson-sammendrag). Behold kun det viktigste, kutt høflighetsfraser og støy. " +
-	"Eksempel: «Kan dere levere 600 enheter i stedet for 500?» — ikke «Avsenderen spør om flere enheter». " +
 	"proposal er ÉN kort setning som spør brukeren om å svare, på formen «Skal jeg svare <navn> om <tema>?». " +
-	"draft er et vennlig, profesjonelt svar. Hold alt kort."
+	"Ikke skriv svarutkast — det lages først når brukeren ber om det."
 
 // handleMailAnalyze oppsummerer tråden og lager et svarutkast.
 func (s *Server) handleMailAnalyze(w http.ResponseWriter, r *http.Request) {
@@ -220,7 +219,6 @@ func (s *Server) handleMailAnalyze(w http.ResponseWriter, r *http.Request) {
 		Summary  string   `json:"summary"`
 		Essences []string `json:"essences"`
 		Proposal string   `json:"proposal"`
-		Draft    string   `json:"draft"`
 	}
 	if err := json.Unmarshal([]byte(stripFences(raw)), &parsed); err != nil {
 		// Fallback: bruk rå-teksten som sammendrag.
@@ -230,13 +228,16 @@ func (s *Server) handleMailAnalyze(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(parsed)
 }
 
-// handleMailDraft forbedrer et svarutkast ut fra brukerens tilbakemelding.
+// handleMailDraft lager et førsteutkast (tomt current) eller forbedrer et
+// eksisterende utkast ut fra brukerens tilbakemelding. Utkast genereres først
+// her — når brukeren faktisk vil svare — ikke ved åpning av tråden.
 func (s *Server) handleMailDraft(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.user(w, r)
 	if !ok {
 		return
 	}
-	if _, _, err := s.mailAccount(user); err != nil {
+	acc, _, err := s.mailAccount(user)
+	if err != nil {
 		http.Error(w, "ingen konto", http.StatusNotFound)
 		return
 	}
@@ -246,11 +247,25 @@ func (s *Server) handleMailDraft(w http.ResponseWriter, r *http.Request) {
 		Feedback string `json:"feedback"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)
-	// Sender IKKE hele tråden på nytt — kun utkast + tilbakemelding (token-spart).
-	sys := "Du er en norsk e-postassistent. Forbedre svarutkastet ut fra tilbakemeldingen. " +
-		"Svar KUN med den nye e-postteksten (norsk, uten signatur), ingen forklaring."
-	userMsg := fmt.Sprintf("Nåværende utkast:\n%s\n\nTilbakemelding: %s",
-		req.Current, req.Feedback)
+
+	var sys, userMsg string
+	if strings.TrimSpace(req.Current) == "" {
+		// Førsteutkast: trenger trådens innhold én gang.
+		msgs, err := acc.Thread(req.Key, inboxScan)
+		if err != nil || len(msgs) == 0 {
+			http.Error(w, "fant ikke tråden", http.StatusNotFound)
+			return
+		}
+		sys = "Du er en norsk e-postassistent. Skriv et vennlig, profesjonelt svarutkast " +
+			"(norsk, uten signatur) på tråden. Hold det kort. Svar KUN med e-postteksten."
+		userMsg = threadText(msgs)
+	} else {
+		// Forbedring: sender IKKE hele tråden på nytt — kun utkast + tilbakemelding.
+		sys = "Du er en norsk e-postassistent. Forbedre svarutkastet ut fra tilbakemeldingen. " +
+			"Svar KUN med den nye e-postteksten (norsk, uten signatur), ingen forklaring."
+		userMsg = fmt.Sprintf("Nåværende utkast:\n%s\n\nTilbakemelding: %s",
+			req.Current, req.Feedback)
+	}
 	draft, err := s.llmComplete(r.Context(), sys, userMsg)
 	if err != nil {
 		http.Error(w, "AI feilet", http.StatusBadGateway)
