@@ -18,13 +18,16 @@ const widgetSystemBase = "Du bygger ÉN widget for brukeren — én enkelt visua
 	"verktøyet set_widget med feltene som skal endres. ALDRI skriv mal-uttrykk som " +
 	"{{query_database(...)}} eller kode i noe felt — bruk kun de definerte feltene. " +
 	"Widget-typer (velg én):" +
-	"\n- kpi: et nøkkeltall. Statisk: sett value (+ unit, delta). Eller fra databasen: sett " +
-	"connection_id + sql (en SELECT som gir ETT tall), la value stå tom." +
-	"\n- text: en tekstblokk/overskrift. Felt: content (markdown)." +
-	"\n- table: en tabell fra databasen. Felt: title, connection_id, sql (SELECT)." +
+	"\n- kpi: et nøkkeltall. Statisk: sett value (+ unit, delta som «+12%» eller «-3%»). Eller fra " +
+	"databasen: sett connection_id + sql (en SELECT som gir ETT tall), la value stå tom." +
+	"\n- sparkline: et nøkkeltall med trend. Felt: title, connection_id, sql (SELECT som gir en serie), " +
+	"y (verdi-kolonne), evt. x. Siste rad blir tallet, hele serien tegnes som mini-graf." +
+	"\n- line: linjediagram over tid. Felt: title, connection_id, sql, x (dato/kategori), y (verdi)." +
 	"\n- bar: stolpediagram. Felt: title, connection_id, sql, x (kategori-kolonne), y (verdi-kolonne)." +
-	"\n- line: linjediagram. Felt: title, connection_id, sql, x, y." +
-	"\nFor table/bar/line: skriv en SELECT som gir de riktige kolonnene, og oppgi connection_id fra " +
+	"\n- donut: andel/fordeling. Felt: title, connection_id, sql (SELECT kategori, verdi), x (kategori), y (verdi)." +
+	"\n- table: en tabell fra databasen. Felt: title, connection_id, sql (SELECT)." +
+	"\n- text: en tekstblokk/overskrift. Felt: content (markdown)." +
+	"\nFor data-typene: skriv en SELECT som gir de riktige kolonnene, og oppgi connection_id fra " +
 	"skjemaet under. Etter verktøykallet svarer du med maks ett kort ord (f.eks. «Ok»). Aldri lange svar."
 
 // widgetSystem legger til databaseskjemaet så modellen kan skrive SQL.
@@ -38,7 +41,7 @@ func (s *Server) widgetSystem(ctx context.Context) string {
 // widgetTools er det ene verktøyet modellen bruker i widget-editoren.
 func widgetTools() []any {
 	compProps := map[string]any{
-		"type":          map[string]any{"type": "string", "description": "kpi | text | table | bar | line"},
+		"type":          map[string]any{"type": "string", "description": "kpi | sparkline | line | bar | donut | table | text"},
 		"title":         map[string]any{"type": "string"},
 		"value":         map[string]any{"type": "string"},
 		"unit":          map[string]any{"type": "string"},
