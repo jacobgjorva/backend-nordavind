@@ -14,20 +14,15 @@ import (
 // extractModel er en billig modell for bakgrunns-uttrekk av bransjekunnskap.
 const extractModel = "mistral-small-3.2-24b-instruct-2506"
 
-const extractSystem = "Du trekker ut BEDRIFTS-INTERN operasjonell innsikt som BRUKEREN har lært " +
-	"AI-en i denne samtalen — ting AI-en umulig kunne visst fra før. \n" +
-	"KILDEN er kun det BRUKEREN forklarer/oppgir om hvordan akkurat denne bedriften jobber: interne " +
-	"rutiner, egne fagtermer, hvem-gjør-hva, faste regler og krav som er spesifikke for dem. \n" +
-	"LAKMUSTEST: «Ville en kompetent AI allerede visst dette uten å få det fortalt av denne bedriften?» " +
-	"Hvis JA → utelat. Ta ALDRI med allmennkunnskap, definisjoner, det AI-en selv svarte, eller noe " +
-	"som kom fra nettsøk/treningsdata. \n" +
-	"UTELUKK OGSÅ: forretningsstrategi, konkrete økonomiske tall (omsetning, priser, lønn), " +
-	"personopplysninger, navn på ansatte, engangsting, meninger, sensitivt. MEN behold terskler/" +
-	"grenser som er en fast del av en rutine (f.eks. «ordrer over X må godkjennes»). Ved tvil: utelat. \n" +
-	"De fleste samtaler gir INGEN noder — returner da tom liste. Lag aldri dubletter av det som " +
-	"allerede finnes (listen under). Maks 3 noder. \n" +
-	"Svar KUN med JSON: {\"nodes\":[{\"type\":\"term|prosess|regel|entitet\",\"title\":\"kort navn\"," +
-	"\"summary\":\"én presis setning\",\"relations\":[{\"to\":\"tittel på eksisterende eller ny node\"," +
+const extractSystem = "Trekk ut BEDRIFTS-INTERN operasjonell innsikt brukeren har lært AI-en i " +
+	"samtalen: interne rutiner, egne fagtermer, hvem-gjør-hva, faste regler/terskler spesifikke for " +
+	"bedriften. Lakmustest: ville en kompetent AI visst dette uten å få det fortalt? Hvis ja, utelat. " +
+	"Ta ALDRI med allmennkunnskap, definisjoner, det AI-en selv svarte, nettsøk-resultater, " +
+	"forretningsstrategi, konkrete tall (omsetning/priser/lønn), personopplysninger, navn, engangsting, " +
+	"meninger eller sensitivt. Behold terskler som er del av en fast rutine («ordrer over X må " +
+	"godkjennes»). Ved tvil: utelat. De fleste samtaler gir INGEN noder. Ingen dubletter av eksisterende " +
+	"(listen under). Maks 3. Svar KUN med JSON: {\"nodes\":[{\"type\":\"term|prosess|regel|entitet\"," +
+	"\"title\":\"kort navn\",\"summary\":\"én presis setning\",\"relations\":[{\"to\":\"tittel\"," +
 	"\"relation\":\"er del av|kommer før|betyr|brukes i|gjelder for\"}]}]}"
 
 type extractedNode struct {

@@ -12,20 +12,16 @@ import (
 // agentSetupSystem er instruksen som legges inn når brukeren starter
 // /agent-flyten. Den styrer hvordan modellen samler inn oppsett og kaller
 // verktøyene — holdt server-side så det er én kilde til sannhet.
-const agentSetupSystem = "Brukeren vil sette opp en agent: en automatisert prosedyre som kjører på " +
-	"fast frekvens. Ditt FØRSTE svar skal være ÉN kort setning som kun spør hva agenten skal gjøre " +
-	"(f.eks. «Hva skal agenten gjøre for deg?») — ingen tilleggsspørsmål om data, nettsider, " +
-	"database, frekvens eller tilgang. Utled selv om det er en database- eller websøk-oppgave fra svaret. " +
-	"Deretter, ett spørsmål av gangen, samle inn: hvor ofte den skal kjøre og på hvilket klokkeslett, " +
-	"og — HVIS det er en database-oppgave — hvilken tilkobling (bruk navnet, aldri finn opp en id). " +
-	"MINIMUM intervall er 15 minutter (900 sek). Ber brukeren om noe hyppigere, forklar kort at 15 " +
-	"minutter er minste tillatte og foreslå det. " +
-	"En websøk-agent trenger ingen tilkobling. Ikke vis widgeten før du har frekvens og tidspunkt. " +
-	"Når du har alt, svar med én kort " +
-	"bekreftelsessetning etterfulgt av en ```agent_setup kodeblokk med JSON:\n" +
+const agentSetupSystem = "Brukeren vil sette opp en agent (automatisert prosedyre på fast frekvens). " +
+	"FØRSTE svar: ÉN kort setning som kun spør hva agenten skal gjøre («Hva skal agenten gjøre for " +
+	"deg?»), ingen andre spørsmål ennå. Utled selv om det er en database- eller websøk-oppgave. " +
+	"Deretter, ett spørsmål av gangen: hvor ofte og på hvilket klokkeslett, og HVIS database-oppgave, " +
+	"hvilken tilkobling (bruk navnet, aldri finn opp en id). MINIMUM intervall 15 min (900 sek); ved " +
+	"hyppigere ønske, forklar kort at 15 min er minste og foreslå det. Websøk-agent trenger ingen " +
+	"tilkobling. Ikke vis widgeten før du har frekvens og tidspunkt. Når alt er klart: én kort " +
+	"bekreftelse, så en ```agent_setup kodeblokk med JSON:\n" +
 	"{\"name\":\"kort navn\",\"task\":\"presis instruks\",\"fields\":[ ... ]}\n" +
-	"fields er en liste over kontrollene widgeten skal vise — ta KUN med de relevante, hver med en " +
-	"fornuftig forhåndsverdi:\n" +
+	"fields = kontrollene widgeten skal vise, KUN relevante, hver med fornuftig forhåndsverdi:\n" +
 	"- {\"type\":\"interval\",\"value\":<sekunder; 3600=time, 86400=dag, 172800=annenhver dag, 604800=uke — bruk vilkårlig antall>}\n" +
 	"- {\"type\":\"time\",\"value\":\"HH:MM\"} (kun hvis intervall er minst én dag)\n" +
 	"- {\"type\":\"effort\",\"value\":\"Lav|Moderat|Høy|Max\"}\n" +
