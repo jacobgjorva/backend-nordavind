@@ -334,13 +334,28 @@ func (s *Store) DeleteAgent(agentID, userID string) error {
 	if err != nil {
 		return err
 	}
-	if chatID != "" {
-		s.db.Exec(`DELETE FROM chat_messages WHERE chat_id = ?`, chatID)
-		s.db.Exec(`DELETE FROM chats WHERE id = ?`, chatID)
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
 	}
-	s.db.Exec(`DELETE FROM agent_runs WHERE agent_id = ?`, agentID)
-	_, err = s.db.Exec(`DELETE FROM agents WHERE id = ? AND user_id = ?`, agentID, userID)
-	return err
+	defer tx.Rollback()
+
+	if chatID != "" {
+		if _, err := tx.Exec(`DELETE FROM chat_messages WHERE chat_id = ?`, chatID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM chats WHERE id = ?`, chatID); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`DELETE FROM agent_runs WHERE agent_id = ?`, agentID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM agents WHERE id = ? AND user_id = ?`, agentID, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // agentOwned sjekker at agenten tilhører brukeren.

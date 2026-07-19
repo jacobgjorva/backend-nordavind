@@ -244,7 +244,17 @@ func SafeQuery(ctx context.Context, db *sql.DB, driver, query string, allowed []
 
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
-	rows, err := db.QueryContext(ctx, q)
+
+	// Backstopp under regex-laget: kjør i en read-only transaksjon der
+	// driveren støtter det, slik at en eventuell skrivende setning som
+	// slipper forbi mønstervernet avvises på DB-nivå. Faller tilbake til
+	// et vanlig kall for drivere som ikke støtter ReadOnly.
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, nil, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, q)
 	if err != nil {
 		return nil, nil, err
 	}

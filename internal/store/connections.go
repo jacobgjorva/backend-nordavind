@@ -147,7 +147,13 @@ func (s *Store) ConnectionCreds(tenantID, id string) (Connection, []byte, error)
 }
 
 func (s *Store) DeleteConnection(tenantID, id string) error {
-	res, err := s.db.Exec(`DELETE FROM connections WHERE id = ? AND tenant_id = ?`, id, tenantID)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec(`DELETE FROM connections WHERE id = ? AND tenant_id = ?`, id, tenantID)
 	if err != nil {
 		return err
 	}
@@ -155,11 +161,11 @@ func (s *Store) DeleteConnection(tenantID, id string) error {
 		return ErrNotFound
 	}
 	for _, t := range []string{"connection_tables", "connection_columns", "connection_access", "connection_links"} {
-		if _, err := s.db.Exec(`DELETE FROM `+t+` WHERE connection_id = ?`, id); err != nil {
+		if _, err := tx.Exec(`DELETE FROM `+t+` WHERE connection_id = ?`, id); err != nil {
 			return err
 		}
 	}
-	return nil
+	return tx.Commit()
 }
 
 // SaveConnectionConfig erstatter hele kurateringen for en tilkobling.

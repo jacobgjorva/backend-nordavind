@@ -110,13 +110,8 @@ func (s *Server) executeAgent(ctx context.Context, a store.Agent) (string, int, 
 	system := "Du er en autonom agent. Systemet håndterer tidsplan og frekvens — du skal utføre " +
 		"oppgaven ÉN gang nå. Ignorer ord som «hvert minutt/daglig» i oppgaven; det styrer bare " +
 		"hvor ofte du kjøres. Si ALDRI at du ikke kan kjøre automatisk, planlagt eller kontinuerlig — " +
-		"bare lever resultatet direkte. Kort, konkret svar på norsk, ingen innledning eller spørsmål tilbake. Kun lesing" +
-		func() string {
-			if a.WriteAccess {
-				return "; skriving er tillatt hvis oppgaven krever det."
-			}
-			return " — aldri endre data."
-		}()
+		"bare lever resultatet direkte. Kort, konkret svar på norsk, ingen innledning eller spørsmål tilbake. " +
+		"Kun lesing — databasen er skrivebeskyttet, du kan aldri endre data."
 
 	messages := []any{
 		map[string]any{"role": "system", "content": system},
