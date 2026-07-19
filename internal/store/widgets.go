@@ -2,18 +2,20 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 )
 
 // Widget er én navngitt visualisering brukeren kan kalle overalt med
-// /<slug>. Spec er JSON for én komponent (kpi/text/table/bar/line).
+// /<slug>. Spec er JSON for én komponent (kpi/text/table/bar/line) og
+// serialiseres som et objekt (RawMessage), ikke en streng.
 type Widget struct {
-	ID        string    `json:"id"`
-	Slug      string    `json:"slug"`
-	Title     string    `json:"title"`
-	Spec      string    `json:"spec"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        string          `json:"id"`
+	Slug      string          `json:"slug"`
+	Title     string          `json:"title"`
+	Spec      json.RawMessage `json:"spec,omitempty"`
+	UpdatedAt time.Time       `json:"updated_at"`
 }
 
 func (s *Store) migrateWidgets() error {
@@ -35,7 +37,7 @@ func (s *Store) migrateWidgets() error {
 
 // CreateWidget oppretter en tom widget med gitt slug. Slug er unik per bruker.
 func (s *Store) CreateWidget(tenantID, userID, slug, title string) (Widget, error) {
-	w := Widget{ID: newID(), Slug: slug, Title: title, Spec: "{}", UpdatedAt: time.Now()}
+	w := Widget{ID: newID(), Slug: slug, Title: title, Spec: json.RawMessage("{}"), UpdatedAt: time.Now()}
 	_, err := s.db.Exec(
 		`INSERT INTO widgets (id, tenant_id, user_id, slug, title, spec) VALUES (?, ?, ?, ?, ?, '{}')`,
 		w.ID, tenantID, userID, slug, title,
@@ -68,16 +70,18 @@ func (s *Store) ListWidgets(userID string) ([]Widget, error) {
 // Widget henter én widget brukeren eier, med spec.
 func (s *Store) Widget(slug, userID string) (Widget, error) {
 	var w Widget
+	var spec string
 	err := s.db.QueryRow(
 		`SELECT id, slug, title, spec, updated_at FROM widgets WHERE slug = ? AND user_id = ?`,
 		slug, userID,
-	).Scan(&w.ID, &w.Slug, &w.Title, &w.Spec, &w.UpdatedAt)
+	).Scan(&w.ID, &w.Slug, &w.Title, &spec, &w.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return w, ErrNotFound
 	}
-	if w.Spec == "" {
-		w.Spec = "{}"
+	if spec == "" {
+		spec = "{}"
 	}
+	w.Spec = json.RawMessage(spec)
 	return w, err
 }
 

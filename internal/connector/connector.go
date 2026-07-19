@@ -170,14 +170,30 @@ var (
 	forbiddenRe = regexp.MustCompile(`(?i)\b(insert|update|delete|drop|alter|create|grant|revoke|truncate|attach|vacuum|copy|call|merge|execute|set|use|lock|pragma|into)\b`)
 	tableRefRe  = regexp.MustCompile(`(?i)\b(?:from|join)\s+([a-zA-Z_][a-zA-Z0-9_."]*)`)
 	limitRe     = regexp.MustCompile(`(?i)\blimit\s+\d+`)
+	// Funksjoner der FROM er del av syntaksen (EXTRACT(YEAR FROM col),
+	// SUBSTRING/TRIM/POSITION/OVERLAY) — ikke en tabellreferanse.
+	fnFromRe = regexp.MustCompile(`(?i)\b(?:extract|substring|trim|position|overlay)\s*\([^()]*\)`)
 )
+
+// stripFnFrom fjerner funksjonskall som bruker FROM-syntaks, så tabell-
+// uttrekket ikke forveksler en kolonne med et tabellnavn. Kjører til
+// fikspunkt for enkelt nøstede kall.
+func stripFnFrom(q string) string {
+	for {
+		next := fnFromRe.ReplaceAllString(q, " ")
+		if next == q {
+			return next
+		}
+		q = next
+	}
+}
 
 const maxRows = 100
 
 // ReferencedTables plukker ut tabellnavnene en spørring refererer til.
 func ReferencedTables(query string) []string {
 	var out []string
-	for _, m := range tableRefRe.FindAllStringSubmatch(query, -1) {
+	for _, m := range tableRefRe.FindAllStringSubmatch(stripFnFrom(query), -1) {
 		ref := strings.ToLower(strings.Trim(m[1], `"`))
 		if i := strings.LastIndex(ref, "."); i >= 0 {
 			ref = ref[i+1:]
@@ -212,7 +228,7 @@ func SafeQuery(ctx context.Context, db *sql.DB, driver, query string, allowed []
 	for _, m := range regexp.MustCompile(`(?i)\b([a-zA-Z_][a-zA-Z0-9_]*)\s+as\s*\(`).FindAllStringSubmatch(q, -1) {
 		allowedSet[strings.ToLower(m[1])] = true
 	}
-	for _, m := range tableRefRe.FindAllStringSubmatch(q, -1) {
+	for _, m := range tableRefRe.FindAllStringSubmatch(stripFnFrom(q), -1) {
 		ref := strings.ToLower(strings.Trim(m[1], `"`))
 		if i := strings.LastIndex(ref, "."); i >= 0 {
 			ref = ref[i+1:]
