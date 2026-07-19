@@ -36,12 +36,6 @@ type Person struct {
 	Address string `json:"address"`
 }
 
-func (p Person) label() string {
-	if p.Name != "" {
-		return p.Name
-	}
-	return p.Address
-}
 
 // ThreadSummary er én tråd i inbox-listen.
 type ThreadSummary struct {
@@ -114,16 +108,6 @@ func (a Account) dialIMAP() (*imapclient.Client, error) {
 	return c, nil
 }
 
-// Verify sjekker at IMAP-innlogging fungerer.
-func (a Account) Verify() error {
-	c, err := a.dialIMAP()
-	if err != nil {
-		return err
-	}
-	c.Logout().Wait()
-	c.Close()
-	return nil
-}
 
 type envInfo struct {
 	uid     uint32
