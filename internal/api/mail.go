@@ -182,10 +182,13 @@ func threadText(msgs []mail.Message) string {
 }
 
 const mailAnalyzeSystem = "Du er en norsk e-postassistent. Du får en e-posttråd. Svar KUN med JSON " +
-	"(ingen prat, ingen ```): {\"summary\": \"<én til to setninger om hva tråden handler om og hva som " +
-	"kreves>\", \"essences\": [\"<essensen i melding 1, kun det man trenger for å svare>\", ...], " +
+	"(ingen prat, ingen ```): {\"summary\": \"\", \"essences\": [\"<melding 1 forenklet>\", ...], " +
 	"\"draft\": \"<et vennlig, profesjonelt svarutkast på norsk, uten signatur>\"}. " +
-	"essences skal ha ett element per melding, i samme rekkefølge. Hold alt kort og konkret."
+	"essences skal ha ett element per melding, i samme rekkefølge. Hver essence er en KRAFTIG forenklet " +
+	"versjon av selve meldingen, skrevet i FØRSTEPERSON som om avsenderen sier det selv (ikke et " +
+	"tredjeperson-sammendrag). Behold kun det viktigste, kutt høflighetsfraser og støy. " +
+	"Eksempel: «Kan dere levere 600 enheter i stedet for 500?» — ikke «Avsenderen spør om flere enheter». " +
+	"Hold det til én til to korte setninger per melding."
 
 // handleMailAnalyze oppsummerer tråden og lager et svarutkast.
 func (s *Server) handleMailAnalyze(w http.ResponseWriter, r *http.Request) {
