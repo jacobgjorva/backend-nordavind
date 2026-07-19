@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/jacobgjorva/backend-nordavind/internal/connector"
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
 
@@ -220,10 +221,29 @@ func (s *Server) handleWidgetQuery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "widgeten har ingen spørring", http.StatusBadRequest)
 		return
 	}
-	// Bygg mot ALLE tilkoblinger, ikke bare den lagrede id-en, så runDBQuery
-	// kan rute til riktig database om connection_id er feil/utdatert.
-	dbCtx := s.buildDBTool(user.TenantID, user.ID, "")
-	result := s.runDBQuery(r.Context(), dbCtx, conn, sql)
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(result))
+	// Lettvekts-sti: en lagret widget har en fast connection_id, så vi bygger
+	// KUN den ene tilkoblingen (ingen dekryptering/skjemabygging for alle) og
+	// kjører den lagrede spørringen direkte — ingen LLM, riktig statuskode.
+	dbCtx := s.buildDBTool(user.TenantID, user.ID, conn)
+	if dbCtx == nil {
+		http.Error(w, "databasen er ikke tilgjengelig", http.StatusBadGateway)
+		return
+	}
+	dc, _, ok, _ := dbCtx.resolveConn(conn, sql)
+	if !ok {
+		http.Error(w, "ukjent tilkobling", http.StatusBadGateway)
+		return
+	}
+	db, err := connector.Open(r.Context(), dc.creds)
+	if err != nil {
+		http.Error(w, "kunne ikke koble til databasen", http.StatusBadGateway)
+		return
+	}
+	defer db.Close()
+	cols, rows, err := connector.SafeQuery(r.Context(), db, dc.creds.Driver, sql, dc.allowed)
+	if err != nil {
+		http.Error(w, "spørringen feilet: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, map[string]any{"columns": cols, "rows": rows, "row_count": len(rows)})
 }
