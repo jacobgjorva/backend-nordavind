@@ -183,12 +183,13 @@ func threadText(msgs []mail.Message) string {
 
 const mailAnalyzeSystem = "Du er en norsk e-postassistent. Du får en e-posttråd. Svar KUN med JSON " +
 	"(ingen prat, ingen ```): {\"summary\": \"\", \"essences\": [\"<melding 1 forenklet>\", ...], " +
-	"\"draft\": \"<et vennlig, profesjonelt svarutkast på norsk, uten signatur>\"}. " +
+	"\"proposal\": \"<forslag til brukeren>\", \"draft\": \"<svarutkast på norsk, uten signatur>\"}. " +
 	"essences skal ha ett element per melding, i samme rekkefølge. Hver essence er en KRAFTIG forenklet " +
 	"versjon av selve meldingen, skrevet i FØRSTEPERSON som om avsenderen sier det selv (ikke et " +
 	"tredjeperson-sammendrag). Behold kun det viktigste, kutt høflighetsfraser og støy. " +
 	"Eksempel: «Kan dere levere 600 enheter i stedet for 500?» — ikke «Avsenderen spør om flere enheter». " +
-	"Hold det til én til to korte setninger per melding."
+	"proposal er ÉN kort setning som spør brukeren om å svare, på formen «Skal jeg svare <navn> om <tema>?». " +
+	"draft er et vennlig, profesjonelt svar. Hold alt kort."
 
 // handleMailAnalyze oppsummerer tråden og lager et svarutkast.
 func (s *Server) handleMailAnalyze(w http.ResponseWriter, r *http.Request) {
@@ -216,6 +217,7 @@ func (s *Server) handleMailAnalyze(w http.ResponseWriter, r *http.Request) {
 	var parsed struct {
 		Summary  string   `json:"summary"`
 		Essences []string `json:"essences"`
+		Proposal string   `json:"proposal"`
 		Draft    string   `json:"draft"`
 	}
 	if err := json.Unmarshal([]byte(stripFences(raw)), &parsed); err != nil {
