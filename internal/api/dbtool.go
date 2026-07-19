@@ -50,22 +50,27 @@ func (s *Server) buildDBTool(tenantID, userID, onlyConnID string) *dbToolCtx {
 		}
 		tables, links, err := s.store.AccessibleTables(c.ID, userID)
 		if err != nil {
+			s.log.Warn("db-verktøy: dropper kobling, tabelloppslag feilet", "connection", c.Name, "id", c.ID, "err", err)
 			continue
 		}
 		views, _ := s.store.ConnectionViews(c.ID)
 		if len(tables) == 0 && len(views) == 0 {
+			s.log.Warn("db-verktøy: dropper kobling, ingen tilgjengelige tabeller/views", "connection", c.Name, "id", c.ID, "user", userID)
 			continue
 		}
 		_, enc, err := s.store.ConnectionCreds(tenantID, c.ID)
 		if err != nil {
+			s.log.Warn("db-verktøy: dropper kobling, creds-oppslag feilet", "connection", c.Name, "id", c.ID, "err", err)
 			continue
 		}
 		plain, err := connector.Decrypt(s.credsKey, enc)
 		if err != nil {
+			s.log.Warn("db-verktøy: dropper kobling, dekryptering feilet (feil SECRET_KEY?)", "connection", c.Name, "id", c.ID, "err", err)
 			continue
 		}
 		var creds connector.Creds
 		if err := json.Unmarshal(plain, &creds); err != nil {
+			s.log.Warn("db-verktøy: dropper kobling, ugyldig creds-json", "connection", c.Name, "id", c.ID, "err", err)
 			continue
 		}
 
@@ -105,6 +110,7 @@ func (s *Server) buildDBTool(tenantID, userID, onlyConnID string) *dbToolCtx {
 		t.conns[c.ID] = dbConn{conn: c, creds: creds, allowed: allowed}
 	}
 	if len(t.conns) == 0 {
+		s.log.Warn("db-verktøy: ingen brukbare koblinger, modellen får ingen database", "tenant", tenantID, "user", userID, "onlyConnID", onlyConnID)
 		return nil
 	}
 	t.schema = schema.String()

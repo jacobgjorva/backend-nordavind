@@ -99,12 +99,13 @@ func (s *Server) executeAgent(ctx context.Context, a store.Agent) (string, int, 
 	defer cancel()
 
 	tools := []any{webSearchTool}
-	var dbCtx *dbToolCtx
-	if a.ConnectionID != "" {
-		dbCtx = s.buildDBTool(a.TenantID, a.UserID, a.ConnectionID)
-		if dbCtx != nil {
-			tools = append(tools, dbCtx.tool)
-		}
+	// Gi agenten samme DB-kontekst som interaktiv chat: ALLE eierens
+	// koblinger, ikke bare den bundne. resolveConn auto-ruter til riktig
+	// database ut fra tabellene spørringen nevner, så agenten finner alltid
+	// dataene selv om a.ConnectionID mangler eller peker feil.
+	dbCtx := s.buildDBTool(a.TenantID, a.UserID, "")
+	if dbCtx != nil {
+		tools = append(tools, dbCtx.tool)
 	}
 
 	system := "Du er en autonom agent. Systemet håndterer tidsplan og frekvens — du skal utføre " +
@@ -112,6 +113,13 @@ func (s *Server) executeAgent(ctx context.Context, a store.Agent) (string, int, 
 		"hvor ofte du kjøres. Si ALDRI at du ikke kan kjøre automatisk, planlagt eller kontinuerlig — " +
 		"bare lever resultatet direkte. Kort, konkret svar på norsk, ingen innledning eller spørsmål tilbake. " +
 		"Kun lesing — databasen er skrivebeskyttet, du kan aldri endre data."
+	if dbCtx != nil {
+		system += " Du har tilgang til bedriftens database via verktøyet query_database — " +
+			"bruk det når oppgaven krever data derfra, aldri si at du mangler tilgang."
+		if _, ok := dbCtx.conns[a.ConnectionID]; ok {
+			system += " Bruk connection_id=" + a.ConnectionID + " med mindre oppgaven tydelig gjelder en annen database."
+		}
+	}
 
 	messages := []any{
 		map[string]any{"role": "system", "content": system},
