@@ -174,37 +174,52 @@ func (s *Server) executeAgent(ctx context.Context, a store.Agent) (string, int, 
 		}
 		msg := out.Choices[0].Message
 
-		if len(msg.ToolCalls) == 0 {
-			return strings.TrimSpace(msg.Content), totalTokens, nil
+		// Normaliser verktøykall: strukturerte + evt. tekstlige
+		// <tool_call>-blokker modellen la i innholdet (samme robusthet som
+		// streaming-relayet).
+		type normCall struct{ id, name, args string }
+		var norm []normCall
+		for _, c := range msg.ToolCalls {
+			norm = append(norm, normCall{c.ID, c.Function.Name, c.Function.Arguments})
+		}
+		visible, _, blocks := splitToolCallText(msg.Content)
+		for i, b := range blocks {
+			if name, args := parseTextualToolCall(b); name != "" {
+				norm = append(norm, normCall{fmt.Sprintf("call_t%d", i), name, args})
+			}
+		}
+
+		if len(norm) == 0 {
+			return strings.TrimSpace(visible), totalTokens, nil
 		}
 
 		// Stopp hvis token-grensen er passert underveis.
 		if a.DailyTokenLimit > 0 && totalTokens >= a.DailyTokenLimit {
-			return strings.TrimSpace(msg.Content), totalTokens, nil
+			return strings.TrimSpace(visible), totalTokens, nil
 		}
 
 		// Registrer assistant-meldingen med verktøykallene og utfør dem.
-		calls := make([]any, 0, len(msg.ToolCalls))
-		toolMsgs := make([]any, 0, len(msg.ToolCalls))
-		for _, c := range msg.ToolCalls {
+		calls := make([]any, 0, len(norm))
+		toolMsgs := make([]any, 0, len(norm))
+		for _, c := range norm {
 			calls = append(calls, map[string]any{
-				"id": c.ID, "type": "function",
-				"function": map[string]any{"name": c.Function.Name, "arguments": c.Function.Arguments},
+				"id": c.id, "type": "function",
+				"function": map[string]any{"name": c.name, "arguments": c.args},
 			})
 			var args struct {
 				Query        string `json:"query"`
 				ConnectionID string `json:"connection_id"`
 				SQL          string `json:"sql"`
 			}
-			_ = json.Unmarshal([]byte(c.Function.Arguments), &args)
+			_ = json.Unmarshal([]byte(c.args), &args)
 			var result string
-			if c.Function.Name == "query_database" {
+			if c.name == "query_database" {
 				result = s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL)
 			} else {
 				result, _ = s.runWebSearch(ctx, args.Query)
 			}
 			toolMsgs = append(toolMsgs, map[string]any{
-				"role": "tool", "tool_call_id": c.ID, "content": result,
+				"role": "tool", "tool_call_id": c.id, "content": result,
 			})
 		}
 		messages = append(messages, map[string]any{
