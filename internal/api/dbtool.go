@@ -70,21 +70,24 @@ func (s *Server) buildDBTool(tenantID, userID, onlyConnID string) *dbToolCtx {
 		}
 
 		var allowed []string
+		// Tett format: én linje per tabell «navn(kol type, …)», beholder all
+		// info men kutter punktlister/innrykk/linjeskift = færre tokens.
 		fmt.Fprintf(&schema, "Database %q (id=%s, %s):\n", c.Name, c.ID, c.Driver)
 		for _, tb := range tables {
 			allowed = append(allowed, tb.Name)
-			fmt.Fprintf(&schema, "- %s", tb.Name)
+			cols := make([]string, 0, len(tb.ColumnList))
+			for _, col := range tb.ColumnList {
+				s := col.Name + " " + col.Type
+				if col.Description != "" {
+					s += " (" + col.Description + ")"
+				}
+				cols = append(cols, s)
+			}
+			fmt.Fprintf(&schema, "%s(%s)", tb.Name, strings.Join(cols, ", "))
 			if tb.Description != "" {
-				fmt.Fprintf(&schema, ": %s", tb.Description)
+				fmt.Fprintf(&schema, " — %s", tb.Description)
 			}
 			schema.WriteString("\n")
-			for _, col := range tb.ColumnList {
-				fmt.Fprintf(&schema, "  - %s (%s)", col.Name, col.Type)
-				if col.Description != "" {
-					fmt.Fprintf(&schema, ": %s", col.Description)
-				}
-				schema.WriteString("\n")
-			}
 		}
 		for _, l := range links {
 			fmt.Fprintf(&schema, "JOIN: %s.%s = %s.%s\n", l.FromTable, l.FromColumn, l.ToTable, l.ToColumn)
