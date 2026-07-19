@@ -103,10 +103,7 @@ func toPersons(as []imap.Address) []Person {
 // dialIMAP kobler til og logger inn.
 func (a Account) dialIMAP() (*imapclient.Client, error) {
 	addr := fmt.Sprintf("%s:%d", a.IMAPHost, a.IMAPPort)
-	options := &imapclient.Options{
-		WordDecoder: &mime.WordDecoder{},
-	}
-	c, err := imapclient.DialTLS(addr, options)
+	c, err := imapclient.DialTLS(addr, nil)
 	if err != nil {
 		return nil, fmt.Errorf("imap-tilkobling feilet: %w", err)
 	}
@@ -144,7 +141,7 @@ func (a Account) fetchEnvelopes(n int) ([]envInfo, error) {
 		return nil, err
 	}
 	defer c.Close()
-	defer c.Logout().Wait()
+	defer func() { c.Logout().Wait() }()
 
 	mbox, err := c.Select("INBOX", nil).Wait()
 	if err != nil {
@@ -260,7 +257,7 @@ func (a Account) Thread(key string, scan int) ([]Message, error) {
 		return nil, err
 	}
 	defer c.Close()
-	defer c.Logout().Wait()
+	defer func() { c.Logout().Wait() }()
 	if _, err := c.Select("INBOX", nil).Wait(); err != nil {
 		return nil, err
 	}
