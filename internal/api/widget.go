@@ -28,7 +28,8 @@ const widgetSystemBase = "Du bygger ÉN widget for brukeren — én enkelt visua
 	"\n- table: en tabell fra databasen. Felt: title, connection_id, sql (SELECT)." +
 	"\n- text: en tekstblokk/overskrift. Felt: content (markdown)." +
 	"\nFor data-typene: skriv en SELECT som gir de riktige kolonnene, og oppgi connection_id fra " +
-	"skjemaet under. Etter verktøykallet svarer du med maks ett kort ord (f.eks. «Ok»). Aldri lange svar."
+	"skjemaet under. For line/bar/donut/sparkline: oppgi ALLTID både x (kategori/dato) og y (verdi) — " +
+	"SELECT må returnere begge kolonnene. Etter verktøykallet svarer du med maks ett kort ord (f.eks. «Ok»). Aldri lange svar."
 
 // widgetSystem legger til databaseskjemaet så modellen kan skrive SQL.
 func (s *Server) widgetSystem(ctx context.Context) string {
