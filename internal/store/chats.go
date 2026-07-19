@@ -3,14 +3,19 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 )
 
-// Chat er en samtale eid av én bruker i en tenant.
+// Chat er en samtale eid av én bruker i en tenant. AgentID er satt hvis
+// samtalen tilhører en agent (grupperes under «Agenter» i sidepanelet).
 type Chat struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID           string    `json:"id"`
+	Title        string    `json:"title"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	AgentID      string    `json:"agent_id,omitempty"`
+	AgentEnabled bool      `json:"agent_enabled,omitempty"`
+	Kind         string    `json:"kind,omitempty"` // "chat" | "dashboard"
 }
 
 // ChatMessage er én melding i en samtale. Sources er JSON fra websøk.
@@ -21,7 +26,7 @@ type ChatMessage struct {
 }
 
 func (s *Store) migrateChats() error {
-	_, err := s.db.Exec(`
+	if _, err := s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS chats (
 			id         TEXT PRIMARY KEY,
 			tenant_id  TEXT NOT NULL,
@@ -40,8 +45,20 @@ func (s *Store) migrateChats() error {
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE INDEX IF NOT EXISTS idx_messages_chat ON chat_messages (chat_id, id);
-	`)
-	return err
+	`); err != nil {
+		return err
+	}
+	for _, col := range []string{
+		`ALTER TABLE chats ADD COLUMN agent_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE chats ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat'`,
+		`ALTER TABLE chats ADD COLUMN dashboard_spec TEXT NOT NULL DEFAULT '{"components":[]}'`,
+	} {
+		if _, err := s.db.Exec(col); err != nil &&
+			!strings.Contains(err.Error(), "duplicate column") {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) CreateChat(tenantID, userID, title string) (Chat, error) {
@@ -56,7 +73,9 @@ func (s *Store) CreateChat(tenantID, userID, title string) (Chat, error) {
 // ListChats returnerer brukerens samtaler, nyest oppdatert først.
 func (s *Store) ListChats(userID string) ([]Chat, error) {
 	rows, err := s.db.Query(
-		`SELECT id, title, updated_at FROM chats WHERE user_id = ? ORDER BY updated_at DESC LIMIT 100`,
+		`SELECT c.id, c.title, c.updated_at, c.agent_id, COALESCE(a.enabled, 0), c.kind
+		 FROM chats c LEFT JOIN agents a ON a.id = c.agent_id
+		 WHERE c.user_id = ? ORDER BY c.updated_at DESC LIMIT 100`,
 		userID,
 	)
 	if err != nil {
@@ -67,12 +86,27 @@ func (s *Store) ListChats(userID string) ([]Chat, error) {
 	var out []Chat
 	for rows.Next() {
 		var c Chat
-		if err := rows.Scan(&c.ID, &c.Title, &c.UpdatedAt); err != nil {
+		var enabled int
+		if err := rows.Scan(&c.ID, &c.Title, &c.UpdatedAt, &c.AgentID, &enabled, &c.Kind); err != nil {
 			return nil, err
 		}
+		c.AgentEnabled = enabled != 0
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// AppendAgentMessage legger en melding til en agent-chat uten eierskapssjekk
+// (scheduleren kjører uten brukersesjon).
+func (s *Store) AppendAgentMessage(chatID string, m ChatMessage) error {
+	if _, err := s.db.Exec(
+		`INSERT INTO chat_messages (chat_id, role, content, sources) VALUES (?, ?, ?, ?)`,
+		chatID, m.Role, m.Content, m.Sources,
+	); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`UPDATE chats SET updated_at = ? WHERE id = ?`, time.Now(), chatID)
+	return err
 }
 
 // chatOwned sjekker at samtalen tilhører brukeren.

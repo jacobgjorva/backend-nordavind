@@ -9,7 +9,7 @@ import (
 // Config holder all oppstartskonfigurasjon, lest fra miljøvariabler.
 type Config struct {
 	Port            string
-	UpstreamBaseURL string // OpenAI-kompatibelt endepunkt, f.eks. https://api.eurouter.ai/v1
+	UpstreamBaseURL string // OpenAI-kompatibelt endepunkt (Scaleway Generative APIs)
 	UpstreamAPIKey  string
 	AllowedOrigins  []string // CORS-origins for frontend (kommaseparert i env)
 	DBPath          string   // SQLite-fil for tenants/brukere/sesjoner
@@ -20,14 +20,14 @@ func Load() (Config, error) {
 	loadDotEnv(".env")
 	cfg := Config{
 		Port:            getenv("PORT", "8080"),
-		UpstreamBaseURL: getenv("UPSTREAM_BASE_URL", "https://api.eurouter.ai/api/v1"),
-		UpstreamAPIKey:  os.Getenv("EUROUTER_API_KEY"),
+		UpstreamBaseURL: getenv("UPSTREAM_BASE_URL", "https://api.scaleway.ai/v1"),
+		UpstreamAPIKey:  os.Getenv("UPSTREAM_API_KEY"),
 		AllowedOrigins:  strings.Split(getenv("ALLOWED_ORIGIN", "http://localhost:5173,http://127.0.0.1:5173"), ","),
 		DBPath:          getenv("DB_PATH", "data/nordavind.db"),
 		AuthRequired:    getenv("AUTH_REQUIRED", "false") == "true",
 	}
 	if cfg.UpstreamAPIKey == "" {
-		return cfg, fmt.Errorf("EUROUTER_API_KEY må være satt")
+		return cfg, fmt.Errorf("UPSTREAM_API_KEY må være satt")
 	}
 	return cfg, nil
 }

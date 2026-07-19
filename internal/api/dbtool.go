@@ -12,8 +12,9 @@ import (
 
 // dbToolCtx er databasene brukeren har tilgang til i denne forespørselen.
 type dbToolCtx struct {
-	conns map[string]dbConn // connection-id -> tilkobling
-	tool  map[string]any
+	conns  map[string]dbConn // connection-id -> tilkobling
+	tool   map[string]any
+	schema string // menneskelesbart skjema (til dashboard-SQL)
 }
 
 type dbConn struct {
@@ -29,7 +30,14 @@ func (s *Server) dbToolContext(ctx context.Context) *dbToolCtx {
 	if !ok {
 		return nil
 	}
-	conns, err := s.store.ListConnections(user.TenantID)
+	return s.buildDBTool(user.TenantID, user.ID, "")
+}
+
+// buildDBTool bygger query_database-verktøyet for en tenant/bruker. Hvis
+// onlyConnID er satt, begrenses verktøyet til den ene tilkoblingen (brukes
+// av agent-scheduleren, som kjører uten en HTTP-sesjon).
+func (s *Server) buildDBTool(tenantID, userID, onlyConnID string) *dbToolCtx {
+	conns, err := s.store.ListConnections(tenantID)
 	if err != nil || len(conns) == 0 {
 		return nil
 	}
@@ -37,7 +45,10 @@ func (s *Server) dbToolContext(ctx context.Context) *dbToolCtx {
 	t := &dbToolCtx{conns: map[string]dbConn{}}
 	var schema strings.Builder
 	for _, c := range conns {
-		tables, links, err := s.store.AccessibleTables(c.ID, user.ID)
+		if onlyConnID != "" && c.ID != onlyConnID {
+			continue
+		}
+		tables, links, err := s.store.AccessibleTables(c.ID, userID)
 		if err != nil {
 			continue
 		}
@@ -45,7 +56,7 @@ func (s *Server) dbToolContext(ctx context.Context) *dbToolCtx {
 		if len(tables) == 0 && len(views) == 0 {
 			continue
 		}
-		_, enc, err := s.store.ConnectionCreds(user.TenantID, c.ID)
+		_, enc, err := s.store.ConnectionCreds(tenantID, c.ID)
 		if err != nil {
 			continue
 		}
@@ -93,6 +104,7 @@ func (s *Server) dbToolContext(ctx context.Context) *dbToolCtx {
 	if len(t.conns) == 0 {
 		return nil
 	}
+	t.schema = schema.String()
 
 	t.tool = map[string]any{
 		"type": "function",

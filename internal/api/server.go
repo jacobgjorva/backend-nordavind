@@ -46,7 +46,7 @@ func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 		rates:    &usdNok{},
 		credsKey: key,
 	}
-	go s.pricing.refreshLoop(&http.Client{Timeout: 30 * time.Second}, cfg.UpstreamBaseURL, cfg.UpstreamAPIKey)
+	s.startScheduler(context.Background())
 	return s
 }
 
@@ -77,6 +77,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/chats/{id}/messages", s.requireAuth(s.handleAppendChatMessage))
 	mux.HandleFunc("DELETE /v1/chats/{id}", s.requireAuth(s.handleDeleteChat))
 	mux.HandleFunc("POST /v1/chats/{id}/title", s.requireAuth(s.handleGenerateChatTitle))
+	mux.HandleFunc("PATCH /v1/chats/{id}", s.requireAuth(s.handleRenameChat))
 	mux.HandleFunc("GET /v1/connections", s.requireAdmin(s.handleListConnections))
 	mux.HandleFunc("POST /v1/connections", s.requireAdmin(s.handleCreateConnection))
 	mux.HandleFunc("POST /v1/connections/test", s.requireAdmin(s.handleTestConnection))
@@ -88,6 +89,26 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /v1/admin/users/{id}", s.requireAdmin(s.handleAdminDeleteUser))
 	mux.HandleFunc("POST /v1/chat/completions", s.requireAuth(s.handleChatCompletions))
 	mux.HandleFunc("POST /v1/extract", s.requireAuth(s.handleExtract))
+	mux.HandleFunc("POST /v1/corrections", s.requireAuth(s.handleLogCorrection))
+	mux.HandleFunc("POST /v1/knowledge/extract", s.requireAuth(s.handleExtractKnowledge))
+	mux.HandleFunc("GET /v1/knowledge/pending", s.requireAdmin(s.handleListPending))
+	mux.HandleFunc("GET /v1/knowledge/graph", s.requireAuth(s.handleKnowledgeGraph))
+	mux.HandleFunc("POST /v1/knowledge/{id}/accept", s.requireAdmin(s.handleAcceptNode))
+	mux.HandleFunc("POST /v1/knowledge/{id}/reject", s.requireAdmin(s.handleRejectNode))
+	mux.HandleFunc("PUT /v1/knowledge/{id}", s.requireAdmin(s.handleUpdateNode))
+	mux.HandleFunc("DELETE /v1/knowledge/{id}", s.requireAdmin(s.handleDeleteNode))
+	mux.HandleFunc("GET /v1/agents", s.requireAuth(s.handleListAgents))
+	mux.HandleFunc("GET /v1/agent-connections", s.requireAuth(s.handleAgentConnections))
+	mux.HandleFunc("POST /v1/widgets", s.requireAuth(s.handleCreateWidget))
+	mux.HandleFunc("GET /v1/widgets", s.requireAuth(s.handleListWidgets))
+	mux.HandleFunc("GET /v1/widgets/{slug}", s.requireAuth(s.handleGetWidget))
+	mux.HandleFunc("DELETE /v1/widgets/{slug}", s.requireAuth(s.handleDeleteWidget))
+	mux.HandleFunc("GET /v1/widgets/{slug}/query", s.requireAuth(s.handleWidgetQuery))
+	mux.HandleFunc("GET /v1/chats/{chatId}/agent", s.requireAuth(s.handleAgentByChat))
+	mux.HandleFunc("PATCH /v1/agents/{id}", s.requireAuth(s.handleSetAgentEnabled))
+	mux.HandleFunc("PUT /v1/agents/{id}", s.requireAuth(s.handleUpdateAgent))
+	mux.HandleFunc("POST /v1/agents", s.requireAuth(s.handleCreateAgent))
+	mux.HandleFunc("DELETE /v1/agents/{id}", s.requireAuth(s.handleDeleteAgent))
 	return s.cors(mux)
 }
 
@@ -105,6 +126,14 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	patched, full, pickedModel := withRoutingDefaults(body)
+
+	// Berik med relevant bransjekunnskap fra tenantens graf.
+	if kb := s.knowledgeFor(r.Context(), full); kb != "" {
+		injectSystem(full, kb)
+		if b, err := json.Marshal(full); err == nil {
+			patched = b
+		}
+	}
 
 	// Streaming-forespørsler kjøres i agent-løkken (web_search som verktøy).
 	if wantsStream, _ := full["stream"].(bool); wantsStream {
@@ -182,7 +211,13 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 					"oppsummering. Aldri gjett: bruk web_search for fakta du er usikker på, og si fra " +
 					"hvis kildene ikke dekker svaret. Skriv aldri URL-er eller kildehenvisninger — de " +
 					"vises automatisk. Ved råd: land én tydelig anbefaling. Kun hvis forespørselen er " +
-					"for vag til å kunne besvares: still ett oppklarende spørsmål.",
+					"for vag til å kunne besvares: still ett oppklarende spørsmål. " +
+					"Ha en avslappet, laidback tone: uformell og lun, som en kollega du er trygg på. " +
+					"Bruk KUN naturlige, ekte norske uttrykk. Aldri oversett engelsk slang eller " +
+					"idiomer direkte til norsk (det blir rart), velg det en nordmann faktisk ville sagt " +
+					"eller la det være. Ikke stiv eller overivrig, men aldri på bekostning av korthet eller presisjon. " +
+					"Du kan tolke bilder: brukeren kan laste opp et bilde via bindersen, så beskriver " +
+					"og analyserer du det. Si aldri at du ikke kan se bilder.",
 			}
 			full["messages"] = append([]any{system}, raw...)
 		}
@@ -192,29 +227,65 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 	if model != payload.Model {
 		full["model"] = model
 	}
-	if model == "auto" {
+	// Et nytt bilde i siste melding krever vision-modellen — overstyrer all
+	// annen ruting. Oppfølging uten bilde faller tilbake til Bris/Storm.
+	if router.LastUserHasImage(payload.Messages) {
+		model = router.VisionModel
+		full["model"] = model
+	} else if model == "auto" {
 		model = router.Pick(payload.Messages)
 		full["model"] = model
-		if model == router.HeavyModel {
-			// Tyngre spørsmål får resonnering uansett hva klienten ba om.
+		if model == router.TopModel {
+			// Tornado (GLM) resonnerer på de tyngste oppgavene.
 			full["reasoning"] = map[string]any{"enabled": true}
 		}
 	}
-	if _, ok := full["provider"]; !ok {
-		if model == router.MidModel {
-			// Enkelte tredjeparts-leverandører (f.eks. nebul) feiler på
-			// tool-streaming for Mistral — bruk Mistrals egen.
-			full["provider"] = map[string]any{"order": []string{"mistral"}}
-		} else {
-			full["provider"] = map[string]any{"sort": "throughput"}
-		}
+	// Bris/Storm er ikke multimodale — bytt ut gamle bilde-deler med en
+	// tekstplassholder så de kan svare på oppfølging uten å feile på bildedata.
+	if model != router.VisionModel {
+		stripImageParts(full)
 	}
-
 	patched, err := json.Marshal(full)
 	if err != nil {
 		return body, full, model
 	}
 	return patched, full, model
+}
+
+// stripImageParts erstatter bilde-deler i meldingene med en tekstplassholder,
+// slik at ikke-multimodale modeller (Bris/Storm) ikke feiler på bildedata.
+// Vision-modellens beskrivelse ligger allerede i samtalen som tekst.
+func stripImageParts(full map[string]any) {
+	msgs, ok := full["messages"].([]any)
+	if !ok {
+		return
+	}
+	for _, m := range msgs {
+		mm, ok := m.(map[string]any)
+		if !ok {
+			continue
+		}
+		parts, ok := mm["content"].([]any)
+		if !ok {
+			continue
+		}
+		var b strings.Builder
+		for _, p := range parts {
+			pm, ok := p.(map[string]any)
+			if !ok {
+				continue
+			}
+			switch pm["type"] {
+			case "text":
+				if t, ok := pm["text"].(string); ok {
+					b.WriteString(t)
+				}
+			case "image_url":
+				b.WriteString(" [bilde sendt tidligere] ")
+			}
+		}
+		mm["content"] = strings.TrimSpace(b.String())
+	}
 }
 
 // flushCopy kopierer upstream-responsen til klienten og flusher fortløpende,

@@ -44,13 +44,96 @@ type toolCall struct {
 // runAgentLoop kjører chat-forespørselen med web_search som verktøy.
 // Reasoning og modell-chunks streames til klienten underveis; når modellen
 // begynner på selve svaret, pipes resten rått gjennom.
-func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full map[string]any) {
-	tools := []any{webSearchTool}
-	dbCtx := s.dbToolContext(ctx)
-	if dbCtx != nil {
-		tools = append(tools, dbCtx.tool)
+// injectSystem legger en instruks til samtalens system-melding — føyer til
+// den første system-meldingen hvis den finnes, ellers settes en ny fremst.
+func injectSystem(full map[string]any, text string) {
+	msgs, _ := full["messages"].([]any)
+	for _, m := range msgs {
+		mm, ok := m.(map[string]any)
+		if !ok || mm["role"] != "system" {
+			continue
+		}
+		if c, ok := mm["content"].(string); ok {
+			mm["content"] = c + "\n\n" + text
+			return
+		}
 	}
-	full["tools"] = tools
+	sys := map[string]any{"role": "system", "content": text}
+	full["messages"] = append([]any{sys}, msgs...)
+}
+
+// hasImageMessage sjekker om samtalen inneholder en bilde-del.
+func hasImageMessage(full map[string]any) bool {
+	msgs, _ := full["messages"].([]any)
+	for _, m := range msgs {
+		mm, ok := m.(map[string]any)
+		if !ok {
+			continue
+		}
+		parts, ok := mm["content"].([]any)
+		if !ok {
+			continue
+		}
+		for _, p := range parts {
+			if pm, ok := p.(map[string]any); ok && pm["type"] == "image_url" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full map[string]any) {
+	dbCtx := s.dbToolContext(ctx)
+
+	// Agent-oppsett: /agent-flyten settes av frontend. Vi legger inn en
+	// setup-instruks og administrasjonsverktøyene. Flagget må fjernes før
+	// forespørselen sendes videre til upstream.
+	setup, _ := full["nordavind_agent_setup"].(bool)
+	delete(full, "nordavind_agent_setup")
+	if setup {
+		injectSystem(full, agentSetupSystem)
+	}
+
+	// Widget-editor: modellen er ren utfører som bygger én widget via verktøy.
+	widgetSlug, _ := full["nordavind_widget"].(string)
+	delete(full, "nordavind_widget")
+	if widgetSlug != "" {
+		injectSystem(full, s.widgetSystem(ctx))
+	}
+
+	// Agent-chat: brukeren kan be agenten om å endre seg selv.
+	editID, _ := full["nordavind_agent_edit"].(string)
+	delete(full, "nordavind_agent_edit")
+	editable := false
+	if editID != "" {
+		if user, ok := ctx.Value(userKey).(store.User); ok {
+			if a, err := s.store.GetAgent(editID, user.ID); err == nil {
+				injectSystem(full, agentEditSystem(a))
+				editable = true
+			}
+		}
+	}
+
+	// Bilder tolkes av vision-modellen uten verktøy — web_search/db gir
+	// tomme svar sammen med bilde-input.
+	if !hasImageMessage(full) {
+		tools := []any{webSearchTool}
+		if dbCtx != nil {
+			tools = append(tools, dbCtx.tool)
+		}
+		// Agent-verktøy kun i /agent-modus.
+		if setup {
+			tools = append(tools, s.buildAgentTools(ctx)...)
+		}
+		if editable {
+			tools = append(tools, buildAgentEditTools()...)
+		}
+		if widgetSlug != "" {
+			tools = append(tools, widgetTools()...)
+		}
+		full["tools"] = tools
+	}
 	full["stream"] = true
 	// Be upstream om tokenforbruk i streamen.
 	full["stream_options"] = map[string]any{"include_usage": true}
@@ -109,11 +192,34 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			_ = json.Unmarshal([]byte(c.Args.String()), &args)
 
 			var result string
-			if c.Name == "query_database" {
+			switch c.Name {
+			case "query_database":
 				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Spør databasen"})
 				emit("data: " + string(meta))
 				result = s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL)
-			} else {
+			case "create_agent", "update_agent", "delete_agent", "list_agents":
+				var aa agentToolArgs
+				_ = json.Unmarshal([]byte(c.Args.String()), &aa)
+				switch c.Name {
+				case "create_agent":
+					meta, _ := json.Marshal(map[string]any{"nordavind_step": "Oppretter agent"})
+					emit("data: " + string(meta))
+					result = s.runCreateAgent(ctx, aa)
+				case "update_agent":
+					meta, _ := json.Marshal(map[string]any{"nordavind_step": "Oppdaterer agent"})
+					emit("data: " + string(meta))
+					result = s.runUpdateAgent(ctx, aa)
+				case "delete_agent":
+					result = s.runDeleteAgent(ctx, aa)
+				default:
+					result = s.runListAgents(ctx)
+				}
+			case "set_widget":
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Bygger widget"})
+				emit("data: " + string(meta))
+				result = s.runWidgetOp(ctx, widgetSlug, c.Args.String())
+				emit(`data: {"nordavind_widget_updated":true}`)
+			default:
 				if q := strings.TrimSpace(args.Query); q != "" {
 					// Fremdriftssteg til tidslinjen i frontend.
 					meta, _ := json.Marshal(map[string]any{"nordavind_step": "Søker: " + q})
@@ -302,7 +408,6 @@ func (s *Server) generateTitle(r *http.Request, question, answer string) string 
 		"max_tokens":  25,
 		"temperature": 0.3,
 		"reasoning":   map[string]any{"enabled": false},
-		"provider":    map[string]any{"order": []string{"mistral"}},
 	}
 	body, _ := json.Marshal(payload)
 

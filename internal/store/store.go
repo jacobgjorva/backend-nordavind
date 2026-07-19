@@ -55,7 +55,19 @@ func Open(path string) (*Store, error) {
 	if err := s.migrateChats(); err != nil {
 		return nil, err
 	}
-	return s, s.migrateConnections()
+	if err := s.migrateConnections(); err != nil {
+		return nil, err
+	}
+	if err := s.migrateCorrections(); err != nil {
+		return nil, err
+	}
+	if err := s.migrateAgents(); err != nil {
+		return nil, err
+	}
+	if err := s.migrateWidgets(); err != nil {
+		return nil, err
+	}
+	return s, s.migrateKnowledge()
 }
 
 func (s *Store) Close() error { return s.db.Close() }

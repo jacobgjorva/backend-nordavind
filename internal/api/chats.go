@@ -131,6 +131,41 @@ func (s *Server) handleDeleteChat(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleRenameChat setter en manuell tittel på samtalen.
+func (s *Server) handleRenameChat(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.currentUser(r)
+	if !ok {
+		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
+		return
+	}
+	var req struct {
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "ugyldig request", http.StatusBadRequest)
+		return
+	}
+	title := strings.TrimSpace(req.Title)
+	if title == "" {
+		http.Error(w, "tom tittel", http.StatusBadRequest)
+		return
+	}
+	if t := []rune(title); len(t) > 60 {
+		title = string(t[:60])
+	}
+	err := s.store.UpdateChatTitle(r.PathValue("id"), user.ID, title)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"title": title})
+}
+
 // handleGenerateChatTitle lager en kort tittel fra første utveksling og
 // lagrer den på samtalen.
 func (s *Server) handleGenerateChatTitle(w http.ResponseWriter, r *http.Request) {
