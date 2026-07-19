@@ -55,13 +55,39 @@ func (s *Server) handleExtractKnowledge(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "ugyldig request", http.StatusBadRequest)
 		return
 	}
-	if strings.TrimSpace(req.Question) == "" {
+	if !worthExtracting(req.Question) {
+		// Ikke bruk et LLM-kall på småprat/spørsmål uten bedriftsintern forklaring.
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	// Fyr og glem: brukeren skal ikke vente.
 	go s.runExtraction(user.TenantID, user.ID, req.ChatID, req.Question, req.Answer)
 	w.WriteHeader(http.StatusAccepted)
+}
+
+// extractMarkers er tegn på at brukeren forklarer noe bedriftsinternt (kilden
+// til kunnskapsnoder), i motsetning til å stille et spørsmål eller småprate.
+var extractMarkers = []string{
+	"vi ", "vår", "våre", "hos oss", "hos meg", "internt", "rutine", "pleier",
+	"kalles", "betyr", " må ", " skal ", "bruker vi", "vi bruker", "regel",
+	"krav", "policy", "prosedyre", "standarden", "alltid", "aldri",
+}
+
+// worthExtracting gater uttrekk-kallet: kun substansielle meldinger der
+// brukeren faktisk forklarer noe bedriftsinternt er verdt et LLM-kall.
+// Deterministisk forhåndsfilter = sparer det store flertallet av kallene.
+func worthExtracting(question string) bool {
+	q := strings.TrimSpace(question)
+	if len([]rune(q)) < 40 {
+		return false
+	}
+	low := strings.ToLower(q)
+	for _, m := range extractMarkers {
+		if strings.Contains(low, m) {
+			return true
+		}
+	}
+	return false
 }
 
 // runExtraction ber en billig modell foreslå 0–3 pending-noder og lagrer dem
