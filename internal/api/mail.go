@@ -235,8 +235,7 @@ func (s *Server) handleMailDraft(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
-	acc, _, err := s.mailAccount(user.ID)
-	if err != nil {
+	if _, _, err := s.mailAccount(user.ID); err != nil {
 		http.Error(w, "ingen konto", http.StatusNotFound)
 		return
 	}
@@ -246,11 +245,11 @@ func (s *Server) handleMailDraft(w http.ResponseWriter, r *http.Request) {
 		Feedback string `json:"feedback"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)
-	msgs, _ := acc.Thread(req.Key, inboxScan)
+	// Sender IKKE hele tråden på nytt — kun utkast + tilbakemelding (token-spart).
 	sys := "Du er en norsk e-postassistent. Forbedre svarutkastet ut fra tilbakemeldingen. " +
 		"Svar KUN med den nye e-postteksten (norsk, uten signatur), ingen forklaring."
-	userMsg := fmt.Sprintf("Tråd:\n%s\n\nNåværende utkast:\n%s\n\nTilbakemelding: %s",
-		threadText(msgs), req.Current, req.Feedback)
+	userMsg := fmt.Sprintf("Nåværende utkast:\n%s\n\nTilbakemelding: %s",
+		req.Current, req.Feedback)
 	draft, err := s.llmComplete(r.Context(), sys, userMsg)
 	if err != nil {
 		http.Error(w, "AI feilet", http.StatusBadGateway)
