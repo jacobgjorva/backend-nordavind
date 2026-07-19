@@ -301,10 +301,10 @@ func (s *Server) runWebSearch(ctx context.Context, query string) (string, []sour
 		s.log.Warn("websøk feilet", "query", query, "err", err)
 		return "Søket ga ingen resultater.", nil
 	}
-	if len(results) > 3 {
-		results = results[:3]
+	if len(results) > 2 {
+		results = results[:2]
 	}
-	pages := s.search.FetchPages(ctx, results, 3000)
+	pages := s.search.FetchPages(ctx, results, 1500)
 	s.log.Info("websøk", "query", query, "treff", len(results))
 
 	refs := make([]sourceRef, 0, len(results))
