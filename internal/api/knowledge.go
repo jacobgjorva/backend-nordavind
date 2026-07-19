@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
@@ -59,6 +61,34 @@ func lastUserText(full map[string]any) string {
 }
 
 // embed lager en vektor for en tekst via Scaleways embeddings-endepunkt.
+// Global cache for query-embeddings. Embeddings er tenant-uavhengige (samme
+// tekst → samme vektor), så identiske spørsmål slipper et nytt kall.
+var (
+	embedCache  sync.Map // string -> []float32
+	embedCacheN atomic.Int64
+)
+
+const embedCacheMax = 1000
+
+// embedCached returnerer en cachet embedding for teksten, ellers henter og
+// cacher den (bundet størrelse).
+func (s *Server) embedCached(ctx context.Context, text string) ([]float32, error) {
+	key := strings.ToLower(strings.TrimSpace(text))
+	if v, ok := embedCache.Load(key); ok {
+		return v.([]float32), nil
+	}
+	vec, err := s.embed(ctx, text)
+	if err != nil {
+		return nil, err
+	}
+	if embedCacheN.Load() < embedCacheMax {
+		if _, loaded := embedCache.LoadOrStore(key, vec); !loaded {
+			embedCacheN.Add(1)
+		}
+	}
+	return vec, nil
+}
+
 func (s *Server) embed(ctx context.Context, text string) ([]float32, error) {
 	url := strings.TrimSuffix(s.cfg.UpstreamBaseURL, "/") + "/embeddings"
 	body, _ := json.Marshal(map[string]any{"model": embeddingModel, "input": text})
@@ -109,14 +139,16 @@ func cosine(a, b []float32) float64 {
 // bransje-nodene for spørsmålet, pluss deres nærmeste naboer. Returnerer
 // tom streng hvis tenanten ingen relevante noder har.
 func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) string {
-	if strings.TrimSpace(query) == "" {
+	// Svært korte meldinger («ok», «takk», «ja») bærer ingen søkbar hensikt —
+	// hopp over embeddingen helt.
+	if len([]rune(strings.TrimSpace(query))) < 12 {
 		return ""
 	}
 	nodes, err := s.store.AcceptedNodes(tenantID)
 	if err != nil || len(nodes) == 0 {
 		return ""
 	}
-	qvec, err := s.embed(ctx, query)
+	qvec, err := s.embedCached(ctx, query)
 	if err != nil {
 		s.log.Warn("embedding feilet", "err", err)
 		return ""
