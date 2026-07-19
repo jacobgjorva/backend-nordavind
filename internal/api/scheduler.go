@@ -14,7 +14,7 @@ import (
 
 const (
 	schedulerTick           = 30 * time.Second
-	agentMaxRounds          = 6
+	agentMaxRounds          = 4
 	agentHTTPTimeoutSeconds = 120
 )
 
@@ -126,6 +126,8 @@ func (s *Server) executeAgent(ctx context.Context, a store.Agent) (string, int, 
 			"stream":      false,
 			"tools":       tools,
 			"temperature": 0.3,
+			"max_tokens":  800,
+			"reasoning":   map[string]any{"enabled": false},
 		}
 		if round == agentMaxRounds {
 			payload["tool_choice"] = "none" // tving et sluttsvar

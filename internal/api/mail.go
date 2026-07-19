@@ -113,7 +113,7 @@ func (s *Server) handleMailThread(w http.ResponseWriter, r *http.Request) {
 }
 
 // llmComplete kjører ett ikke-streamet LLM-kall og returnerer innholdet.
-func (s *Server) llmComplete(ctx context.Context, system, userMsg string) (string, error) {
+func (s *Server) llmComplete(ctx context.Context, system, userMsg string, maxTokens int) (string, error) {
 	payload := map[string]any{
 		"model": router.MidModel,
 		"messages": []any{
@@ -122,6 +122,7 @@ func (s *Server) llmComplete(ctx context.Context, system, userMsg string) (strin
 		},
 		"stream":      false,
 		"temperature": 0.3,
+		"max_tokens":  maxTokens,
 		"reasoning":   map[string]any{"enabled": false},
 	}
 	body, _ := json.Marshal(payload)
@@ -224,7 +225,7 @@ func (s *Server) handleMailAnalyze(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "fant ikke tråden", http.StatusNotFound)
 		return
 	}
-	raw, err := s.llmComplete(r.Context(), mailAnalyzeSystem, threadText(msgs))
+	raw, err := s.llmComplete(r.Context(), mailAnalyzeSystem, threadText(msgs), 700)
 	if err != nil {
 		http.Error(w, "AI-analyse feilet", http.StatusBadGateway)
 		return
@@ -280,7 +281,7 @@ func (s *Server) handleMailDraft(w http.ResponseWriter, r *http.Request) {
 		userMsg = fmt.Sprintf("Nåværende utkast:\n%s\n\nTilbakemelding: %s",
 			req.Current, req.Feedback)
 	}
-	draft, err := s.llmComplete(r.Context(), sys, userMsg)
+	draft, err := s.llmComplete(r.Context(), sys, userMsg, 500)
 	if err != nil {
 		http.Error(w, "AI feilet", http.StatusBadGateway)
 		return

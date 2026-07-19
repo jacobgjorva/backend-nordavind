@@ -241,6 +241,13 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 			full["reasoning"] = map[string]any{"enabled": true}
 		}
 	}
+	// Kun TopModel skal resonnere. Slå reasoning eksplisitt av for alle andre
+	// (ikke stol på upstream-default) med mindre klienten selv har satt det.
+	if model != router.TopModel {
+		if _, set := full["reasoning"]; !set {
+			full["reasoning"] = map[string]any{"enabled": false}
+		}
+	}
 	// Bris/Storm er ikke multimodale — bytt ut gamle bilde-deler med en
 	// tekstplassholder så de kan svare på oppfølging uten å feile på bildedata.
 	if model != router.VisionModel {
