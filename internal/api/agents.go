@@ -11,9 +11,8 @@ import (
 
 // handleCreateAgent oppretter en agent fra config-widgeten i chatten.
 func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	var req struct {
@@ -88,9 +87,8 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 // handleAgentConnections lister tenantens tilkoblinger (id + navn) som
 // agent-widgeten lar brukeren velge mellom. Trygt for alle innloggede.
 func (s *Server) handleAgentConnections(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	conns, err := s.store.ListConnections(user.TenantID)
@@ -108,9 +106,8 @@ func (s *Server) handleAgentConnections(w http.ResponseWriter, r *http.Request) 
 
 // handleListAgents returnerer brukerens agenter.
 func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	agents, err := s.store.ListAgents(user.ID)
@@ -127,9 +124,8 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 
 // handleAgentByChat returnerer agenten som eier en chat (for pause-knappen).
 func (s *Server) handleAgentByChat(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	agent, err := s.store.AgentByChat(r.PathValue("chatId"), user.ID)
@@ -147,9 +143,8 @@ func (s *Server) handleAgentByChat(w http.ResponseWriter, r *http.Request) {
 
 // handleSetAgentEnabled pauser eller gjenopptar en agent.
 func (s *Server) handleSetAgentEnabled(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	var req struct {
@@ -173,9 +168,8 @@ func (s *Server) handleSetAgentEnabled(w http.ResponseWriter, r *http.Request) {
 
 // handleUpdateAgent oppdaterer en agents konfigurasjon (redigering i chatten).
 func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	var req struct {
@@ -243,9 +237,8 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 
 // handleDeleteAgent sletter en agent brukeren eier.
 func (s *Server) handleDeleteAgent(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	err := s.store.DeleteAgent(r.PathValue("id"), user.ID)

@@ -28,7 +28,10 @@ func (s *Server) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 
 // handleCreateConnection tester tilkoblingen og lagrer kredensialene kryptert.
 func (s *Server) handleCreateConnection(w http.ResponseWriter, r *http.Request) {
-	user, _ := r.Context().Value(userKey).(store.User)
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
 	var req struct {
 		Name string `json:"name"`
 		connector.Creds
@@ -62,7 +65,10 @@ func (s *Server) handleCreateConnection(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleListConnections(w http.ResponseWriter, r *http.Request) {
-	user, _ := r.Context().Value(userKey).(store.User)
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
 	conns, err := s.store.ListConnections(user.TenantID)
 	if err != nil {
 		http.Error(w, "intern feil", http.StatusInternalServerError)
@@ -75,7 +81,10 @@ func (s *Server) handleListConnections(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteConnection(w http.ResponseWriter, r *http.Request) {
-	user, _ := r.Context().Value(userKey).(store.User)
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
 	if err := s.store.DeleteConnection(user.TenantID, r.PathValue("id")); err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, store.ErrNotFound) {
@@ -148,7 +157,10 @@ func (s *Server) handleConnectionSchema(w http.ResponseWriter, r *http.Request) 
 
 // handleSaveConnectionConfig lagrer admin-kurateringen for en tilkobling.
 func (s *Server) handleSaveConnectionConfig(w http.ResponseWriter, r *http.Request) {
-	user, _ := r.Context().Value(userKey).(store.User)
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
 	id := r.PathValue("id")
 	if _, _, err := s.store.ConnectionCreds(user.TenantID, id); err != nil {
 		http.Error(w, "ikke funnet", http.StatusNotFound)
@@ -193,7 +205,3 @@ func (s *Server) handleSaveConnectionConfig(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func writeJSON(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(v)
-}

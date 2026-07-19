@@ -9,16 +9,10 @@ import (
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
 
-func (s *Server) currentUser(r *http.Request) (store.User, bool) {
-	user, ok := r.Context().Value(userKey).(store.User)
-	return user, ok
-}
-
 // handleListChats returnerer brukerens samtaler.
 func (s *Server) handleListChats(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	chats, err := s.store.ListChats(user.ID)
@@ -35,9 +29,8 @@ func (s *Server) handleListChats(w http.ResponseWriter, r *http.Request) {
 
 // handleCreateChat oppretter en ny samtale.
 func (s *Server) handleCreateChat(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	var req struct {
@@ -66,9 +59,8 @@ func (s *Server) handleCreateChat(w http.ResponseWriter, r *http.Request) {
 
 // handleGetChat returnerer meldingene i en samtale.
 func (s *Server) handleGetChat(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	messages, err := s.store.ChatMessages(r.PathValue("id"), user.ID)
@@ -89,9 +81,8 @@ func (s *Server) handleGetChat(w http.ResponseWriter, r *http.Request) {
 
 // handleAppendChatMessage legger til en melding i samtalen.
 func (s *Server) handleAppendChatMessage(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	var m store.ChatMessage
@@ -114,9 +105,8 @@ func (s *Server) handleAppendChatMessage(w http.ResponseWriter, r *http.Request)
 
 // handleDeleteChat sletter en samtale.
 func (s *Server) handleDeleteChat(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	err := s.store.DeleteChat(r.PathValue("id"), user.ID)
@@ -133,9 +123,8 @@ func (s *Server) handleDeleteChat(w http.ResponseWriter, r *http.Request) {
 
 // handleRenameChat setter en manuell tittel på samtalen.
 func (s *Server) handleRenameChat(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	var req struct {
@@ -169,9 +158,8 @@ func (s *Server) handleRenameChat(w http.ResponseWriter, r *http.Request) {
 // handleGenerateChatTitle lager en kort tittel fra første utveksling og
 // lagrer den på samtalen.
 func (s *Server) handleGenerateChatTitle(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	var req struct {

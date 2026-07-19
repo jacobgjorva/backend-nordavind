@@ -10,9 +10,8 @@ import (
 
 // handleLogCorrection lagrer en brukerkorrigering på et AI-svar.
 func (s *Server) handleLogCorrection(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	var c store.Correction

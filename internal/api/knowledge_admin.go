@@ -11,9 +11,8 @@ import (
 
 // handleListPending returnerer noder som venter på godkjenning.
 func (s *Server) handleListPending(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	nodes, err := s.store.PendingNodes(user.TenantID)
@@ -30,9 +29,8 @@ func (s *Server) handleListPending(w http.ResponseWriter, r *http.Request) {
 
 // handleKnowledgeGraph returnerer aksepterte noder + kanter til visualisering.
 func (s *Server) handleKnowledgeGraph(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	nodes, edges, err := s.store.GraphData(user.TenantID)
@@ -53,9 +51,8 @@ func (s *Server) handleKnowledgeGraph(w http.ResponseWriter, r *http.Request) {
 // handleAcceptNode godkjenner en node (med evt. redigert tekst) og reberegner
 // embedding hvis teksten er endret.
 func (s *Server) handleAcceptNode(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	var req struct {
@@ -91,9 +88,8 @@ func (s *Server) handleAcceptNode(w http.ResponseWriter, r *http.Request) {
 
 // handleUpdateNode redigerer en akseptert node manuelt (reberegner embedding).
 func (s *Server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	var req struct {
@@ -129,9 +125,8 @@ func (s *Server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
 
 // handleDeleteNode sletter en node.
 func (s *Server) handleDeleteNode(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	err := s.store.DeleteNode(r.PathValue("id"), user.TenantID)
@@ -148,9 +143,8 @@ func (s *Server) handleDeleteNode(w http.ResponseWriter, r *http.Request) {
 
 // handleRejectNode avviser en node.
 func (s *Server) handleRejectNode(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	err := s.store.RejectNode(r.PathValue("id"), user.TenantID)

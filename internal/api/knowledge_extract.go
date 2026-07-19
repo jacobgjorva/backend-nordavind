@@ -42,9 +42,8 @@ type extractedNode struct {
 
 // handleExtractKnowledge starter uttrekk i bakgrunnen etter en utveksling.
 func (s *Server) handleExtractKnowledge(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	var req struct {

@@ -44,9 +44,8 @@ func (s *Server) mailAccount(u store.User) (mail.Account, store.MailAccount, err
 
 // handleGetMailAccount returnerer konto-status (fra config).
 func (s *Server) handleGetMailAccount(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	_, rec, err := s.mailAccount(user)
@@ -60,9 +59,8 @@ func (s *Server) handleGetMailAccount(w http.ResponseWriter, r *http.Request) {
 
 // handleMailInbox lister tråder nyest først.
 func (s *Server) handleMailInbox(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	acc, _, err := s.mailAccount(user)
@@ -88,9 +86,8 @@ func (s *Server) handleMailInbox(w http.ResponseWriter, r *http.Request) {
 
 // handleMailThread returnerer meldingene i tråden + signatur.
 func (s *Server) handleMailThread(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	acc, rec, err := s.mailAccount(user)
@@ -199,9 +196,8 @@ const mailAnalyzeSystem = "Du er en norsk e-postassistent. Du får en e-posttrå
 
 // handleMailAnalyze oppsummerer tråden og lager et svarutkast.
 func (s *Server) handleMailAnalyze(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	acc, _, err := s.mailAccount(user)
@@ -236,9 +232,8 @@ func (s *Server) handleMailAnalyze(w http.ResponseWriter, r *http.Request) {
 
 // handleMailDraft forbedrer et svarutkast ut fra brukerens tilbakemelding.
 func (s *Server) handleMailDraft(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	if _, _, err := s.mailAccount(user); err != nil {
@@ -267,9 +262,8 @@ func (s *Server) handleMailDraft(w http.ResponseWriter, r *http.Request) {
 
 // handleMailSend sender en e-post.
 func (s *Server) handleMailSend(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	acc, rec, err := s.mailAccount(user)

@@ -113,9 +113,8 @@ func slugify(s string) string {
 
 // handleCreateWidget oppretter en tom widget med gitt navn/slug.
 func (s *Server) handleCreateWidget(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	var req struct {
@@ -146,9 +145,8 @@ func (s *Server) handleCreateWidget(w http.ResponseWriter, r *http.Request) {
 
 // handleListWidgets returnerer brukerens widgets (til slash-menyen).
 func (s *Server) handleListWidgets(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	list, err := s.store.ListWidgets(user.ID)
@@ -165,9 +163,8 @@ func (s *Server) handleListWidgets(w http.ResponseWriter, r *http.Request) {
 
 // handleGetWidget returnerer én widget med spec.
 func (s *Server) handleGetWidget(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	wg, err := s.store.Widget(r.PathValue("slug"), user.ID)
@@ -185,9 +182,8 @@ func (s *Server) handleGetWidget(w http.ResponseWriter, r *http.Request) {
 
 // handleDeleteWidget fjerner en widget brukeren eier.
 func (s *Server) handleDeleteWidget(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	if err := s.store.DeleteWidget(r.PathValue("slug"), user.ID); errors.Is(err, store.ErrNotFound) {
@@ -203,9 +199,8 @@ func (s *Server) handleDeleteWidget(w http.ResponseWriter, r *http.Request) {
 // handleWidgetQuery kjører widgetens datakilde (read-only) og returnerer
 // kolonner + rader.
 func (s *Server) handleWidgetQuery(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
+	user, ok := s.user(w, r)
 	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
 	wg, err := s.store.Widget(r.PathValue("slug"), user.ID)
