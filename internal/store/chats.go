@@ -62,8 +62,12 @@ func (s *Store) migrateChats() error {
 }
 
 func (s *Store) CreateChat(tenantID, userID, title string) (Chat, error) {
-	c := Chat{ID: newID(), Title: title, UpdatedAt: time.Now()}
-	_, err := s.db.Exec(
+	id, err := newID()
+	if err != nil {
+		return Chat{}, err
+	}
+	c := Chat{ID: id, Title: title, UpdatedAt: time.Now()}
+	_, err = s.db.Exec(
 		`INSERT INTO chats (id, tenant_id, user_id, title) VALUES (?, ?, ?, ?)`,
 		c.ID, tenantID, userID, c.Title,
 	)

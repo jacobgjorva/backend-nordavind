@@ -11,9 +11,17 @@ import (
 	"strings"
 )
 
-// LoadKey leser (eller genererer) en 32-byte nøkkel for kryptering av
-// kundens databasekredensialer. Ligger ved siden av SQLite-filen.
+// LoadKey henter en 32-byte nøkkel for kryptering av kundens
+// databasekredensialer. Foretrekker SECRET_KEY (hex) fra miljøet; faller
+// tilbake til en fil ved siden av SQLite-filen for lokal utvikling.
 func LoadKey(dbPath string) ([]byte, error) {
+	if env := strings.TrimSpace(os.Getenv("SECRET_KEY")); env != "" {
+		key, err := hex.DecodeString(env)
+		if err != nil || len(key) != 32 {
+			return nil, errors.New("SECRET_KEY må være 64 hex-tegn (32 byte)")
+		}
+		return key, nil
+	}
 	path := filepath.Join(filepath.Dir(dbPath), "secret.key")
 	if data, err := os.ReadFile(path); err == nil {
 		key, err := hex.DecodeString(strings.TrimSpace(string(data)))

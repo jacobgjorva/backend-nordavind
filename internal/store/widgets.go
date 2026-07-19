@@ -37,8 +37,12 @@ func (s *Store) migrateWidgets() error {
 
 // CreateWidget oppretter en tom widget med gitt slug. Slug er unik per bruker.
 func (s *Store) CreateWidget(tenantID, userID, slug, title string) (Widget, error) {
-	w := Widget{ID: newID(), Slug: slug, Title: title, Spec: json.RawMessage("{}"), UpdatedAt: time.Now()}
-	_, err := s.db.Exec(
+	id, err := newID()
+	if err != nil {
+		return Widget{}, err
+	}
+	w := Widget{ID: id, Slug: slug, Title: title, Spec: json.RawMessage("{}"), UpdatedAt: time.Now()}
+	_, err = s.db.Exec(
 		`INSERT INTO widgets (id, tenant_id, user_id, slug, title, spec) VALUES (?, ?, ?, ?, ?, '{}')`,
 		w.ID, tenantID, userID, slug, title,
 	)

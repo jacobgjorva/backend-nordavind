@@ -16,11 +16,16 @@ import (
 
 const inboxScan = 80 // hvor mange meldinger som skannes for tråd-gruppering
 
-// mailAccount bygger e-postkontoen. MIDLERTIDIG: hentes fra env-config (én
-// hardkodet konto i dev). Flyttes til Connector-siden på produksjonsnivå.
-func (s *Server) mailAccount(_ string) (mail.Account, store.MailAccount, error) {
+// mailAccount bygger e-postkontoen. MIDLERTIDIG: én delt env-konto i dev.
+// Gates hardt til cfg.Mail.Owner slik at kun den ene eier-brukeren når den —
+// ingen andre tenanter/brukere skal kunne lese eller sende fra den.
+// Flyttes til Connector-siden (per-bruker) på produksjonsnivå.
+func (s *Server) mailAccount(u store.User) (mail.Account, store.MailAccount, error) {
 	m := s.cfg.Mail
 	if m.Email == "" || m.IMAPHost == "" || m.Password == "" {
+		return mail.Account{}, store.MailAccount{}, store.ErrNotFound
+	}
+	if m.Owner == "" || !strings.EqualFold(u.Email, m.Owner) {
 		return mail.Account{}, store.MailAccount{}, store.ErrNotFound
 	}
 	rec := store.MailAccount{
@@ -39,11 +44,12 @@ func (s *Server) mailAccount(_ string) (mail.Account, store.MailAccount, error) 
 
 // handleGetMailAccount returnerer konto-status (fra config).
 func (s *Server) handleGetMailAccount(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.currentUser(r); !ok {
+	user, ok := s.currentUser(r)
+	if !ok {
 		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
-	_, rec, err := s.mailAccount("")
+	_, rec, err := s.mailAccount(user)
 	if errors.Is(err, store.ErrNotFound) {
 		http.Error(w, "ingen konto", http.StatusNotFound)
 		return
@@ -59,7 +65,7 @@ func (s *Server) handleMailInbox(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
-	acc, _, err := s.mailAccount(user.ID)
+	acc, _, err := s.mailAccount(user)
 	if errors.Is(err, store.ErrNotFound) {
 		http.Error(w, "ingen konto", http.StatusNotFound)
 		return
@@ -87,7 +93,7 @@ func (s *Server) handleMailThread(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
-	acc, rec, err := s.mailAccount(user.ID)
+	acc, rec, err := s.mailAccount(user)
 	if err != nil {
 		http.Error(w, "ingen konto", http.StatusNotFound)
 		return
@@ -198,7 +204,7 @@ func (s *Server) handleMailAnalyze(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
-	acc, _, err := s.mailAccount(user.ID)
+	acc, _, err := s.mailAccount(user)
 	if err != nil {
 		http.Error(w, "ingen konto", http.StatusNotFound)
 		return
@@ -235,7 +241,7 @@ func (s *Server) handleMailDraft(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
-	if _, _, err := s.mailAccount(user.ID); err != nil {
+	if _, _, err := s.mailAccount(user); err != nil {
 		http.Error(w, "ingen konto", http.StatusNotFound)
 		return
 	}
@@ -266,7 +272,7 @@ func (s *Server) handleMailSend(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
-	acc, rec, err := s.mailAccount(user.ID)
+	acc, rec, err := s.mailAccount(user)
 	if err != nil {
 		http.Error(w, "ingen konto", http.StatusNotFound)
 		return

@@ -59,7 +59,11 @@ func (s *Store) migrateKnowledge() error {
 
 // CreateNode lagrer en node (default pending). Embedding lagres som JSON.
 func (s *Store) CreateNode(tenantID string, n KnowledgeNode) (KnowledgeNode, error) {
-	n.ID = newID()
+	id, err := newID()
+	if err != nil {
+		return n, err
+	}
+	n.ID = id
 	n.CreatedAt = time.Now()
 	if n.Status == "" {
 		n.Status = "pending"
@@ -68,7 +72,7 @@ func (s *Store) CreateNode(tenantID string, n KnowledgeNode) (KnowledgeNode, err
 		n.Type = "term"
 	}
 	emb, _ := json.Marshal(n.Embedding)
-	_, err := s.db.Exec(
+	_, err = s.db.Exec(
 		`INSERT INTO knowledge_nodes (id, tenant_id, type, title, summary, status, chat_id, user_id, embedding)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		n.ID, tenantID, n.Type, n.Title, n.Summary, n.Status, n.ChatID, n.UserID, string(emb),

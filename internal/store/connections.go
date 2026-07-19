@@ -102,8 +102,12 @@ func (s *Store) migrateConnections() error {
 }
 
 func (s *Store) CreateConnection(tenantID, name, driver string, credsEnc []byte) (Connection, error) {
-	c := Connection{ID: newID(), TenantID: tenantID, Name: name, Driver: driver}
-	_, err := s.db.Exec(
+	id, err := newID()
+	if err != nil {
+		return Connection{}, err
+	}
+	c := Connection{ID: id, TenantID: tenantID, Name: name, Driver: driver}
+	_, err = s.db.Exec(
 		`INSERT INTO connections (id, tenant_id, name, driver, creds_enc) VALUES (?, ?, ?, ?, ?)`,
 		c.ID, c.TenantID, c.Name, c.Driver, credsEnc,
 	)

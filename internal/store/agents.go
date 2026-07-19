@@ -109,14 +109,22 @@ func NextRun(now time.Time, intervalSeconds int, runTime string) time.Time {
 // CreateAgent lagrer en ny agent, oppretter en egen chat for output og
 // setter første kjøretidspunkt.
 func (s *Store) CreateAgent(tenantID, userID string, a Agent) (Agent, error) {
-	a.ID = newID()
+	id, err := newID()
+	if err != nil {
+		return a, err
+	}
+	a.ID = id
 	a.CreatedAt = time.Now()
 	a.Enabled = true
 	next := NextRun(a.CreatedAt, a.IntervalSeconds, a.RunTime)
 	a.NextRunAt = &next
 
 	// Egen chat for agentens output, koblet begge veier.
-	a.ChatID = newID()
+	chatID, err := newID()
+	if err != nil {
+		return a, err
+	}
+	a.ChatID = chatID
 	if _, err := s.db.Exec(
 		`INSERT INTO chats (id, tenant_id, user_id, title, agent_id) VALUES (?, ?, ?, ?, ?)`,
 		a.ChatID, tenantID, userID, a.Name, a.ID,
@@ -124,7 +132,7 @@ func (s *Store) CreateAgent(tenantID, userID string, a Agent) (Agent, error) {
 		return a, err
 	}
 
-	_, err := s.db.Exec(
+	_, err = s.db.Exec(
 		`INSERT INTO agents
 			(id, tenant_id, user_id, name, task, connection_id, schedule_label,
 			 interval_seconds, run_time, daily_token_limit, write_access, enabled, next_run_at, chat_id)

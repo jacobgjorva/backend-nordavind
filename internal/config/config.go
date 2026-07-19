@@ -21,7 +21,7 @@ type Config struct {
 	UpstreamAPIKey  string
 	AllowedOrigins  []string // CORS-origins for frontend (kommaseparert i env)
 	DBPath          string   // SQLite-fil for tenants/brukere/sesjoner
-	AuthRequired    bool     // krev innlogging på chat/extract (av i dev til frontend er klar)
+	AuthRequired    bool     // krev innlogging på chat/extract (default på; sett AUTH_REQUIRED=false kun i dev)
 
 	// MIDLERTIDIG: hardkodet e-postkonto til /mail (env). Flyttes til
 	// Connector-siden på produksjonsnivå senere.
@@ -37,6 +37,9 @@ type MailConfig struct {
 	SMTPPort  int
 	Password  string
 	Signature string
+	// Owner er den ENESTE brukeren som får bruke den delte dev-postkassen.
+	// Tom verdi = mail-funksjonen er av (unngår kryss-tenant-lekkasje).
+	Owner string
 }
 
 func Load() (Config, error) {
@@ -47,7 +50,7 @@ func Load() (Config, error) {
 		UpstreamAPIKey:  os.Getenv("UPSTREAM_API_KEY"),
 		AllowedOrigins:  strings.Split(getenv("ALLOWED_ORIGIN", "http://localhost:5173,http://127.0.0.1:5173"), ","),
 		DBPath:          getenv("DB_PATH", "data/nordavind.db"),
-		AuthRequired:    getenv("AUTH_REQUIRED", "false") == "true",
+		AuthRequired:    getenv("AUTH_REQUIRED", "true") != "false",
 		Mail: MailConfig{
 			Email:     os.Getenv("MAIL_EMAIL"),
 			IMAPHost:  os.Getenv("MAIL_IMAP_HOST"),
@@ -56,6 +59,7 @@ func Load() (Config, error) {
 			SMTPPort:  atoiDefault(os.Getenv("MAIL_SMTP_PORT"), 587),
 			Password:  os.Getenv("MAIL_PASSWORD"),
 			Signature: os.Getenv("MAIL_SIGNATURE"),
+			Owner:     strings.ToLower(strings.TrimSpace(os.Getenv("MAIL_OWNER_EMAIL"))),
 		},
 	}
 	if cfg.UpstreamAPIKey == "" {
