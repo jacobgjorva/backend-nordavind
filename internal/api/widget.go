@@ -86,7 +86,11 @@ func (s *Server) runWidgetOp(ctx context.Context, slug, rawArgs string) string {
 		}
 	}
 
+	// Behold registertittelen om komponenten ikke selv har en.
 	title, _ := comp["title"].(string)
+	if title == "" {
+		title = w.Title
+	}
 	out, _ := json.Marshal(comp)
 	if err := s.store.SetWidget(slug, user.ID, title, string(out)); err != nil {
 		return "Kunne ikke lagre."
