@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/jacobgjorva/backend-nordavind/internal/connector"
 	"github.com/jacobgjorva/backend-nordavind/internal/mail"
 	"github.com/jacobgjorva/backend-nordavind/internal/router"
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
@@ -17,106 +16,40 @@ import (
 
 const inboxScan = 80 // hvor mange meldinger som skannes for tråd-gruppering
 
-// mailAccount bygger et dekryptert mail.Account for brukeren.
-func (s *Server) mailAccount(userID string) (mail.Account, store.MailAccount, error) {
-	rec, err := s.store.MailAccount(userID)
-	if err != nil {
-		return mail.Account{}, rec, err
+// mailAccount bygger e-postkontoen. MIDLERTIDIG: hentes fra env-config (én
+// hardkodet konto i dev). Flyttes til Connector-siden på produksjonsnivå.
+func (s *Server) mailAccount(_ string) (mail.Account, store.MailAccount, error) {
+	m := s.cfg.Mail
+	if m.Email == "" || m.IMAPHost == "" || m.Password == "" {
+		return mail.Account{}, store.MailAccount{}, store.ErrNotFound
 	}
-	pass, err := connector.Decrypt(s.credsKey, rec.PassEnc)
-	if err != nil {
-		return mail.Account{}, rec, err
+	rec := store.MailAccount{
+		Email:    m.Email,
+		IMAPHost: m.IMAPHost, IMAPPort: m.IMAPPort,
+		SMTPHost: m.SMTPHost, SMTPPort: m.SMTPPort,
+		Signature: m.Signature,
 	}
 	return mail.Account{
-		Email:    rec.Email,
-		IMAPHost: rec.IMAPHost, IMAPPort: rec.IMAPPort,
-		SMTPHost: rec.SMTPHost, SMTPPort: rec.SMTPPort,
-		Password: string(pass),
+		Email:    m.Email,
+		IMAPHost: m.IMAPHost, IMAPPort: m.IMAPPort,
+		SMTPHost: m.SMTPHost, SMTPPort: m.SMTPPort,
+		Password: m.Password,
 	}, rec, nil
 }
 
-// handleSaveMailAccount lagrer/oppdaterer kontoen etter å ha verifisert IMAP.
-func (s *Server) handleSaveMailAccount(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
-	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
-		return
-	}
-	var req struct {
-		Email     string `json:"email"`
-		IMAPHost  string `json:"imap_host"`
-		IMAPPort  int    `json:"imap_port"`
-		SMTPHost  string `json:"smtp_host"`
-		SMTPPort  int    `json:"smtp_port"`
-		Password  string `json:"password"`
-		Signature string `json:"signature"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "ugyldig request", http.StatusBadRequest)
-		return
-	}
-	if req.IMAPPort == 0 {
-		req.IMAPPort = 993
-	}
-	if req.SMTPPort == 0 {
-		req.SMTPPort = 587
-	}
-	acc := mail.Account{
-		Email:    req.Email,
-		IMAPHost: req.IMAPHost, IMAPPort: req.IMAPPort,
-		SMTPHost: req.SMTPHost, SMTPPort: req.SMTPPort,
-		Password: req.Password,
-	}
-	if err := acc.Verify(); err != nil {
-		http.Error(w, "kunne ikke koble til: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	enc, err := connector.Encrypt(s.credsKey, []byte(req.Password))
-	if err != nil {
-		http.Error(w, "intern feil", http.StatusInternalServerError)
-		return
-	}
-	if err := s.store.SaveMailAccount(user.ID, store.MailAccount{
-		Email:    req.Email,
-		IMAPHost: req.IMAPHost, IMAPPort: req.IMAPPort,
-		SMTPHost: req.SMTPHost, SMTPPort: req.SMTPPort,
-		PassEnc: enc, Signature: req.Signature,
-	}); err != nil {
-		http.Error(w, "kunne ikke lagre", http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// handleGetMailAccount returnerer konto-status (uten passord).
+// handleGetMailAccount returnerer konto-status (fra config).
 func (s *Server) handleGetMailAccount(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
-	if !ok {
+	if _, ok := s.currentUser(r); !ok {
 		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
 		return
 	}
-	rec, err := s.store.MailAccount(user.ID)
+	_, rec, err := s.mailAccount("")
 	if errors.Is(err, store.ErrNotFound) {
 		http.Error(w, "ingen konto", http.StatusNotFound)
 		return
 	}
-	if err != nil {
-		http.Error(w, "intern feil", http.StatusInternalServerError)
-		return
-	}
-	rec.PassEnc = nil
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(rec)
-}
-
-func (s *Server) handleDeleteMailAccount(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.currentUser(r)
-	if !ok {
-		http.Error(w, "ikke innlogget", http.StatusUnauthorized)
-		return
-	}
-	s.store.DeleteMailAccount(user.ID)
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleMailInbox lister tråder nyest først.
