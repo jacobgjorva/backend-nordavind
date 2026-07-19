@@ -175,13 +175,27 @@ func threadText(msgs []mail.Message) string {
 			}
 			fmt.Fprintf(&b, "Vedlegg: %s\n", strings.Join(names, ", "))
 		}
-		body := m.Body
-		if len(body) > 4000 {
-			body = body[:4000]
+		body := stripQuoted(m.Body)
+		if len(body) > 1500 {
+			body = body[:1500]
 		}
 		fmt.Fprintf(&b, "%s\n\n", body)
 	}
 	return b.String()
+}
+
+// stripQuoted fjerner sitert historikk (linjer som starter med «>») så vi
+// ikke sender samme tekst om igjen nedover i tråden.
+func stripQuoted(body string) string {
+	lines := strings.Split(body, "\n")
+	kept := lines[:0]
+	for _, l := range lines {
+		if strings.HasPrefix(strings.TrimSpace(l), ">") {
+			continue
+		}
+		kept = append(kept, l)
+	}
+	return strings.TrimSpace(strings.Join(kept, "\n"))
 }
 
 const mailAnalyzeSystem = "Du er en norsk e-postassistent. Du får en e-posttråd. Svar KUN med JSON " +
