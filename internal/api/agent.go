@@ -120,21 +120,25 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// Bilder tolkes av vision-modellen uten verktøy — web_search/db gir
 	// tomme svar sammen med bilde-input.
 	if !hasImageMessage(full) {
-		tools := []any{webSearchTool}
-		if dbCtx != nil {
-			tools = append(tools, dbCtx.tool)
-		}
-		// Agent-verktøy kun i /agent-modus.
-		if setup {
-			tools = append(tools, s.buildAgentTools(ctx)...)
-		}
-		if editable {
-			tools = append(tools, buildAgentEditTools()...)
-		}
 		if widgetSlug != "" {
-			tools = append(tools, widgetTools()...)
+			// Widget-editor: KUN set_widget. Uten query_database/web_search kan
+			// ikke modellen svare på dataspørsmål — den må skrive SQL-en inn i
+			// widgeten. Skjemaet ligger allerede i system-prompten.
+			full["tools"] = widgetTools()
+		} else {
+			tools := []any{webSearchTool}
+			if dbCtx != nil {
+				tools = append(tools, dbCtx.tool)
+			}
+			// Agent-verktøy kun i /agent-modus.
+			if setup {
+				tools = append(tools, s.buildAgentTools(ctx)...)
+			}
+			if editable {
+				tools = append(tools, buildAgentEditTools()...)
+			}
+			full["tools"] = tools
 		}
-		full["tools"] = tools
 	}
 	full["stream"] = true
 	// Be upstream om tokenforbruk i streamen.
