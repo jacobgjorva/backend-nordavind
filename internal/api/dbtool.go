@@ -126,21 +126,90 @@ func (s *Server) buildDBTool(tenantID, userID, onlyConnID string) *dbToolCtx {
 	return t
 }
 
+// resolveConn velger tilkoblingen for en spørring deterministisk, uavhengig
+// av om modellen gjettet riktig connection_id. Rekkefølge:
+//  1. oppgitt id som faktisk har alle refererte tabeller
+//  2. den ENE tilkoblingen som har alle refererte tabeller (auto-ruting)
+//  3. oppgitt id (selv om tabeller mangler — la SafeQuery gi presis feil)
+//  4. eneste tilkobling hvis det bare finnes én
+//
+// Returnerer (kobling, id, ok, feilmelding-til-modellen).
+func (t *dbToolCtx) resolveConn(connID, query string) (dbConn, string, bool, string) {
+	refs := connector.ReferencedTables(query)
+
+	has := func(dc dbConn) bool {
+		allowed := map[string]bool{}
+		for _, a := range dc.allowed {
+			allowed[strings.ToLower(a)] = true
+		}
+		for _, r := range refs {
+			if !allowed[strings.ToLower(r)] {
+				return false
+			}
+		}
+		return true
+	}
+
+	// 1) Oppgitt id som dekker tabellene.
+	if dc, ok := t.conns[connID]; ok && (len(refs) == 0 || has(dc)) {
+		return dc, connID, true, ""
+	}
+
+	// 2) Auto-ruting: nøyaktig én kobling som har alle tabellene.
+	if len(refs) > 0 {
+		var match []string
+		for id, dc := range t.conns {
+			if has(dc) {
+				match = append(match, id)
+			}
+		}
+		if len(match) == 1 {
+			return t.conns[match[0]], match[0], true, ""
+		}
+		if len(match) > 1 {
+			return dbConn{}, "", false, fmt.Sprintf(
+				"Tabellene finnes i flere databaser (%s). Oppgi riktig connection_id.\n%s",
+				strings.Join(match, ", "), t.connectionList())
+		}
+	}
+
+	// 3) Oppgitt id finnes, men mangler tabeller — la SafeQuery gi presis feil.
+	if dc, ok := t.conns[connID]; ok {
+		return dc, connID, true, ""
+	}
+
+	// 4) Bare én kobling totalt: bruk den uansett.
+	if len(t.conns) == 1 {
+		for id, dc := range t.conns {
+			return dc, id, true, ""
+		}
+	}
+
+	return dbConn{}, "", false, "Ukjent connection_id.\n" + t.connectionList()
+}
+
+// connectionList beskriver tilgjengelige databaser og tabellene deres, til
+// bruk i feilmeldinger så modellen kan korrigere seg selv.
+func (t *dbToolCtx) connectionList() string {
+	var b strings.Builder
+	b.WriteString("Tilgjengelige databaser:\n")
+	for id, dc := range t.conns {
+		fmt.Fprintf(&b, "- %s (id=%s): %s\n", dc.conn.Name, id, strings.Join(dc.allowed, ", "))
+	}
+	return b.String()
+}
+
 // runDBQuery utfører et query_database-kall fra modellen.
 func (s *Server) runDBQuery(ctx context.Context, t *dbToolCtx, connID, query string) string {
 	if t == nil {
 		return "Ingen database er tilgjengelig."
 	}
-	dc, ok := t.conns[connID]
+	dc, resolvedID, ok, msg := t.resolveConn(connID, query)
 	if !ok {
-		// Én tilkobling: godta manglende/feil id.
-		if len(t.conns) == 1 {
-			for _, v := range t.conns {
-				dc = v
-			}
-		} else {
-			return "Ukjent connection_id."
-		}
+		return msg
+	}
+	if resolvedID != connID {
+		s.log.Info("db-spørring rutet om", "fra", connID, "til", resolvedID)
 	}
 
 	db, err := connector.Open(ctx, dc.creds)
@@ -152,7 +221,12 @@ func (s *Server) runDBQuery(ctx context.Context, t *dbToolCtx, connID, query str
 
 	cols, rows, err := connector.SafeQuery(ctx, db, dc.creds.Driver, query, dc.allowed)
 	if err != nil {
-		return "Spørringen feilet: " + err.Error()
+		// Gi modellen nok kontekst til å rette seg selv i neste runde.
+		msg := "Spørringen feilet: " + err.Error()
+		if strings.Contains(err.Error(), "ikke tilgjengelig") {
+			msg += "\nDenne databasen (" + dc.conn.Name + ") har: " + strings.Join(dc.allowed, ", ")
+		}
+		return msg
 	}
 	s.log.Info("db-spørring", "connection", dc.conn.Name, "rader", len(rows))
 

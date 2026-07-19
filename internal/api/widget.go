@@ -221,7 +221,9 @@ func (s *Server) handleWidgetQuery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "widgeten har ingen spørring", http.StatusBadRequest)
 		return
 	}
-	dbCtx := s.buildDBTool(user.TenantID, user.ID, conn)
+	// Bygg mot ALLE tilkoblinger, ikke bare den lagrede id-en, så runDBQuery
+	// kan rute til riktig database om connection_id er feil/utdatert.
+	dbCtx := s.buildDBTool(user.TenantID, user.ID, "")
 	result := s.runDBQuery(r.Context(), dbCtx, conn, sql)
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(result))
