@@ -67,6 +67,9 @@ func Open(path string) (*Store, error) {
 	if err := s.migrateWidgets(); err != nil {
 		return nil, err
 	}
+	if err := s.migrateMail(); err != nil {
+		return nil, err
+	}
 	return s, s.migrateKnowledge()
 }
 
