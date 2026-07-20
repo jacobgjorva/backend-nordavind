@@ -70,7 +70,10 @@ func Open(path string) (*Store, error) {
 	if err := s.migrateKnowledge(); err != nil {
 		return nil, err
 	}
-	return s, s.migrateDocuments()
+	if err := s.migrateDocuments(); err != nil {
+		return nil, err
+	}
+	return s, s.migrateNotes()
 }
 
 func (s *Store) Close() error { return s.db.Close() }
