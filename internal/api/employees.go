@@ -36,16 +36,54 @@ func (s *Server) employeeContext(ctx context.Context, tenantID string) string {
 		b.WriteString("\n")
 	}
 	b.WriteString(
-		"Eskalering til en person: prøv ALLTID å løse oppgaven selv først (bruk kunnskap og verktøy). " +
-			"KUN hvis du etter å ha forsøkt er sikker på at du ikke kommer videre (mangler data, verktøy " +
-			"eller tilgang) OG én bestemt person i registeret åpenbart kan, svarer du i SAMME melding med " +
-			"én kort linje (f.eks. «Dette får jeg ikke til selv – her er et utkast til <navn>:») etterfulgt " +
-			"av en ```mailcompose kodeblokk med JSON: {\"to\":[{\"name\":\"<navn>\",\"address\":\"<e-post>\"}]," +
-			"\"subject\":\"<emne>\",\"body\":\"<utkast, norsk>\"}. Bruk nøyaktig e-postadressen fra registeret, " +
-			"og velg ÉN person. Ikke still spørsmål om å sende først - kortet har en Send-knapp brukeren " +
-			"selv trykker. For alt du kan svare på eller løse selv: svar normalt og nevn aldri registeret.",
+		"Eskalering til en person: prøv ALLTID å løse oppgaven selv først (kunnskap og verktøy). KUN hvis " +
+			"du etter å ha forsøkt er sikker på at du ikke kommer videre (mangler data, verktøy eller " +
+			"tilgang) OG én bestemt person i registeret åpenbart kan, kaller du verktøyet contact_person " +
+			"med personens navn/e-post fra registeret og et kort utkast. Det viser et ferdig e-postkort " +
+			"brukeren selv sender. Velg ÉN person. For alt du kan svare på eller løse selv: svar normalt " +
+			"og nevn aldri registeret.",
 	)
 	return b.String()
+}
+
+// hasEmployees er sann hvis tenanten har minst én ansatt i registeret.
+func (s *Server) hasEmployees(tenantID string) bool {
+	emps, err := s.store.ListEmployees(tenantID)
+	return err == nil && len(emps) > 0
+}
+
+// contactTool lar modellen eskalere til en person deterministisk: den kaller
+// verktøyet med mottaker + utkast, og backend rendrer compose-kortet. Mye mer
+// robust enn å be modellen skrive en fri-tekst-blokk.
+var contactTool = map[string]any{
+	"type": "function",
+	"function": map[string]any{
+		"name": "contact_person",
+		"description": "Bruk KUN når du etter å ha forsøkt selv (kunnskap/verktøy) er sikker på at du " +
+			"ikke kommer videre, og én bestemt person i ansatt-registeret åpenbart kan hjelpe. Da lager " +
+			"dette et ferdig e-postutkast til personen som brukeren kan redigere og sende. Ikke bruk det " +
+			"for noe du kan svare på eller løse selv.",
+		"parameters": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"name":    map[string]any{"type": "string", "description": "personens navn fra registeret"},
+				"email":   map[string]any{"type": "string", "description": "personens e-postadresse fra registeret"},
+				"subject": map[string]any{"type": "string", "description": "kort emne"},
+				"body":    map[string]any{"type": "string", "description": "utkast til meldingen, på norsk, uten signatur"},
+			},
+			"required": []string{"email", "subject", "body"},
+		},
+	},
+}
+
+// composeBlock bygger ```mailcompose-blokken frontend rendrer som send-kortet.
+func composeBlock(name, email, subject, body string) string {
+	spec, _ := json.Marshal(map[string]any{
+		"to":      []map[string]string{{"name": name, "address": email}},
+		"subject": subject,
+		"body":    body,
+	})
+	return "```mailcompose\n" + string(spec) + "\n```"
 }
 
 // handleListEmployees returnerer tenantens ansatt-register.

@@ -120,6 +120,10 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			if dbCtx != nil {
 				tools = append(tools, dbCtx.tool)
 			}
+			// Eskalerings-verktøy når tenanten har et ansatt-register.
+			if user, ok := ctx.Value(userKey).(store.User); ok && s.hasEmployees(user.TenantID) {
+				tools = append(tools, contactTool)
+			}
 			// Agent-verktøy kun i /agent-modus.
 			if setup {
 				tools = append(tools, s.buildAgentTools(ctx)...)
@@ -172,6 +176,27 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		completionTokens += usage.CompletionTokens
 		if len(calls) == 0 {
 			// Svaret er streamet ferdig til klienten.
+			emit("data: [DONE]")
+			return
+		}
+
+		// Eskalering: modellen ba om å kontakte en person. Rendrer compose-kortet
+		// deterministisk og avslutter — ingen fri-tekst-blokk å bomme på.
+		for _, c := range calls {
+			if c.Name != "contact_person" {
+				continue
+			}
+			var ca struct {
+				Name    string `json:"name"`
+				Email   string `json:"email"`
+				Subject string `json:"subject"`
+				Body    string `json:"body"`
+			}
+			_ = json.Unmarshal([]byte(c.Args.String()), &ca)
+			if strings.TrimSpace(ca.Email) == "" {
+				continue
+			}
+			emit(contentSSE(composeBlock(ca.Name, ca.Email, ca.Subject, ca.Body)))
 			emit("data: [DONE]")
 			return
 		}
