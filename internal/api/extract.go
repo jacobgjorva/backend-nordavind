@@ -41,13 +41,15 @@ func (s *Server) handleExtract(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case strings.HasSuffix(strings.ToLower(name), ".pdf") || bytes.HasPrefix(raw, []byte("%PDF")):
 		text = search.ExtractPDF(raw, maxExtractChars)
+	case strings.HasSuffix(strings.ToLower(name), ".docx"):
+		text = search.ExtractDOCX(raw, maxExtractChars)
 	case utf8.Valid(raw):
 		text = string(raw)
 		if runes := []rune(text); len(runes) > maxExtractChars {
 			text = string(runes[:maxExtractChars])
 		}
 	default:
-		http.Error(w, "filtypen støttes ikke (tekst og PDF)", http.StatusUnsupportedMediaType)
+		http.Error(w, "filtypen støttes ikke (tekst, PDF og Word/.docx)", http.StatusUnsupportedMediaType)
 		return
 	}
 
