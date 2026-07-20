@@ -120,9 +120,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			if dbCtx != nil {
 				tools = append(tools, dbCtx.tool)
 			}
-			// Eskalerings-verktøy når tenanten har et ansatt-register.
-			if user, ok := ctx.Value(userKey).(store.User); ok && s.hasEmployees(user.TenantID) {
-				tools = append(tools, contactTool)
+			// Eskalerings-verktøy (registeret ligger i verktøy-beskrivelsen).
+			if user, ok := ctx.Value(userKey).(store.User); ok {
+				if ct := s.contactTool(user.TenantID); ct != nil {
+					tools = append(tools, ct)
+				}
 			}
 			// Agent-verktøy kun i /agent-modus.
 			if setup {
