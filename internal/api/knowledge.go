@@ -20,8 +20,11 @@ const (
 	knowledgeTopK     = 6    // antall mest relevante noder
 	knowledgeMinScore = 0.35 // ignorer svake treff
 	chunkTopK         = 25   // maks antall dokument-biter (budsjettet er den reelle grensen)
-	chunkMinScore     = 0.35 // ignorer svake bit-treff
-	chunkCharBudget   = 4000 // hardt tak på injisert dokument-tekst
+	// qwen3-embedding scorer selv urelatert tekst ~0.21 og klart relevant
+	// ~0.31–0.53. 0.28 skiller signal fra støy; sammen med dokument-boostingen
+	// drar et treff på dokumentet inn alle bitene.
+	chunkMinScore   = 0.28
+	chunkCharBudget = 4000 // hardt tak på injisert dokument-tekst
 )
 
 // knowledgeFor henter kunnskapskonteksten for siste brukermelding i en
