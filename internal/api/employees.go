@@ -1,13 +1,50 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
+
+// employeeContext bygger ansatt-registeret + eskaleringsinstruksen som
+// injiseres i chat-systemet. Tom streng hvis registeret er tomt (null overhead).
+// KUN når modellen er sikker på at den ikke kommer videre selv skal den foreslå
+// å kontakte en person og drafte en mailcompose-blokk ved bekreftelse.
+func (s *Server) employeeContext(ctx context.Context, tenantID string) string {
+	emps, err := s.store.ListEmployees(tenantID)
+	if err != nil || len(emps) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("Internt ansatt-register (hvem gjør hva):\n")
+	for _, e := range emps {
+		fmt.Fprintf(&b, "- %s", e.Name)
+		if e.Role != "" {
+			fmt.Fprintf(&b, ", %s", e.Role)
+		}
+		if e.Description != "" {
+			fmt.Fprintf(&b, " — %s", e.Description)
+		}
+		if e.Email != "" {
+			fmt.Fprintf(&b, " <%s>", e.Email)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString(
+		"Hvis — og KUN hvis — du er helt sikker på at du ikke kan fullføre det brukeren ber om " +
+			"selv (mangler data, verktøy eller tilgang) og en person i registeret åpenbart kan, foreslå " +
+			"å kontakte dem med ÉN kort setning: «Skal jeg sende en mail til <navn> for å be om det jeg " +
+			"trenger?». Gjør dette ALDRI for noe du kan svare på eller løse selv, og nevn ellers aldri " +
+			"registeret. Når brukeren bekrefter, svar KUN med en ```mailcompose kodeblokk med JSON: " +
+			"{\"to\":[{\"name\":\"<navn>\",\"address\":\"<e-post>\"}],\"subject\":\"<emne>\",\"body\":\"<utkast, norsk>\"}.",
+	)
+	return b.String()
+}
 
 // handleListEmployees returnerer tenantens ansatt-register.
 func (s *Server) handleListEmployees(w http.ResponseWriter, r *http.Request) {

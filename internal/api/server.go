@@ -141,9 +141,15 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	// Berik med relevant bransjekunnskap fra tenantens graf.
 	if kb := s.knowledgeFor(r.Context(), full); kb != "" {
 		injectSystem(full, kb)
-		if b, err := json.Marshal(full); err == nil {
-			patched = b
+	}
+	// Ansatt-register + eskaleringsinstruks (foreslå mail når AI-en står fast).
+	if u, ok := r.Context().Value(userKey).(store.User); ok && u.TenantID != "" {
+		if dir := s.employeeContext(r.Context(), u.TenantID); dir != "" {
+			injectSystem(full, dir)
 		}
+	}
+	if b, err := json.Marshal(full); err == nil {
+		patched = b
 	}
 
 	// Streaming-forespørsler kjøres i agent-løkken (web_search som verktøy).
