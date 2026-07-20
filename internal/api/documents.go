@@ -163,6 +163,35 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"id": docID, "title": title, "summary": summary, "chunks": len(notes)})
 }
 
+const classifySystem = "Du vurderer om et opplastet dokument er VERDIFULL, GJENBRUKBAR bedriftskunnskap " +
+	"AI-en bør huske (rutine, retningslinje, prosedyre, fast referanse, intern guide). Engangsting som " +
+	"kvitteringer, tilfeldige skjermbilder, personlige filer eller støy skal IKKE huskes. Svar KUN «ja» eller «nei»."
+
+// handleClassifyDocument avgjør billig om et vedlegg er verdt å tilby lagring
+// for — så brukeren kun spørres om ekte gjenbrukbar kunnskap. Ett lite kall på
+// et trunkert utdrag, kjøres bare når et dokument lastes opp.
+func (s *Server) handleClassifyDocument(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.user(w, r); !ok {
+		return
+	}
+	var req struct {
+		Filename string `json:"filename"`
+		Text     string `json:"text"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "ugyldig request")
+		return
+	}
+	head := strings.TrimSpace(req.Text)
+	if len(head) > 1500 {
+		head = head[:1500]
+	}
+	raw, err := s.llmComplete(r.Context(), classifySystem, "Filnavn: "+req.Filename+"\n\n"+head, 3)
+	// Ved feil: foreslå heller lagring enn å miste kunnskap.
+	save := err != nil || strings.Contains(strings.ToLower(raw), "ja")
+	writeJSON(w, map[string]any{"save": save})
+}
+
 // handleListDocuments returnerer tenantens dokumentbibliotek.
 func (s *Server) handleListDocuments(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.user(w, r)

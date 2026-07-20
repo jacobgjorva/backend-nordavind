@@ -93,6 +93,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/knowledge/extract", s.requireAuth(s.handleExtractKnowledge))
 	mux.HandleFunc("POST /v1/documents", s.requireAuth(s.handleCreateDocument))
 	mux.HandleFunc("GET /v1/documents", s.requireAuth(s.handleListDocuments))
+	mux.HandleFunc("POST /v1/documents/classify", s.requireAuth(s.handleClassifyDocument))
 	mux.HandleFunc("DELETE /v1/documents/{id}", s.requireAuth(s.handleDeleteDocument))
 	mux.HandleFunc("GET /v1/knowledge/pending", s.requireAdmin(s.handleListPending))
 	mux.HandleFunc("GET /v1/knowledge/graph", s.requireAuth(s.handleKnowledgeGraph))
