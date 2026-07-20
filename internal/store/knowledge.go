@@ -241,8 +241,8 @@ func (s *Store) DeleteNode(id, tenantID string) error {
 		return ErrNotFound
 	}
 	s.db.Exec(`DELETE FROM knowledge_edges WHERE from_id = ? OR to_id = ?`, id, id)
-	// Doknoder har biter under seg — rydd dem med.
-	s.DeleteDocumentChunks(id)
+	// Doknoder har biter + provenance under seg — rydd dem med.
+	s.DeleteDocumentData(id)
 	return nil
 }
 

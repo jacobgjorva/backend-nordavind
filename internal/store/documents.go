@@ -31,14 +31,21 @@ func (s *Store) migrateDocuments() error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_dchunks_node ON document_chunks (node_id);
 		CREATE INDEX IF NOT EXISTS idx_dchunks_tenant ON document_chunks (tenant_id);
+		CREATE TABLE IF NOT EXISTS documents (
+			node_id    TEXT PRIMARY KEY,
+			tenant_id  TEXT NOT NULL,
+			filename   TEXT NOT NULL DEFAULT '',
+			raw_text   TEXT NOT NULL DEFAULT '',
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
 	`)
 	return err
 }
 
-// CreateDocument lagrer et opplastet dokument som én accepted doknode pluss
-// bitene under den, i én transaksjon. Returnerer den lagrede noden (med ID).
-// node bør ha Type "dokument", Status "accepted" og en summary-embedding satt.
-func (s *Store) CreateDocument(tenantID string, node KnowledgeNode, chunks []DocumentChunk) (KnowledgeNode, error) {
+// CreateDocument lagrer et opplastet dokument som én accepted doknode, en rad
+// med provenance (filnavn + råtekst som fallback), og de propositionaliserte
+// bitene under noden — alt i én transaksjon. Returnerer noden (med ID).
+func (s *Store) CreateDocument(tenantID, filename, rawText string, node KnowledgeNode, chunks []DocumentChunk) (KnowledgeNode, error) {
 	nodeID, err := newID()
 	if err != nil {
 		return node, err
@@ -63,6 +70,13 @@ func (s *Store) CreateDocument(tenantID string, node KnowledgeNode, chunks []Doc
 		`INSERT INTO knowledge_nodes (id, tenant_id, type, title, summary, status, chat_id, user_id, embedding)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		node.ID, tenantID, node.Type, node.Title, node.Summary, node.Status, node.ChatID, node.UserID, string(emb),
+	); err != nil {
+		return node, err
+	}
+
+	if _, err := tx.Exec(
+		`INSERT INTO documents (node_id, tenant_id, filename, raw_text) VALUES (?, ?, ?, ?)`,
+		node.ID, tenantID, filename, rawText,
 	); err != nil {
 		return node, err
 	}
@@ -112,9 +126,12 @@ func (s *Store) AcceptedChunks(tenantID string) ([]DocumentChunk, error) {
 	return out, rows.Err()
 }
 
-// DeleteDocumentChunks fjerner alle biter under en doknode. Kalles fra
-// DeleteNode så sletting av dokumentet i grafen også rydder bitene.
-func (s *Store) DeleteDocumentChunks(nodeID string) error {
-	_, err := s.db.Exec(`DELETE FROM document_chunks WHERE node_id = ?`, nodeID)
+// DeleteDocumentData fjerner biter og provenance-rad under en doknode. Kalles
+// fra DeleteNode så sletting av dokumentet i grafen rydder alt tilhørende.
+func (s *Store) DeleteDocumentData(nodeID string) error {
+	if _, err := s.db.Exec(`DELETE FROM document_chunks WHERE node_id = ?`, nodeID); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`DELETE FROM documents WHERE node_id = ?`, nodeID)
 	return err
 }

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -56,6 +57,43 @@ func chunkText(text string) []string {
 	return chunks
 }
 
+// propositionalizeSystem gjør en dokument-seksjon om til atomære, RAG-
+// optimaliserte utsagn. Fidelity-guardrail: konkret info bevares ordrett;
+// kun fyll fjernes. Betales én gang ved opplasting, spares på hver henting.
+const propositionalizeSystem = "Du gjør om en del av et internt bedriftsdokument til RAG-optimaliserte, " +
+	"atomære utsagn. Hvert utsagn skal være kort, SELVSTENDIG (forståelig uten kontekst) og fortettet: " +
+	"fjern fyll, høflighetsfraser, gjentakelser og navigasjon. BEVAR ordrett hvert faktum, tall, terskel, " +
+	"dato, navn og hvert steg i en prosedyre — aldri endre, avrund eller utelat konkret informasjon, og " +
+	"behold rekkefølgen på steg. Svar KUN med JSON: {\"statements\":[\"...\", \"...\"]}."
+
+// propositionalize deler dokumentet i seksjoner og gjør hver om til atomære
+// utsagn via et billig kall. Returnerer feil hvis ingenting kom ut, så
+// kalleren kan falle tilbake til naiv oppdeling.
+func (s *Server) propositionalize(ctx context.Context, text string) ([]string, error) {
+	var out []string
+	for _, section := range chunkText(text) {
+		raw, err := s.llmComplete(ctx, propositionalizeSystem, section, 1200)
+		if err != nil {
+			return nil, err
+		}
+		var parsed struct {
+			Statements []string `json:"statements"`
+		}
+		if json.Unmarshal([]byte(stripFences(raw)), &parsed) != nil {
+			continue
+		}
+		for _, st := range parsed.Statements {
+			if st = strings.TrimSpace(st); st != "" {
+				out = append(out, st)
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil, errors.New("tom propositionalisering")
+	}
+	return out, nil
+}
+
 // docSummarySystem ber om en kort tittel + ett sammendrag av dokumentet, som
 // JSON. Ett billig kall — dokumentteksten går aldri gjennom modellen ellers.
 const docSummarySystem = "Du får starten av et internt bedriftsdokument. Svar KUN med JSON " +
@@ -86,7 +124,13 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parts := chunkText(text)
+	// Propositionalisér til atomære RAG-enheter; fall tilbake til naiv
+	// oppdeling så lagring aldri stopper på en AI-feil.
+	parts, err := s.propositionalize(r.Context(), text)
+	if err != nil {
+		s.log.Warn("propositionalisering feilet, bruker naiv oppdeling", "err", err)
+		parts = chunkText(text)
+	}
 	if len(parts) == 0 {
 		writeErr(w, http.StatusBadRequest, "fant ikke tekst å lagre")
 		return
@@ -110,7 +154,7 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 		chunks = append(chunks, store.DocumentChunk{Content: p, Embedding: vec})
 	}
 
-	node, err := s.store.CreateDocument(user.TenantID, store.KnowledgeNode{
+	node, err := s.store.CreateDocument(user.TenantID, req.Filename, text, store.KnowledgeNode{
 		Type: "dokument", Status: "accepted", Title: title, Summary: summary,
 		ChatID: req.ChatID, UserID: user.ID, Embedding: summaryVec,
 	}, chunks)
