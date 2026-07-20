@@ -19,9 +19,9 @@ const (
 	embeddingModel    = "qwen3-embedding-8b"
 	knowledgeTopK     = 6    // antall mest relevante noder
 	knowledgeMinScore = 0.35 // ignorer svake treff
-	chunkTopK         = 4    // antall mest relevante dokument-biter
+	chunkTopK         = 25   // maks antall dokument-biter (budsjettet er den reelle grensen)
 	chunkMinScore     = 0.35 // ignorer svake bit-treff
-	chunkCharBudget   = 3000 // hardt tak på injisert dokument-tekst
+	chunkCharBudget   = 4000 // hardt tak på injisert dokument-tekst
 )
 
 // knowledgeFor henter kunnskapskonteksten for siste brukermelding i en
@@ -158,9 +158,20 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 		return ""
 	}
 
+	// Dokument-relevans: hvor godt spørsmålet matcher hvert dokuments
+	// sammendrag. Brukes til å dra inn hele dokumentets biter når spørsmålet
+	// gjelder dokumentet (f.eks. «hva er karakterene mine») — ikke bare de få
+	// bitene som tilfeldigvis matcher ordrett.
+	docScore := map[string]float64{}
+	for _, n := range nodes {
+		if n.Type == "dokument" {
+			docScore[n.ID] = cosine(qvec, n.Embedding)
+		}
+	}
+
 	var b strings.Builder
 	s.writeNodeContext(&b, tenantID, qvec, nodes)
-	writeChunkContext(&b, qvec, chunks)
+	writeChunkContext(&b, qvec, chunks, docScore)
 	return b.String()
 }
 
@@ -210,17 +221,34 @@ func (s *Server) writeNodeContext(b *strings.Builder, tenantID string, qvec []fl
 }
 
 // writeChunkContext skriver de mest relevante dokument-bitene, med
-// kildehenvisning og et hardt tegn-tak så injeksjonen aldri sprenger konteksten.
-func writeChunkContext(b *strings.Builder, qvec []float32, chunks []store.DocumentChunk) {
+// kildehenvisning og et hardt tegn-tak. En bit rangeres på det HØYESTE av sin
+// egen likhet og dokumentets samlede relevans (docScore), slik at et treff på
+// dokumentet drar inn alle bitene — også de som ikke matcher spørsmålet ordrett
+// (f.eks. hver enkelt karakterlinje i et vitnemål). Bitene sorteres slik at
+// samme dokument holdes samlet og i rekkefølge.
+func writeChunkContext(b *strings.Builder, qvec []float32, chunks []store.DocumentChunk, docScore map[string]float64) {
 	type scored struct {
 		chunk store.DocumentChunk
 		score float64
 	}
 	ranked := make([]scored, 0, len(chunks))
 	for _, c := range chunks {
-		ranked = append(ranked, scored{c, cosine(qvec, c.Embedding)})
+		eff := cosine(qvec, c.Embedding)
+		if ds := docScore[c.NodeID]; ds > eff {
+			eff = ds
+		}
+		ranked = append(ranked, scored{c, eff})
 	}
-	sort.Slice(ranked, func(i, j int) bool { return ranked[i].score > ranked[j].score })
+	sort.Slice(ranked, func(i, j int) bool {
+		if ranked[i].score != ranked[j].score {
+			return ranked[i].score > ranked[j].score
+		}
+		// Lik score (typisk samme dokument): behold rekkefølgen i dokumentet.
+		if ranked[i].chunk.NodeID == ranked[j].chunk.NodeID {
+			return ranked[i].chunk.Ordinal < ranked[j].chunk.Ordinal
+		}
+		return ranked[i].chunk.NodeID < ranked[j].chunk.NodeID
+	})
 
 	var picked []scored
 	budget := chunkCharBudget
@@ -237,10 +265,6 @@ func writeChunkContext(b *strings.Builder, qvec []float32, chunks []store.Docume
 
 	b.WriteString("\nRelevante utdrag fra bedriftens egne dokumenter (siter kilden når du bruker dem):\n")
 	for _, r := range picked {
-		content := r.chunk.Content
-		if len(content) > chunkCharBudget {
-			content = content[:chunkCharBudget]
-		}
-		fmt.Fprintf(b, "- (fra «%s») %s\n", r.chunk.DocTitle, content)
+		fmt.Fprintf(b, "- (fra «%s») %s\n", r.chunk.DocTitle, r.chunk.Content)
 	}
 }
