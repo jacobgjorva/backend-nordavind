@@ -229,8 +229,8 @@ func (s *Store) CreateDocumentNotes(tenantID string, doc DocumentInput, notes []
 	}
 
 	if _, err := tx.Exec(
-		`INSERT INTO documents (node_id, tenant_id, filename, raw_text) VALUES (?, ?, ?, ?)`,
-		docID, tenantID, doc.Filename, doc.RawText,
+		`INSERT INTO documents (node_id, tenant_id, filename, raw_text, title) VALUES (?, ?, ?, ?, ?)`,
+		docID, tenantID, doc.Filename, doc.RawText, doc.Title,
 	); err != nil {
 		return "", err
 	}

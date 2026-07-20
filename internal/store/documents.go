@@ -39,7 +39,66 @@ func (s *Store) migrateDocuments() error {
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	// Tittel til bibliotek-visningen (lagt til i etterkant).
+	s.db.Exec(`ALTER TABLE documents ADD COLUMN title TEXT NOT NULL DEFAULT ''`)
+	return nil
+}
+
+// Document er ett opplastet dokument til bibliotek-listen.
+type Document struct {
+	ID        string    `json:"id"`
+	Title     string    `json:"title"`
+	Filename  string    `json:"filename"`
+	Notes     int       `json:"notes"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ListDocuments returnerer tenantens opplastede dokumenter, nyest først, med
+// antall lapper hver har.
+func (s *Store) ListDocuments(tenantID string) ([]Document, error) {
+	rows, err := s.db.Query(
+		`SELECT d.node_id, d.title, d.filename, d.created_at,
+		        (SELECT count(*) FROM knowledge_notes n WHERE n.source_id = d.node_id)
+		 FROM documents d WHERE d.tenant_id = ? ORDER BY d.created_at DESC`,
+		tenantID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Document
+	for rows.Next() {
+		var d Document
+		if err := rows.Scan(&d.ID, &d.Title, &d.Filename, &d.CreatedAt, &d.Notes); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// DeleteDocument fjerner et dokument, alle lappene og FTS-radene, i én
+// transaksjon.
+func (s *Store) DeleteDocument(tenantID, id string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`DELETE FROM documents WHERE node_id = ? AND tenant_id = ?`, id, tenantID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	if err := deleteNotesBySource(tx, tenantID, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // CreateDocument lagrer et opplastet dokument som én accepted doknode, en rad

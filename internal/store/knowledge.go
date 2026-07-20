@@ -271,7 +271,7 @@ func (s *Store) RejectNode(id, tenantID string) error {
 func (s *Store) GraphData(tenantID string) ([]KnowledgeNode, []KnowledgeEdge, error) {
 	nodeRows, err := s.db.Query(
 		`SELECT id, type, title, summary FROM knowledge_nodes
-		 WHERE tenant_id = ? AND status = 'accepted'`,
+		 WHERE tenant_id = ? AND status = 'accepted' AND type != 'dokument'`,
 		tenantID,
 	)
 	if err != nil {

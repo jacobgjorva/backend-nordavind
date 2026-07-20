@@ -163,6 +163,41 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"id": docID, "title": title, "summary": summary, "chunks": len(notes)})
 }
 
+// handleListDocuments returnerer tenantens dokumentbibliotek.
+func (s *Server) handleListDocuments(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	docs, err := s.store.ListDocuments(user.TenantID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "intern feil")
+		return
+	}
+	if docs == nil {
+		docs = []store.Document{}
+	}
+	writeJSON(w, map[string]any{"documents": docs})
+}
+
+// handleDeleteDocument sletter et dokument og alle lappene dets.
+func (s *Server) handleDeleteDocument(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	err := s.store.DeleteDocument(user.TenantID, r.PathValue("id"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "ikke funnet")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "kunne ikke slette")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // documentTitleSummary gir tittel + sammendrag. Bruker oppgitt tittel hvis
 // satt, ellers ett billig LLM-kall på starten av teksten; faller tilbake til
 // filnavnet så en indeksering aldri stopper på AI-feil.
