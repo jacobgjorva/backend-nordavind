@@ -19,6 +19,9 @@ const (
 	embeddingModel    = "qwen3-embedding-8b"
 	knowledgeTopK     = 6    // antall mest relevante noder
 	knowledgeMinScore = 0.35 // ignorer svake treff
+	chunkTopK         = 4    // antall mest relevante dokument-biter
+	chunkMinScore     = 0.35 // ignorer svake bit-treff
+	chunkCharBudget   = 3000 // hardt tak på injisert dokument-tekst
 )
 
 // knowledgeFor henter kunnskapskonteksten for siste brukermelding i en
@@ -144,8 +147,9 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 	if len([]rune(strings.TrimSpace(query))) < 12 {
 		return ""
 	}
-	nodes, err := s.store.AcceptedNodes(tenantID)
-	if err != nil || len(nodes) == 0 {
+	nodes, _ := s.store.AcceptedNodes(tenantID)
+	chunks, _ := s.store.AcceptedChunks(tenantID)
+	if len(nodes) == 0 && len(chunks) == 0 {
 		return ""
 	}
 	qvec, err := s.embedCached(ctx, query)
@@ -154,12 +158,25 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 		return ""
 	}
 
+	var b strings.Builder
+	s.writeNodeContext(&b, tenantID, qvec, nodes)
+	writeChunkContext(&b, qvec, chunks)
+	return b.String()
+}
+
+// writeNodeContext skriver de mest relevante graf-nodene (kuratert innsikt)
+// pluss deres nærmeste naboer. Dokument-noder hoppes over — innholdet deres
+// serveres som biter i writeChunkContext.
+func (s *Server) writeNodeContext(b *strings.Builder, tenantID string, qvec []float32, nodes []store.KnowledgeNode) {
 	type scored struct {
 		node  store.KnowledgeNode
 		score float64
 	}
 	ranked := make([]scored, 0, len(nodes))
 	for _, n := range nodes {
+		if n.Type == "dokument" {
+			continue
+		}
 		ranked = append(ranked, scored{n, cosine(qvec, n.Embedding)})
 	}
 	sort.Slice(ranked, func(i, j int) bool { return ranked[i].score > ranked[j].score })
@@ -174,7 +191,7 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 		ids = append(ids, r.node.ID)
 	}
 	if len(picked) == 0 {
-		return ""
+		return
 	}
 
 	// 1-hopp naboer utvider konteksten langs grafen.
@@ -186,10 +203,44 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 		}
 	}
 
-	var b strings.Builder
 	b.WriteString("Relevant bransjekunnskap om denne bedriften (bruk der det passer, ikke nevn at du har den):\n")
 	for _, n := range picked {
-		fmt.Fprintf(&b, "- %s: %s\n", n.Title, n.Summary)
+		fmt.Fprintf(b, "- %s: %s\n", n.Title, n.Summary)
 	}
-	return b.String()
+}
+
+// writeChunkContext skriver de mest relevante dokument-bitene, med
+// kildehenvisning og et hardt tegn-tak så injeksjonen aldri sprenger konteksten.
+func writeChunkContext(b *strings.Builder, qvec []float32, chunks []store.DocumentChunk) {
+	type scored struct {
+		chunk store.DocumentChunk
+		score float64
+	}
+	ranked := make([]scored, 0, len(chunks))
+	for _, c := range chunks {
+		ranked = append(ranked, scored{c, cosine(qvec, c.Embedding)})
+	}
+	sort.Slice(ranked, func(i, j int) bool { return ranked[i].score > ranked[j].score })
+
+	var picked []scored
+	budget := chunkCharBudget
+	for _, r := range ranked {
+		if len(picked) >= chunkTopK || r.score < chunkMinScore || budget <= 0 {
+			break
+		}
+		picked = append(picked, r)
+		budget -= len(r.chunk.Content)
+	}
+	if len(picked) == 0 {
+		return
+	}
+
+	b.WriteString("\nRelevante utdrag fra bedriftens egne dokumenter (siter kilden når du bruker dem):\n")
+	for _, r := range picked {
+		content := r.chunk.Content
+		if len(content) > chunkCharBudget {
+			content = content[:chunkCharBudget]
+		}
+		fmt.Fprintf(b, "- (fra «%s») %s\n", r.chunk.DocTitle, content)
+	}
 }
