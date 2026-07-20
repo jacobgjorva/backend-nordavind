@@ -209,7 +209,8 @@ func (s *Store) AcceptNode(id, tenantID, title, summary string, embedding []floa
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	// Speil den aksepterte fakta-noden inn i retrieval-skuffen.
+	return s.SyncFactNote(tenantID, id, title, summary, embedding)
 }
 
 // UpdateNode redigerer en akseptert node manuelt og reberegner embedding.
@@ -226,7 +227,7 @@ func (s *Store) UpdateNode(id, tenantID, title, summary string, embedding []floa
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return s.SyncFactNote(tenantID, id, title, summary, embedding)
 }
 
 // DeleteNode fjerner en node og alle kantene den inngår i.
@@ -243,6 +244,8 @@ func (s *Store) DeleteNode(id, tenantID string) error {
 	s.db.Exec(`DELETE FROM knowledge_edges WHERE from_id = ? OR to_id = ?`, id, id)
 	// Doknoder har biter + provenance under seg — rydd dem med.
 	s.DeleteDocumentData(id)
+	// Fjern den speilede lappen fra retrieval-skuffen.
+	s.RemoveNote(id)
 	return nil
 }
 
@@ -259,6 +262,8 @@ func (s *Store) RejectNode(id, tenantID string) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
+	// Avvist fakta skal ikke være søkbart.
+	s.RemoveNote(id)
 	return nil
 }
 

@@ -138,33 +138,29 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 
 	title, summary := s.documentTitleSummary(r.Context(), req.Title, req.Filename, text)
 
-	// Embed sammendraget (til node-ranking) og hver bit (til bit-henting).
-	summaryVec, err := s.embed(r.Context(), title+". "+summary)
-	if err != nil {
-		writeErr(w, http.StatusBadGateway, "kunne ikke indeksere dokumentet")
-		return
-	}
-	chunks := make([]store.DocumentChunk, 0, len(parts))
+	// Hver lapp = én proposisjon, forankret med dokumentets sammendrag som
+	// kontekst (contextual retrieval). Embeddingen dekker context + tekst så
+	// lappen matcher selv når spørsmålet gjelder dokumentet som helhet.
+	notes := make([]store.KnowledgeNote, 0, len(parts))
 	for _, p := range parts {
-		vec, err := s.embed(r.Context(), p)
+		vec, err := s.embed(r.Context(), summary+" "+p)
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, "kunne ikke indeksere dokumentet")
 			return
 		}
-		chunks = append(chunks, store.DocumentChunk{Content: p, Embedding: vec})
+		notes = append(notes, store.KnowledgeNote{Text: p, Context: summary, Embedding: vec})
 	}
 
-	node, err := s.store.CreateDocument(user.TenantID, req.Filename, text, store.KnowledgeNode{
-		Type: "dokument", Status: "accepted", Title: title, Summary: summary,
-		ChatID: req.ChatID, UserID: user.ID, Embedding: summaryVec,
-	}, chunks)
+	docID, err := s.store.CreateDocumentNotes(user.TenantID, store.DocumentInput{
+		Filename: req.Filename, RawText: text, Title: title, Summary: summary,
+	}, notes)
 	if err != nil {
 		s.log.Error("kunne ikke lagre dokument", "err", err)
 		writeErr(w, http.StatusInternalServerError, "kunne ikke lagre dokumentet")
 		return
 	}
-	s.log.Info("dokument lagret", "tittel", title, "biter", len(chunks))
-	writeJSON(w, map[string]any{"id": node.ID, "title": title, "summary": summary, "chunks": len(chunks)})
+	s.log.Info("dokument lagret", "tittel", title, "lapper", len(notes))
+	writeJSON(w, map[string]any{"id": docID, "title": title, "summary": summary, "chunks": len(notes)})
 }
 
 // documentTitleSummary gir tittel + sammendrag. Bruker oppgitt tittel hvis

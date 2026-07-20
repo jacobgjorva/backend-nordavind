@@ -69,12 +69,12 @@ func (s *Store) backfillNotes() error {
 	}
 	defer tx.Rollback()
 
-	// Fakta-noder (alt som ikke er en dokument-node) → fact-lapper.
+	// Fakta-noder (alt som ikke er en dokument-node) → fact-lapper. Text =
+	// selve faktaet (summary), context = tittel så nøkkelordsøk dekker begge.
 	if _, err := tx.Exec(`
 		INSERT INTO knowledge_notes
-			(id, tenant_id, source_type, source_id, title, text, status, chat_id, user_id, embedding, created_at)
-		SELECT id, tenant_id, 'fact', '', title,
-		       CASE WHEN title != '' THEN title || ': ' || summary ELSE summary END,
+			(id, tenant_id, source_type, source_id, title, text, context, status, chat_id, user_id, embedding, created_at)
+		SELECT id, tenant_id, 'fact', '', title, summary, title,
 		       status, chat_id, user_id, embedding, created_at
 		FROM knowledge_nodes WHERE type != 'dokument'
 	`); err != nil {
@@ -172,6 +172,129 @@ func insertNote(tx *sql.Tx, tenantID string, note KnowledgeNote) error {
 		`INSERT INTO knowledge_notes_fts (note_id, text, context) VALUES (?, ?, ?)`,
 		note.ID, note.Text, note.Context,
 	)
+	return err
+}
+
+// DocumentInput er metadata for et opplastet dokument som lagres sammen med
+// lappene sine.
+type DocumentInput struct {
+	Filename string
+	RawText  string
+	Title    string
+	Summary  string
+}
+
+// CreateDocumentNotes lagrer et dokument som lapper i den felles skuffen, i én
+// transaksjon: erstatter et tidligere dokument med samme filnavn (ferskhet),
+// lagrer provenance (filnavn + råtekst) og setter inn hver lapp + FTS.
+// Returnerer dokumentets id.
+func (s *Store) CreateDocumentNotes(tenantID string, doc DocumentInput, notes []KnowledgeNote) (string, error) {
+	docID, err := newID()
+	if err != nil {
+		return "", err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+
+	// Ferskhet: samme filnavn lastet opp på nytt erstatter det gamle helt.
+	if doc.Filename != "" {
+		rows, err := tx.Query(
+			`SELECT node_id FROM documents WHERE tenant_id = ? AND filename = ?`,
+			tenantID, doc.Filename,
+		)
+		if err != nil {
+			return "", err
+		}
+		var oldIDs []string
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return "", err
+			}
+			oldIDs = append(oldIDs, id)
+		}
+		rows.Close()
+		for _, id := range oldIDs {
+			if err := deleteNotesBySource(tx, tenantID, id); err != nil {
+				return "", err
+			}
+			if _, err := tx.Exec(`DELETE FROM documents WHERE node_id = ?`, id); err != nil {
+				return "", err
+			}
+		}
+	}
+
+	if _, err := tx.Exec(
+		`INSERT INTO documents (node_id, tenant_id, filename, raw_text) VALUES (?, ?, ?, ?)`,
+		docID, tenantID, doc.Filename, doc.RawText,
+	); err != nil {
+		return "", err
+	}
+	for _, n := range notes {
+		id, err := newID()
+		if err != nil {
+			return "", err
+		}
+		n.ID = id
+		n.SourceType = "document"
+		n.SourceID = docID
+		n.Title = doc.Title
+		n.Status = "accepted"
+		n.CreatedAt = time.Now()
+		if err := insertNote(tx, tenantID, n); err != nil {
+			return "", err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	return docID, nil
+}
+
+// SyncFactNote speiler en akseptert fakta-node inn i lappe-skuffen (retrieval-
+// indeksen). Idempotent: erstatter en eksisterende lapp med samme id.
+func (s *Store) SyncFactNote(tenantID, id, title, text string, embedding []float32) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := removeNote(tx, id); err != nil {
+		return err
+	}
+	if err := insertNote(tx, tenantID, KnowledgeNote{
+		ID: id, SourceType: "fact", Title: title, Text: text, Context: title,
+		Status: "accepted", Embedding: embedding, CreatedAt: time.Now(),
+	}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// RemoveNote fjerner en lapp (og FTS-raden) — brukes når en fakta-node
+// avvises eller slettes.
+func (s *Store) RemoveNote(id string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := removeNote(tx, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// removeNote sletter en lapp og FTS-raden i en transaksjon.
+func removeNote(tx *sql.Tx, id string) error {
+	if _, err := tx.Exec(`DELETE FROM knowledge_notes_fts WHERE note_id = ?`, id); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`DELETE FROM knowledge_notes WHERE id = ?`, id)
 	return err
 }
 
