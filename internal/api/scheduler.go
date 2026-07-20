@@ -76,6 +76,43 @@ func (s *Server) runAgentOnce(ctx context.Context, a store.Agent, now time.Time)
 	s.store.RecordRun(a.ID, store.AgentRun{Status: "ok", Output: output, TokensUsed: tokens})
 	s.postToAgentChat(a, output)
 	s.log.Info("agent kjørt", "id", a.ID, "navn", a.Name, "tokens", tokens)
+
+	// Push-varsel: kun hvis brukeren har slått det på OG resultatet er verdt å
+	// varsle om (billig sjekk), så en rutinekjøring uten nytt ikke maser.
+	if a.PushEnabled {
+		go s.maybePush(a, output)
+	}
+}
+
+const pushClassifySystem = "Du vurderer et resultat fra en automatisk agent-kjøring. Er dette verdt å " +
+	"vekke brukeren med et push-varsel — altså noe NYTT, handlingskrevende eller viktig? Rutine, " +
+	"«ingenting nytt», tomme eller trivielle resultater skal IKKE varsles. Svar KUN «ja» eller «nei»."
+
+// maybePush avgjør billig om agentens output er verdt et varsel, og køer det.
+func (s *Server) maybePush(a store.Agent, output string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	body := strings.TrimSpace(output)
+	if body == "" {
+		return
+	}
+	head := body
+	if len(head) > 1200 {
+		head = head[:1200]
+	}
+	raw, err := s.llmComplete(ctx, pushClassifySystem, head, 3)
+	if err != nil || !strings.Contains(strings.ToLower(raw), "ja") {
+		return
+	}
+	title := a.Name
+	if len(body) > 200 {
+		body = body[:200]
+	}
+	if err := s.store.EnqueuePush(a.TenantID, a.UserID, a.ID, title, body); err != nil {
+		s.log.Warn("kunne ikke køe push", "id", a.ID, "err", err)
+		return
+	}
+	s.log.Info("push køet", "agent", a.Name, "user", a.UserID)
 }
 
 // postToAgentChat legger agentens resultat inn som en melding i chatten.

@@ -22,6 +22,7 @@ type Agent struct {
 	DailyTokenLimit int        `json:"daily_token_limit"`
 	WriteAccess     bool       `json:"write_access"`
 	Enabled         bool       `json:"enabled"`
+	PushEnabled     bool       `json:"push_enabled"`
 	CreatedAt       time.Time  `json:"created_at"`
 	ChatID          string     `json:"chat_id"`
 	NextRunAt       *time.Time `json:"next_run_at,omitempty"`
@@ -63,6 +64,17 @@ func (s *Store) migrateAgents() error {
 			error       TEXT NOT NULL DEFAULT ''
 		);
 		CREATE INDEX IF NOT EXISTS idx_runs_agent ON agent_runs (agent_id, started_at);
+		CREATE TABLE IF NOT EXISTS push_notifications (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			tenant_id  TEXT NOT NULL,
+			user_id    TEXT NOT NULL,
+			agent_id   TEXT NOT NULL,
+			title      TEXT NOT NULL DEFAULT '',
+			body       TEXT NOT NULL DEFAULT '',
+			sent       INTEGER NOT NULL DEFAULT 0,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE INDEX IF NOT EXISTS idx_push_unsent ON push_notifications (sent, created_at);
 	`); err != nil {
 		return err
 	}
@@ -72,6 +84,7 @@ func (s *Store) migrateAgents() error {
 		`ALTER TABLE agents ADD COLUMN next_run_at TIMESTAMP`,
 		`ALTER TABLE agents ADD COLUMN last_run_at TIMESTAMP`,
 		`ALTER TABLE agents ADD COLUMN chat_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN push_enabled INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := s.db.Exec(col); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column") {
@@ -177,7 +190,7 @@ func (s *Store) ListAgents(userID string) ([]Agent, error) {
 func (s *Store) DueAgents(now time.Time) ([]Agent, error) {
 	rows, err := s.db.Query(
 		`SELECT id, tenant_id, user_id, name, task, connection_id, schedule_label,
-		        interval_seconds, run_time, daily_token_limit, write_access, next_run_at, chat_id
+		        interval_seconds, run_time, daily_token_limit, write_access, next_run_at, chat_id, push_enabled
 		 FROM agents
 		 WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ?
 		 ORDER BY next_run_at`,
@@ -191,13 +204,14 @@ func (s *Store) DueAgents(now time.Time) ([]Agent, error) {
 	var out []Agent
 	for rows.Next() {
 		var a Agent
-		var write int
+		var write, push int
 		if err := rows.Scan(&a.ID, &a.TenantID, &a.UserID, &a.Name, &a.Task,
 			&a.ConnectionID, &a.ScheduleLabel, &a.IntervalSeconds, &a.RunTime,
-			&a.DailyTokenLimit, &write, &a.NextRunAt, &a.ChatID); err != nil {
+			&a.DailyTokenLimit, &write, &a.NextRunAt, &a.ChatID, &push); err != nil {
 			return nil, err
 		}
 		a.WriteAccess = write != 0
+		a.PushEnabled = push != 0
 		a.Enabled = true
 		out = append(out, a)
 	}
@@ -281,6 +295,31 @@ func (s *Store) SetAgentEnabled(agentID, userID string, enabled bool) error {
 	return nil
 }
 
+// EnqueuePush legger et push-varsel i køen (sent=0). Selve leveringen til
+// mobil-appen kobles på senere; nå lagres/logges bare varselet.
+func (s *Store) EnqueuePush(tenantID, userID, agentID, title, body string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO push_notifications (tenant_id, user_id, agent_id, title, body) VALUES (?, ?, ?, ?, ?)`,
+		tenantID, userID, agentID, title, body,
+	)
+	return err
+}
+
+// SetAgentPush slår push-varsel på/av for en agent.
+func (s *Store) SetAgentPush(agentID, userID string, on bool) error {
+	res, err := s.db.Exec(
+		`UPDATE agents SET push_enabled = ? WHERE id = ? AND user_id = ?`,
+		boolToInt(on), agentID, userID,
+	)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // GetAgent henter en agent brukeren eier (for redigering via chatten).
 func (s *Store) GetAgent(id, userID string) (Agent, error) {
 	var a Agent
@@ -304,21 +343,22 @@ func (s *Store) GetAgent(id, userID string) (Agent, error) {
 // AgentByChat henter agenten som eier en chat (for pause-knappen i UI-et).
 func (s *Store) AgentByChat(chatID, userID string) (Agent, error) {
 	var a Agent
-	var write, enabled int
+	var write, enabled, push int
 	err := s.db.QueryRow(
 		`SELECT id, name, task, connection_id, schedule_label, interval_seconds,
 		        run_time, daily_token_limit, write_access, enabled, created_at,
-		        next_run_at, last_run_at, chat_id
+		        next_run_at, last_run_at, chat_id, push_enabled
 		 FROM agents WHERE chat_id = ? AND user_id = ?`,
 		chatID, userID,
 	).Scan(&a.ID, &a.Name, &a.Task, &a.ConnectionID, &a.ScheduleLabel,
 		&a.IntervalSeconds, &a.RunTime, &a.DailyTokenLimit, &write, &enabled,
-		&a.CreatedAt, &a.NextRunAt, &a.LastRunAt, &a.ChatID)
+		&a.CreatedAt, &a.NextRunAt, &a.LastRunAt, &a.ChatID, &push)
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, ErrNotFound
 	}
 	a.WriteAccess = write != 0
 	a.Enabled = enabled != 0
+	a.PushEnabled = push != 0
 	return a, err
 }
 

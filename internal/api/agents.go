@@ -141,29 +141,47 @@ func (s *Server) handleAgentByChat(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(agent)
 }
 
-// handleSetAgentEnabled pauser eller gjenopptar en agent.
+// handleSetAgentEnabled oppdaterer pause- og/eller push-status. Feltene er
+// valgfrie (pekere), så bare det som sendes endres.
 func (s *Server) handleSetAgentEnabled(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.user(w, r)
 	if !ok {
 		return
 	}
 	var req struct {
-		Enabled bool `json:"enabled"`
+		Enabled     *bool `json:"enabled"`
+		PushEnabled *bool `json:"push_enabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "ugyldig request", http.StatusBadRequest)
 		return
 	}
-	err := s.store.SetAgentEnabled(r.PathValue("id"), user.ID, req.Enabled)
+	id := r.PathValue("id")
+	if req.Enabled != nil {
+		if err := s.setAgentField(w, s.store.SetAgentEnabled(id, user.ID, *req.Enabled)); err != nil {
+			return
+		}
+	}
+	if req.PushEnabled != nil {
+		if err := s.setAgentField(w, s.store.SetAgentPush(id, user.ID, *req.PushEnabled)); err != nil {
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// setAgentField mapper en store-feil til riktig HTTP-svar; returnerer feilen
+// (ikke-nil) hvis kalleren skal stoppe.
+func (s *Server) setAgentField(w http.ResponseWriter, err error) error {
 	if errors.Is(err, store.ErrNotFound) {
 		http.Error(w, "ikke funnet", http.StatusNotFound)
-		return
+		return err
 	}
 	if err != nil {
 		http.Error(w, "intern feil", http.StatusInternalServerError)
-		return
+		return err
 	}
-	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 // handleUpdateAgent oppdaterer en agents konfigurasjon (redigering i chatten).
