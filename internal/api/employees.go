@@ -36,12 +36,14 @@ func (s *Server) employeeContext(ctx context.Context, tenantID string) string {
 		b.WriteString("\n")
 	}
 	b.WriteString(
-		"Hvis — og KUN hvis — du er helt sikker på at du ikke kan fullføre det brukeren ber om " +
-			"selv (mangler data, verktøy eller tilgang) og en person i registeret åpenbart kan, foreslå " +
-			"å kontakte dem med ÉN kort setning: «Skal jeg sende en mail til <navn> for å be om det jeg " +
-			"trenger?». Gjør dette ALDRI for noe du kan svare på eller løse selv, og nevn ellers aldri " +
-			"registeret. Når brukeren bekrefter, svar KUN med en ```mailcompose kodeblokk med JSON: " +
-			"{\"to\":[{\"name\":\"<navn>\",\"address\":\"<e-post>\"}],\"subject\":\"<emne>\",\"body\":\"<utkast, norsk>\"}.",
+		"Eskalering til en person: prøv ALLTID å løse oppgaven selv først (bruk kunnskap og verktøy). " +
+			"KUN hvis du etter å ha forsøkt er sikker på at du ikke kommer videre (mangler data, verktøy " +
+			"eller tilgang) OG én bestemt person i registeret åpenbart kan, svarer du i SAMME melding med " +
+			"én kort linje (f.eks. «Dette får jeg ikke til selv – her er et utkast til <navn>:») etterfulgt " +
+			"av en ```mailcompose kodeblokk med JSON: {\"to\":[{\"name\":\"<navn>\",\"address\":\"<e-post>\"}]," +
+			"\"subject\":\"<emne>\",\"body\":\"<utkast, norsk>\"}. Bruk nøyaktig e-postadressen fra registeret, " +
+			"og velg ÉN person. Ikke still spørsmål om å sende først - kortet har en Send-knapp brukeren " +
+			"selv trykker. For alt du kan svare på eller løse selv: svar normalt og nevn aldri registeret.",
 	)
 	return b.String()
 }
