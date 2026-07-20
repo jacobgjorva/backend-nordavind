@@ -39,9 +39,10 @@ func (s *Server) employeeContext(ctx context.Context, tenantID string) string {
 		"Eskalering til en person: prøv ALLTID å løse oppgaven selv først (kunnskap og verktøy). KUN hvis " +
 			"du etter å ha forsøkt er sikker på at du ikke kommer videre (mangler data, verktøy eller " +
 			"tilgang) OG én bestemt person i registeret åpenbart kan, kaller du verktøyet contact_person " +
-			"med personens navn/e-post fra registeret og et kort utkast. Det viser et ferdig e-postkort " +
-			"brukeren selv sender. Velg ÉN person. For alt du kan svare på eller løse selv: svar normalt " +
-			"og nevn aldri registeret.",
+			"med personens navn/e-post fra registeret og et kort utkast skrevet i FØRSTEPERSON som brukeren " +
+			"selv (mailen sendes fra brukerens konto, ikke fra deg). Det viser et ferdig e-postkort brukeren " +
+			"selv sender. Velg ÉN person. For alt du kan svare på eller løse selv: svar normalt og nevn " +
+			"aldri registeret.",
 	)
 	return b.String()
 }
@@ -69,7 +70,7 @@ var contactTool = map[string]any{
 				"name":    map[string]any{"type": "string", "description": "personens navn fra registeret"},
 				"email":   map[string]any{"type": "string", "description": "personens e-postadresse fra registeret"},
 				"subject": map[string]any{"type": "string", "description": "kort emne"},
-				"body":    map[string]any{"type": "string", "description": "utkast til meldingen, på norsk, uten signatur"},
+				"body":    map[string]any{"type": "string", "description": "utkast til meldingen, på norsk, uten signatur. Skriv i FØRSTEPERSON som brukeren selv (mailen sendes fra brukerens konto), f.eks. «Hei <navn>, jeg har et problem med ... kan du hjelpe?» — aldri i tredjeperson om «brukeren»"},
 			},
 			"required": []string{"email", "subject", "body"},
 		},
