@@ -67,7 +67,10 @@ func Open(path string) (*Store, error) {
 	if err := s.migrateWidgets(); err != nil {
 		return nil, err
 	}
-	return s, s.migrateKnowledge()
+	if err := s.migrateKnowledge(); err != nil {
+		return nil, err
+	}
+	return s, s.migrateDocuments()
 }
 
 func (s *Store) Close() error { return s.db.Close() }
