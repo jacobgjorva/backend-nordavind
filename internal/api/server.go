@@ -104,10 +104,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/agents", s.requireAuth(s.handleListAgents))
 	mux.HandleFunc("GET /v1/agent-connections", s.requireAuth(s.handleAgentConnections))
 	mux.HandleFunc("GET /v1/mail/account", s.requireAuth(s.handleGetMailAccount))
-	mux.HandleFunc("GET /v1/mail/inbox", s.requireAuth(s.handleMailInbox))
-	mux.HandleFunc("GET /v1/mail/thread", s.requireAuth(s.handleMailThread))
-	mux.HandleFunc("POST /v1/mail/analyze", s.requireAuth(s.handleMailAnalyze))
-	mux.HandleFunc("POST /v1/mail/draft", s.requireAuth(s.handleMailDraft))
 	mux.HandleFunc("POST /v1/mail/send", s.requireAuth(s.handleMailSend))
 
 	mux.HandleFunc("POST /v1/widgets", s.requireAuth(s.handleCreateWidget))

@@ -14,8 +14,6 @@ import (
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
 
-const inboxScan = 80 // hvor mange meldinger som skannes for tråd-gruppering
-
 // mailAccount bygger e-postkontoen. MIDLERTIDIG: én delt env-konto i dev.
 // Gates hardt til cfg.Mail.Owner slik at kun den ene eier-brukeren når den —
 // ingen andre tenanter/brukere skal kunne lese eller sende fra den.
@@ -55,61 +53,6 @@ func (s *Server) handleGetMailAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(rec)
-}
-
-// handleMailInbox lister tråder nyest først.
-func (s *Server) handleMailInbox(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.user(w, r)
-	if !ok {
-		return
-	}
-	acc, _, err := s.mailAccount(user)
-	if errors.Is(err, store.ErrNotFound) {
-		http.Error(w, "ingen konto", http.StatusNotFound)
-		return
-	}
-	if err != nil {
-		http.Error(w, "intern feil", http.StatusInternalServerError)
-		return
-	}
-	threads, err := acc.Inbox(inboxScan)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	if threads == nil {
-		threads = []mail.ThreadSummary{}
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"threads": threads})
-}
-
-// handleMailThread returnerer meldingene i tråden + signatur.
-func (s *Server) handleMailThread(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.user(w, r)
-	if !ok {
-		return
-	}
-	acc, rec, err := s.mailAccount(user)
-	if err != nil {
-		http.Error(w, "ingen konto", http.StatusNotFound)
-		return
-	}
-	key := r.URL.Query().Get("key")
-	msgs, err := acc.Thread(key, inboxScan)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	if msgs == nil {
-		msgs = []mail.Message{}
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
-		"messages":  msgs,
-		"signature": rec.Signature,
-		"me":        rec.Email,
-	})
 }
 
 // llmComplete kjører ett ikke-streamet LLM-kall og returnerer innholdet.
@@ -161,133 +104,6 @@ func stripFences(s string) string {
 		s = strings.TrimSuffix(strings.TrimSpace(s), "```")
 	}
 	return strings.TrimSpace(s)
-}
-
-// threadText bygger en lesbar representasjon av tråden til LLM-en.
-func threadText(msgs []mail.Message) string {
-	var b strings.Builder
-	for i, m := range msgs {
-		fmt.Fprintf(&b, "--- Melding %d ---\n", i+1)
-		fmt.Fprintf(&b, "Fra: %s <%s>\nDato: %s\n", m.From.Name, m.From.Address, m.Date.Format("2006-01-02 15:04"))
-		if len(m.Attach) > 0 {
-			names := make([]string, len(m.Attach))
-			for j, a := range m.Attach {
-				names[j] = a.Filename
-			}
-			fmt.Fprintf(&b, "Vedlegg: %s\n", strings.Join(names, ", "))
-		}
-		body := stripQuoted(m.Body)
-		if len(body) > 1500 {
-			body = body[:1500]
-		}
-		fmt.Fprintf(&b, "%s\n\n", body)
-	}
-	return b.String()
-}
-
-// stripQuoted fjerner sitert historikk (linjer som starter med «>») så vi
-// ikke sender samme tekst om igjen nedover i tråden.
-func stripQuoted(body string) string {
-	lines := strings.Split(body, "\n")
-	kept := lines[:0]
-	for _, l := range lines {
-		if strings.HasPrefix(strings.TrimSpace(l), ">") {
-			continue
-		}
-		kept = append(kept, l)
-	}
-	return strings.TrimSpace(strings.Join(kept, "\n"))
-}
-
-const mailAnalyzeSystem = "Du er en norsk e-postassistent. Du får en e-posttråd. Svar KUN med JSON " +
-	"(ingen prat, ingen ```): {\"summary\": \"\", \"essences\": [\"<melding 1 forenklet>\", ...], " +
-	"\"proposal\": \"<forslag til brukeren>\"}. " +
-	"essences skal ha ett element per melding, i samme rekkefølge. Hver essence er en KRAFTIG forenklet " +
-	"versjon av selve meldingen, skrevet i FØRSTEPERSON som om avsenderen sier det selv (ikke et " +
-	"tredjeperson-sammendrag). Behold kun det viktigste, kutt høflighetsfraser og støy. " +
-	"proposal er ÉN kort setning som spør brukeren om å svare, på formen «Skal jeg svare <navn> om <tema>?». " +
-	"Ikke skriv svarutkast — det lages først når brukeren ber om det."
-
-// handleMailAnalyze oppsummerer tråden og lager et svarutkast.
-func (s *Server) handleMailAnalyze(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.user(w, r)
-	if !ok {
-		return
-	}
-	acc, _, err := s.mailAccount(user)
-	if err != nil {
-		http.Error(w, "ingen konto", http.StatusNotFound)
-		return
-	}
-	key := r.URL.Query().Get("key")
-	msgs, err := acc.Thread(key, inboxScan)
-	if err != nil || len(msgs) == 0 {
-		http.Error(w, "fant ikke tråden", http.StatusNotFound)
-		return
-	}
-	raw, err := s.llmComplete(r.Context(), mailAnalyzeSystem, threadText(msgs), 700)
-	if err != nil {
-		http.Error(w, "AI-analyse feilet", http.StatusBadGateway)
-		return
-	}
-	var parsed struct {
-		Summary  string   `json:"summary"`
-		Essences []string `json:"essences"`
-		Proposal string   `json:"proposal"`
-	}
-	if err := json.Unmarshal([]byte(stripFences(raw)), &parsed); err != nil {
-		// Fallback: bruk rå-teksten som sammendrag.
-		parsed.Summary = strings.TrimSpace(raw)
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(parsed)
-}
-
-// handleMailDraft lager et førsteutkast (tomt current) eller forbedrer et
-// eksisterende utkast ut fra brukerens tilbakemelding. Utkast genereres først
-// her — når brukeren faktisk vil svare — ikke ved åpning av tråden.
-func (s *Server) handleMailDraft(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.user(w, r)
-	if !ok {
-		return
-	}
-	acc, _, err := s.mailAccount(user)
-	if err != nil {
-		http.Error(w, "ingen konto", http.StatusNotFound)
-		return
-	}
-	var req struct {
-		Key      string `json:"key"`
-		Current  string `json:"current"`
-		Feedback string `json:"feedback"`
-	}
-	json.NewDecoder(r.Body).Decode(&req)
-
-	var sys, userMsg string
-	if strings.TrimSpace(req.Current) == "" {
-		// Førsteutkast: trenger trådens innhold én gang.
-		msgs, err := acc.Thread(req.Key, inboxScan)
-		if err != nil || len(msgs) == 0 {
-			http.Error(w, "fant ikke tråden", http.StatusNotFound)
-			return
-		}
-		sys = "Du er en norsk e-postassistent. Skriv et vennlig, profesjonelt svarutkast " +
-			"(norsk, uten signatur) på tråden. Hold det kort. Svar KUN med e-postteksten."
-		userMsg = threadText(msgs)
-	} else {
-		// Forbedring: sender IKKE hele tråden på nytt — kun utkast + tilbakemelding.
-		sys = "Du er en norsk e-postassistent. Forbedre svarutkastet ut fra tilbakemeldingen. " +
-			"Svar KUN med den nye e-postteksten (norsk, uten signatur), ingen forklaring."
-		userMsg = fmt.Sprintf("Nåværende utkast:\n%s\n\nTilbakemelding: %s",
-			req.Current, req.Feedback)
-	}
-	draft, err := s.llmComplete(r.Context(), sys, userMsg, 500)
-	if err != nil {
-		http.Error(w, "AI feilet", http.StatusBadGateway)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"draft": strings.TrimSpace(draft)})
 }
 
 // handleMailSend sender en e-post.
