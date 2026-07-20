@@ -101,6 +101,61 @@ func (s *Store) backfillNotes() error {
 	return tx.Commit()
 }
 
+// AcceptedNotes henter alle aksepterte lapper for en tenant med embeddings,
+// til vektor-ranking i hentingen.
+func (s *Store) AcceptedNotes(tenantID string) ([]KnowledgeNote, error) {
+	rows, err := s.db.Query(
+		`SELECT id, source_type, source_id, title, text, context, embedding, created_at
+		 FROM knowledge_notes WHERE tenant_id = ? AND status = 'accepted'`,
+		tenantID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []KnowledgeNote
+	for rows.Next() {
+		var n KnowledgeNote
+		var emb string
+		if err := rows.Scan(&n.ID, &n.SourceType, &n.SourceID, &n.Title, &n.Text, &n.Context, &emb, &n.CreatedAt); err != nil {
+			return nil, err
+		}
+		json.Unmarshal([]byte(emb), &n.Embedding)
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// SearchNotesFTS gjør nøkkelord-søk (BM25) og returnerer note-IDer i
+// rangert rekkefølge (best først), kun aksepterte lapper for tenanten.
+func (s *Store) SearchNotesFTS(tenantID, match string, limit int) ([]string, error) {
+	if match == "" {
+		return nil, nil
+	}
+	rows, err := s.db.Query(
+		`SELECT n.id
+		 FROM knowledge_notes_fts f
+		 JOIN knowledge_notes n ON n.id = f.note_id
+		 WHERE f.knowledge_notes_fts MATCH ? AND n.tenant_id = ? AND n.status = 'accepted'
+		 ORDER BY bm25(f.knowledge_notes_fts) LIMIT ?`,
+		match, tenantID, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // insertNote skriver en lapp og speiler den til FTS, i samme transaksjon.
 func insertNote(tx *sql.Tx, tenantID string, note KnowledgeNote) error {
 	emb, _ := json.Marshal(note.Embedding)

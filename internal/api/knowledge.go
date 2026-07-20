@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -16,15 +17,14 @@ import (
 )
 
 const (
-	embeddingModel    = "qwen3-embedding-8b"
-	knowledgeTopK     = 6    // antall mest relevante noder
-	knowledgeMinScore = 0.35 // ignorer svake treff
-	chunkTopK         = 25   // maks antall dokument-biter (budsjettet er den reelle grensen)
-	// qwen3-embedding scorer selv urelatert tekst ~0.21 og klart relevant
-	// ~0.31–0.53. 0.28 skiller signal fra støy; sammen med dokument-boostingen
-	// drar et treff på dokumentet inn alle bitene.
-	chunkMinScore   = 0.28
-	chunkCharBudget = 4000 // hardt tak på injisert dokument-tekst
+	embeddingModel = "qwen3-embedding-8b"
+	// qwen3-embedding scorer urelatert tekst ~0.21 og klart relevant ~0.31–0.53.
+	// 0.28 er vektor-gulvet som skiller signal fra støy.
+	vecFloor    = 0.28
+	candDepth   = 30   // hvor mange kandidater fra hver kilde (vektor / nøkkelord)
+	rrfK        = 60.0 // RRF-konstant (standard); demper topprangeringens dominans
+	noteMaxN    = 25   // maks antall lapper (budsjettet er den reelle grensen)
+	noteBudget  = 4000 // hardt tak på injisert tekst (tegn)
 )
 
 // knowledgeFor henter kunnskapskonteksten for siste brukermelding i en
@@ -141,18 +141,31 @@ func cosine(a, b []float32) float64 {
 	return dot / (math.Sqrt(na) * math.Sqrt(nb))
 }
 
-// knowledgeContext bygger en kompakt kontekst-blokk av de mest relevante
-// bransje-nodene for spørsmålet, pluss deres nærmeste naboer. Returnerer
-// tom streng hvis tenanten ingen relevante noder har.
+var ftsTokenRe = regexp.MustCompile(`\p{L}[\p{L}\p{N}]+`)
+
+// ftsQuery bygger et trygt FTS5 MATCH-uttrykk fra fri tekst: plukker ut ord-
+// tokens (bokstav-initiale), siterer hver og OR-slår dem. Tåler tegnsetting og
+// fanger eksakte koder/navn embeddings bommer på.
+func ftsQuery(query string) string {
+	toks := ftsTokenRe.FindAllString(strings.ToLower(query), -1)
+	parts := make([]string, 0, len(toks))
+	for _, t := range toks {
+		parts = append(parts, `"`+t+`"`)
+	}
+	return strings.Join(parts, " OR ")
+}
+
+// knowledgeContext henter den mest relevante interne kunnskapen for spørsmålet
+// fra den felles lappe-skuffen, som en hybrid av vektor-likhet og nøkkelord
+// (BM25), fusjonert med Reciprocal Rank Fusion. Returnerer tom streng når
+// ingenting er relevant. Rangeringsbasert fusjon → ingen skjør absoluttterskel.
 func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) string {
-	// Svært korte meldinger («ok», «takk», «ja») bærer ingen søkbar hensikt —
-	// hopp over embeddingen helt.
+	// Svært korte meldinger («ok», «takk») bærer ingen søkbar hensikt.
 	if len([]rune(strings.TrimSpace(query))) < 12 {
 		return ""
 	}
-	nodes, _ := s.store.AcceptedNodes(tenantID)
-	chunks, _ := s.store.AcceptedChunks(tenantID)
-	if len(nodes) == 0 && len(chunks) == 0 {
+	notes, _ := s.store.AcceptedNotes(tenantID)
+	if len(notes) == 0 {
 		return ""
 	}
 	qvec, err := s.embedCached(ctx, query)
@@ -160,114 +173,73 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 		s.log.Warn("embedding feilet", "err", err)
 		return ""
 	}
-
-	// Dokument-relevans: hvor godt spørsmålet matcher hvert dokuments
-	// sammendrag. Brukes til å dra inn hele dokumentets biter når spørsmålet
-	// gjelder dokumentet (f.eks. «hva er karakterene mine») — ikke bare de få
-	// bitene som tilfeldigvis matcher ordrett.
-	docScore := map[string]float64{}
-	for _, n := range nodes {
-		if n.Type == "dokument" {
-			docScore[n.ID] = cosine(qvec, n.Embedding)
-		}
+	byID := make(map[string]store.KnowledgeNote, len(notes))
+	for _, n := range notes {
+		byID[n.ID] = n
 	}
 
-	var b strings.Builder
-	s.writeNodeContext(&b, tenantID, qvec, nodes)
-	writeChunkContext(&b, qvec, chunks, docScore)
-	return b.String()
-}
-
-// writeNodeContext skriver de mest relevante graf-nodene (kuratert innsikt)
-// pluss deres nærmeste naboer. Dokument-noder hoppes over — innholdet deres
-// serveres som biter i writeChunkContext.
-func (s *Server) writeNodeContext(b *strings.Builder, tenantID string, qvec []float32, nodes []store.KnowledgeNode) {
-	type scored struct {
-		node  store.KnowledgeNode
+	// Vektor-kandidater: cosine over gulvet, rangert (best først).
+	type sc struct {
+		id    string
 		score float64
 	}
-	ranked := make([]scored, 0, len(nodes))
-	for _, n := range nodes {
-		if n.Type == "dokument" {
-			continue
+	var vec []sc
+	for _, n := range notes {
+		if c := cosine(qvec, n.Embedding); c >= vecFloor {
+			vec = append(vec, sc{n.ID, c})
 		}
-		ranked = append(ranked, scored{n, cosine(qvec, n.Embedding)})
 	}
-	sort.Slice(ranked, func(i, j int) bool { return ranked[i].score > ranked[j].score })
-
-	picked := map[string]store.KnowledgeNode{}
-	var ids []string
-	for _, r := range ranked {
-		if len(picked) >= knowledgeTopK || r.score < knowledgeMinScore {
-			break
-		}
-		picked[r.node.ID] = r.node
-		ids = append(ids, r.node.ID)
-	}
-	if len(picked) == 0 {
-		return
+	sort.Slice(vec, func(i, j int) bool { return vec[i].score > vec[j].score })
+	if len(vec) > candDepth {
+		vec = vec[:candDepth]
 	}
 
-	// 1-hopp naboer utvider konteksten langs grafen.
-	if neighbors, err := s.store.NeighborSummaries(tenantID, ids); err == nil {
-		for _, n := range neighbors {
-			if _, ok := picked[n.ID]; !ok {
-				picked[n.ID] = n
-			}
-		}
+	// Nøkkelord-kandidater (BM25), allerede rangert av SQLite.
+	fts, _ := s.store.SearchNotesFTS(tenantID, ftsQuery(query), candDepth)
+
+	// RRF-fusjon: hver liste bidrar 1/(k + rangering).
+	rrf := map[string]float64{}
+	for rank, v := range vec {
+		rrf[v.id] += 1.0 / (rrfK + float64(rank+1))
+	}
+	for rank, id := range fts {
+		rrf[id] += 1.0 / (rrfK + float64(rank+1))
+	}
+	if len(rrf) == 0 {
+		return ""
 	}
 
-	b.WriteString("Relevant bransjekunnskap om denne bedriften (bruk der det passer, ikke nevn at du har den):\n")
-	for _, n := range picked {
-		fmt.Fprintf(b, "- %s: %s\n", n.Title, n.Summary)
+	fused := make([]string, 0, len(rrf))
+	for id := range rrf {
+		fused = append(fused, id)
 	}
-}
-
-// writeChunkContext skriver de mest relevante dokument-bitene, med
-// kildehenvisning og et hardt tegn-tak. En bit rangeres på det HØYESTE av sin
-// egen likhet og dokumentets samlede relevans (docScore), slik at et treff på
-// dokumentet drar inn alle bitene — også de som ikke matcher spørsmålet ordrett
-// (f.eks. hver enkelt karakterlinje i et vitnemål). Bitene sorteres slik at
-// samme dokument holdes samlet og i rekkefølge.
-func writeChunkContext(b *strings.Builder, qvec []float32, chunks []store.DocumentChunk, docScore map[string]float64) {
-	type scored struct {
-		chunk store.DocumentChunk
-		score float64
-	}
-	ranked := make([]scored, 0, len(chunks))
-	for _, c := range chunks {
-		eff := cosine(qvec, c.Embedding)
-		if ds := docScore[c.NodeID]; ds > eff {
-			eff = ds
+	sort.Slice(fused, func(i, j int) bool {
+		if rrf[fused[i]] != rrf[fused[j]] {
+			return rrf[fused[i]] > rrf[fused[j]]
 		}
-		ranked = append(ranked, scored{c, eff})
-	}
-	sort.Slice(ranked, func(i, j int) bool {
-		if ranked[i].score != ranked[j].score {
-			return ranked[i].score > ranked[j].score
-		}
-		// Lik score (typisk samme dokument): behold rekkefølgen i dokumentet.
-		if ranked[i].chunk.NodeID == ranked[j].chunk.NodeID {
-			return ranked[i].chunk.Ordinal < ranked[j].chunk.Ordinal
-		}
-		return ranked[i].chunk.NodeID < ranked[j].chunk.NodeID
+		// Lik score: nyeste kunnskap vinner (ferskhet).
+		return byID[fused[i]].CreatedAt.After(byID[fused[j]].CreatedAt)
 	})
 
-	var picked []scored
-	budget := chunkCharBudget
-	for _, r := range ranked {
-		if len(picked) >= chunkTopK || r.score < chunkMinScore || budget <= 0 {
+	var b strings.Builder
+	b.WriteString("Relevant intern kunnskap (bruk der det passer; siter kilden når du bruker et dokument):\n")
+	budget, n := noteBudget, 0
+	for _, id := range fused {
+		if n >= noteMaxN || budget <= 0 {
 			break
 		}
-		picked = append(picked, r)
-		budget -= len(r.chunk.Content)
+		note := byID[id]
+		text := note.Text
+		if note.Context != "" {
+			text = note.Context + " " + text
+		}
+		src := "notat"
+		if note.SourceType == "document" && note.Title != "" {
+			src = "«" + note.Title + "»"
+		}
+		fmt.Fprintf(&b, "- (fra %s) %s\n", src, text)
+		budget -= len(text)
+		n++
 	}
-	if len(picked) == 0 {
-		return
-	}
-
-	b.WriteString("\nRelevante utdrag fra bedriftens egne dokumenter (siter kilden når du bruker dem):\n")
-	for _, r := range picked {
-		fmt.Fprintf(b, "- (fra «%s») %s\n", r.chunk.DocTitle, r.chunk.Content)
-	}
+	return b.String()
 }
