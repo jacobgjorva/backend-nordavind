@@ -25,9 +25,14 @@ type roundUsage struct {
 // relayRound leser én SSE-runde fra upstream. Innhold, reasoning og
 // modellinfo videresendes til klienten; tool_calls samles og returneres
 // (aldri videresendt). Upstreams [DONE] svelges — løkka eier avslutningen.
-func (s *Server) relayRound(resp *http.Response, emit func(string)) (map[int]*toolCall, roundUsage) {
+// relayRound streamer/bufrer én upstream-runde. streamContent=false bufrer
+// svar-innholdet i stedet for å sende det live (til den tvungne siste runden,
+// der vi vil se om svaret ble tynt før vi viser noe). Returnerer verktøykall,
+// tokenbruk og hele det synlige svar-innholdet.
+func (s *Server) relayRound(resp *http.Response, emit func(string), streamContent bool) (map[int]*toolCall, roundUsage, string) {
 	calls := map[int]*toolCall{}
 	var usage roundUsage
+	var visible strings.Builder // hele synlige svar-innholdet denne runden
 
 	// Noen modeller emitterer verktøykall som ren tekst
 	// (<tool_call>{...}</tool_call>) i innholdet i stedet for som strukturerte
@@ -96,6 +101,7 @@ func (s *Server) relayRound(resp *http.Response, emit func(string)) (map[int]*to
 			safe, rest, blocks := splitToolCallText(pending.String())
 			pending.Reset()
 			pending.WriteString(rest)
+			visible.WriteString(safe)
 			for _, b := range blocks {
 				if name, args := parseTextualToolCall(b); name != "" {
 					c := &toolCall{ID: fmt.Sprintf("call_t%d", textIdx), Name: name}
@@ -103,6 +109,10 @@ func (s *Server) relayRound(resp *http.Response, emit func(string)) (map[int]*to
 					calls[textIdx] = c
 					textIdx++
 				}
+			}
+			// Bufret runde: ikke send innholdet live (kalleren avgjør etterpå).
+			if !streamContent {
+				continue
 			}
 			// Uendret innhold: send originallinja (bevarer model o.l.). Ellers
 			// syntetiser en innholds-chunk for den trygge delen.
@@ -118,9 +128,12 @@ func (s *Server) relayRound(resp *http.Response, emit func(string)) (map[int]*to
 	}
 	// Uavsluttet buffer (aldri lukket tag): send det som innhold så ingenting mistes.
 	if pending.Len() > 0 {
-		emit(contentSSE(pending.String()))
+		visible.WriteString(pending.String())
+		if streamContent {
+			emit(contentSSE(pending.String()))
+		}
 	}
-	return calls, usage
+	return calls, usage, visible.String()
 }
 
 func newSSEScanner(r io.Reader) *bufio.Scanner {

@@ -12,24 +12,76 @@ import (
 // agentSetupSystem er instruksen som legges inn når brukeren starter
 // /agent-flyten. Den styrer hvordan modellen samler inn oppsett og kaller
 // verktøyene — holdt server-side så det er én kilde til sannhet.
-const agentSetupSystem = "Brukeren vil sette opp en agent (automatisert prosedyre på fast frekvens). " +
-	"FØRSTE svar: ÉN kort setning som kun spør hva agenten skal gjøre («Hva skal agenten gjøre for " +
-	"deg?»), ingen andre spørsmål ennå. Utled selv om det er en database- eller websøk-oppgave. " +
-	"Deretter, ett spørsmål av gangen: hvor ofte og på hvilket klokkeslett, og HVIS database-oppgave, " +
-	"hvilken tilkobling (bruk navnet, aldri finn opp en id). MINIMUM intervall 15 min (900 sek); ved " +
-	"hyppigere ønske, forklar kort at 15 min er minste og foreslå det. Websøk-agent trenger ingen " +
-	"tilkobling. Ikke vis widgeten før du har frekvens og tidspunkt. Når alt er klart: én kort " +
-	"bekreftelse, så en ```agent_setup kodeblokk med JSON:\n" +
-	"{\"name\":\"kort navn\",\"task\":\"presis instruks\",\"fields\":[ ... ]}\n" +
+const agentSetupSystem = "Du er i OPPSETT-modus. Du skal KUN sette opp agenten, ALDRI utføre selve oppgaven nå: " +
+	"ikke søk på nettet, ikke spør databasen, ikke send mail, ikke be om tilgang, ikke løs problemet selv. " +
+	"Mangler du noe for å sette opp agenten godt, SPØR brukeren. Selve jobben kjøres av agenten etterpå.\n\n" +
+	"Brukeren vil sette opp en agent. En agent er enten en RUTINE (samme sjekk på fast " +
+	"frekvens, f.eks. «følg med på X hver dag») eller et OPPDRAG (en større oppgave agenten jobber mot til " +
+	"målet er nådd og så gir seg, f.eks. «finn de neste 3 kundene jeg bør jakte på»). " +
+	"FØRSTE svar: ÉN kort setning som spør hva agenten skal gjøre («Hva skal agenten gjøre for deg?»). " +
+	"Ut fra svaret avgjør du selv om det er rutine eller oppdrag, og om det trenger database eller websøk.\n" +
+	"\nMÅLET med oppsettet er at agenten skal LYKKES best mulig. Ikke hast videre — still oppfølgings-" +
+	"spørsmål, ETT om gangen, til du har alt agenten trenger. Spør bare om det som faktisk er relevant for " +
+	"nettopp denne oppgaven, og hopp over resten.\n" +
+	"For et OPPDRAG, grav i det som avgjør resultatet, f.eks.: hva som gjør oppdraget vellykket " +
+	"(konkret suksesskriterium), omfang/avgrensning, hvilke datakilder/tilkobling som gjelder, relevante " +
+	"kriterier eller preferanser, hvem som eventuelt skal kontaktes, og om agenten selv skal få sende mail " +
+	"eller kun foreslå den. Frekvens er som regel IKKE relevant for et oppdrag — ikke spør om det; oppdraget " +
+	"starter og jobber til det er ferdig.\n" +
+	"For en RUTINE, spør om hvor ofte og på hvilket klokkeslett. MINIMUM intervall 15 min (900 sek); ved " +
+	"hyppigere ønske, forklar kort at 15 min er minste og foreslå det.\n" +
+	"For database-oppgaver: spør hvilken tilkobling (bruk navnet, aldri finn opp en id). Websøk trenger ingen.\n" +
+	"Når du har alt: én kort bekreftelse, så en ```agent_setup kodeblokk med JSON:\n" +
+	"{\"name\":\"kort navn\",\"task\":\"presis, fyldig instruks som fanger alt brukeren oppga (mål, " +
+	"suksesskriterium, avgrensning, kriterier)\",\"fields\":[ ... ]}\n" +
+	"task skal være rik nok til at agenten kan lykkes uten å spørre igjen — bak inn detaljene fra samtalen.\n" +
 	"fields = kontrollene widgeten skal vise, KUN relevante, hver med fornuftig forhåndsverdi:\n" +
-	"- {\"type\":\"interval\",\"value\":<sekunder; 3600=time, 86400=dag, 172800=annenhver dag, 604800=uke — bruk vilkårlig antall>}\n" +
-	"- {\"type\":\"time\",\"value\":\"HH:MM\"} (kun hvis intervall er minst én dag)\n" +
+	"- {\"type\":\"interval\",\"value\":<sekunder; 3600=time, 86400=dag, 172800=annenhver dag, 604800=uke>} " +
+	"(RUTINE: fast kadens. OPPDRAG: sett 900 så den starter snart og jobber til ferdig)\n" +
+	"- {\"type\":\"time\",\"value\":\"HH:MM\"} (kun rutiner med intervall minst én dag)\n" +
 	"- {\"type\":\"effort\",\"value\":\"Lav|Moderat|Høy|Max\"}\n" +
 	"- {\"type\":\"connection\",\"value\":\"<connection_id>\"} (KUN database-agenter)\n" +
 	"- {\"type\":\"write\",\"value\":false} (KUN database-agenter som kan trenge skriving)\n" +
-	"Ta alltid med interval og effort. Utelat connection og write for websøk-agenter. Ikke skriv " +
-	"noe etter kodeblokken. Hvis brukeren vil se agentene sine, kall list_agents og gjengi som en " +
-	"```agents kodeblokk."
+	"- {\"type\":\"mission\",\"value\":true} (KUN for oppdrag)\n" +
+	"- {\"type\":\"send_mail\",\"value\":false} (KUN oppdrag: true hvis brukeren uttrykkelig lot agenten " +
+	"sende mail selv)\n" +
+	"Ta alltid med interval og effort. Utelat connection og write for websøk. For oppdrag: ta med " +
+	"mission=true og interval=900, og send_mail etter avklaring. Ikke skriv noe etter kodeblokken. " +
+	"Hvis brukeren vil se agentene sine, kall list_agents og gjengi som en ```agents kodeblokk."
+
+// missionPlanSystem styrer en fersk agent-chat. Agenten er en arbeidsmaskin:
+// forstår oppgaven, utleder selv fullført-kriterier, og starter løkka umiddelbart
+// via start_mission — uten å ekko målet, uten kort, uten å nevne token-tak.
+const missionPlanSystem = "Du er en autonom arbeidsagent brukeren nettopp opprettet. Du får ETT oppdrag som " +
+	"du så jobber sammenhengende mot til det er fullført. Vær en arbeidsmaskin: ikke gjenta målet tilbake, " +
+	"ikke lag noe kort, ikke nevn tokens eller begrensninger. " +
+	"Når brukeren gir oppgaven: utled SELV konkrete, målbare fullført-kriterier (hvordan vet vi sikkert at " +
+	"målet er nådd), og kall start_mission med goal (oppgaven) og criteria med det samme. Svar KUN med en " +
+	"kort, bestemt kvittering: «Oppgave forstått, starter.» — ingenting mer. " +
+	"Kun hvis oppgaven er helt uforståelig: still ETT kort oppklarende spørsmål i stedet for å starte. " +
+	"IKKE utfør selve oppgaven her (ikke søk/spør database) — start_mission setter i gang løkka som gjør det."
+
+// missionStartTools gir planleggeren ÉT verktøy: start oppdraget med utledede
+// kriterier (ubegrenset token-tak inntil videre).
+func missionStartTools() []any {
+	return []any{
+		map[string]any{
+			"type": "function",
+			"function": map[string]any{
+				"name":        "start_mission",
+				"description": "Start oppdraget nå. Du utleder selv fullført-kriteriene. Løkka begynner umiddelbart.",
+				"parameters": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"goal":     map[string]any{"type": "string", "description": "oppgaven, i klartekst"},
+						"criteria": map[string]any{"type": "string", "description": "målbare kriterier for når målet er nådd"},
+					},
+					"required": []string{"goal", "criteria"},
+				},
+			},
+		},
+	}
+}
 
 // agentEditSystem legges inn i en agent-chat så modellen kan endre agenten
 // når brukeren ber om det.
@@ -122,6 +174,45 @@ func (s *Server) runUpdateAgent(ctx context.Context, a agentToolArgs) string {
 	return "Agent oppdatert."
 }
 
+// runStartMission setter oppdraget (ubegrenset token-tak), godkjenner det og
+// starter den kontinuerlige løkka fra et start_mission-verktøykall.
+func (s *Server) runStartMission(ctx context.Context, agentID, goal, criteria string) string {
+	user, ok := ctx.Value(userKey).(store.User)
+	if !ok {
+		return "Ikke innlogget."
+	}
+	if strings.TrimSpace(agentID) == "" || strings.TrimSpace(goal) == "" {
+		return "Mangler oppdrag."
+	}
+	if strings.TrimSpace(criteria) == "" {
+		criteria = "Oppgaven i målet er utført og resultatet er levert."
+	}
+	if err := s.store.SetMissionPlan(agentID, user.ID, goal, criteria, 0); err != nil {
+		return "Kunne ikke sette oppdraget."
+	}
+	if err := s.store.ApproveMission(agentID, user.ID); err != nil {
+		return "Kunne ikke starte oppdraget."
+	}
+	s.startMissionRunner(context.Background(), agentID)
+	return "startet"
+}
+
+// buildAgentSetupTools gir veiviseren KUN list_agents. Selve opprettelsen skjer
+// deterministisk via ```agent_setup-blokken (Aktiver-kortet i frontend), ikke et
+// verktøykall — det gir auto-binding av tilkobling og en tydelig bekreftelse.
+func buildAgentSetupTools() []any {
+	return []any{
+		map[string]any{
+			"type": "function",
+			"function": map[string]any{
+				"name":        "list_agents",
+				"description": "List brukerens agenter. Vis alltid resultatet som en ```agents kodeblokk med JSON-en verktøyet returnerer.",
+				"parameters":  map[string]any{"type": "object", "properties": map[string]any{}},
+			},
+		},
+	}
+}
+
 // buildAgentTools lager verktøyene modellen bruker til å administrere agenter.
 // Kun tilgjengelig i /agent-modus, så vanlig chat ikke forurenses.
 func (s *Server) buildAgentTools(ctx context.Context) []any {
@@ -168,6 +259,8 @@ func (s *Server) buildAgentTools(ctx context.Context) []any {
 						"interval_seconds":  map[string]any{"type": "integer", "description": "frekvens i sekunder (86400 = daglig)"},
 						"daily_token_limit": map[string]any{"type": "integer", "description": "maks tokens agenten kan bruke per dag"},
 						"write_access":      map[string]any{"type": "boolean", "description": "true kun hvis brukeren eksplisitt ba om skrivetilgang"},
+						"mission":           map[string]any{"type": "boolean", "description": "true hvis dette er et oppdrag agenten skal jobbe mot til målet er nådd (ikke en fast rutine)"},
+						"send_mail":         map[string]any{"type": "boolean", "description": "true kun hvis brukeren eksplisitt lot agenten sende mail selv; ellers foreslår den mail brukeren sender"},
 					},
 					"required": []string{"name", "task", "connection_id", "schedule_label", "interval_seconds", "daily_token_limit"},
 				},
@@ -201,6 +294,8 @@ type agentToolArgs struct {
 	RunTime         string `json:"run_time"`
 	DailyTokenLimit int    `json:"daily_token_limit"`
 	WriteAccess     bool   `json:"write_access"`
+	Mission         bool   `json:"mission"`
+	SendMail        bool   `json:"send_mail"`
 	AgentID         string `json:"agent_id"`
 }
 
@@ -241,6 +336,8 @@ func (s *Server) runCreateAgent(ctx context.Context, a agentToolArgs) string {
 		IntervalSeconds: a.IntervalSeconds,
 		DailyTokenLimit: a.DailyTokenLimit,
 		WriteAccess:     a.WriteAccess,
+		Mission:         a.Mission,
+		SendMail:        a.SendMail,
 	})
 	if err != nil {
 		s.log.Error("kunne ikke opprette agent", "err", err)

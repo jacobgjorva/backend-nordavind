@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/config"
@@ -28,6 +29,11 @@ type Server struct {
 	pricing  *pricing
 	rates    *usdNok
 	credsKey []byte // krypteringsnøkkel for kundens databasekredensialer
+
+	// Kontinuerlige oppdrags-løkker som kjører akkurat nå (agent-id → aktiv),
+	// så vi ikke starter samme oppdrag to ganger.
+	missionMu      sync.Mutex
+	missionRunning map[string]bool
 }
 
 func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
@@ -45,6 +51,8 @@ func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 		pricing:  newPricing(),
 		rates:    &usdNok{},
 		credsKey: key,
+
+		missionRunning: map[string]bool{},
 	}
 	s.startScheduler(context.Background())
 	return s
@@ -118,6 +126,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/chats/{chatId}/agent", s.requireAuth(s.handleAgentByChat))
 	mux.HandleFunc("PATCH /v1/agents/{id}", s.requireAuth(s.handleSetAgentEnabled))
 	mux.HandleFunc("PUT /v1/agents/{id}", s.requireAuth(s.handleUpdateAgent))
+	mux.HandleFunc("POST /v1/agents/draft", s.requireAuth(s.handleCreateDraftAgent))
+	mux.HandleFunc("POST /v1/agents/{id}/mission", s.requireAuth(s.handleSetMissionPlan))
+	mux.HandleFunc("POST /v1/agents/{id}/mission/approve", s.requireAuth(s.handleApproveMission))
 	mux.HandleFunc("POST /v1/agents", s.requireAuth(s.handleCreateAgent))
 	mux.HandleFunc("DELETE /v1/agents/{id}", s.requireAuth(s.handleDeleteAgent))
 	return s.cors(mux)
@@ -148,6 +159,14 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	// Streaming-forespørsler kjøres i agent-løkken (web_search som verktøy).
 	if wantsStream, _ := full["stream"].(bool); wantsStream {
+		// Agent-oppsett startes eksplisitt med /agent (frontend setter flagget).
+		// Da kjøres veiviseren på en sterkere modell (Storm), reasoning AV — den
+		// skal skrive rent innhold (agent_setup-blokken), ikke resonnere.
+		if setup, _ := full["nordavind_agent_setup"].(bool); setup {
+			full["model"] = router.HeavyModel
+			full["reasoning"] = map[string]any{"enabled": false}
+			pickedModel = router.HeavyModel
+		}
 		s.runAgentLoop(r.Context(), w, full)
 		s.log.Info("chat/completions",
 			"mode", "agent",
@@ -213,11 +232,20 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 			system := map[string]any{
 				"role": "system",
 				"content": "I dag er " + time.Now().Format("2006-01-02") + ". " +
-					"Svar kortest mulig med mest verdi, på ALLE spørsmål, også tunge og analytiske: " +
-					"færrest mulig setninger, ofte én, maks fem (tak, ikke mål) tilpasset kompleksiteten. " +
+					"Svar EKSTREMT tett: pakk mest mulig konkret verdi i færrest ord. Legg det viktigste i de " +
+					"FØRSTE 1-2 setningene — brukeren leser sjelden mer. Gi eksakte tall, retning/trend, tidsrom " +
+					"og en relevant nyanse der det finnes, men si HVERT poeng bare ÉN gang (aldri gjenta at noe " +
+					"«kan variere» e.l.) og STOPP straks verdien er levert — ikke fyll opp mot noe tak. Sikt mot " +
+					"1-2 setninger; flere kun hvis hver bærer NYTT, konkret innhold. Null fyll og tomme forbehold. " +
+					"Selv når du har mye data (f.eks. etter research): ALDRI en punkt-for-punkt-gjennomgang av flere " +
+					"ting — velg det viktigste og gi anbefalingen, ikke en rapport. " +
 					"Kun løpende tekst, aldri overskrifter eller lister. Gi kun svaret: ingen tankerekke, " +
-					"innledning eller oppsummering. Aldri gjett, bruk web_search ved usikre fakta og si " +
-					"fra hvis kildene ikke dekker svaret. Skriv aldri URL-er eller kildehenvisninger, de " +
+					"innledning eller oppsummering. GJETT ALDRI på fakta. For ENHVER konkret opplysning om " +
+					"virkeligheten — navn, tall, datoer, priser, statistikk, hendelser, «hvem/når/hvor mye/" +
+					"nyeste/hvor» — skal du anta at du IKKE vet det sikkert og bruke web_search FØR du svarer, " +
+					"også når spørsmålet virker trivielt. Kun ren logikk/regning/språk du er helt sikker på kan " +
+					"besvares uten søk. Dekker ikke kildene svaret, si det heller enn å gjette. Skriv aldri " +
+					"URL-er eller kildehenvisninger, de " +
 					"vises automatisk. Ved råd: land én tydelig anbefaling. Kun hvis forespørselen er for " +
 					"vag: still ett oppklarende spørsmål. Tone: avslappet og lun som en trygg kollega, " +
 					"uformell men aldri på bekostning av korthet eller presisjon. Bruk kun naturlige " +

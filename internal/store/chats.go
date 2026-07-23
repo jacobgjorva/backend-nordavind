@@ -173,6 +173,17 @@ func (s *Store) DeleteChat(chatID, userID string) error {
 	if _, err := s.db.Exec(`DELETE FROM chat_messages WHERE chat_id = ?`, chatID); err != nil {
 		return err
 	}
+	// Er dette en agent-chat, fjern også agenten (og løggen) så den ikke blir
+	// liggende igjen og kjøre. En kjørende oppdrags-løkke ser at agenten er borte
+	// og stopper av seg selv.
+	if _, err := s.db.Exec(
+		`DELETE FROM agent_runs WHERE agent_id IN (SELECT id FROM agents WHERE chat_id = ?)`, chatID,
+	); err != nil {
+		return err
+	}
+	if _, err := s.db.Exec(`DELETE FROM agents WHERE chat_id = ?`, chatID); err != nil {
+		return err
+	}
 	_, err := s.db.Exec(`DELETE FROM chats WHERE id = ?`, chatID)
 	return err
 }

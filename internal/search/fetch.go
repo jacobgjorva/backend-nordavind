@@ -43,6 +43,12 @@ func (c *Client) FetchPages(ctx context.Context, results []Result, maxChars int)
 	return texts
 }
 
+// FetchURL henter ren, lesbar tekst fra én konkret side (HTML/PDF). Tom streng
+// ved feil. Brukes av fetch_url-verktøyet så agenten kan lese en kilde dypt.
+func (c *Client) FetchURL(ctx context.Context, url string, maxChars int) string {
+	return c.fetchPage(ctx, url, maxChars)
+}
+
 func (c *Client) fetchPage(ctx context.Context, url string, maxChars int) string {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

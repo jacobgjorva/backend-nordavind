@@ -152,6 +152,19 @@ func (s *Store) UserByEmail(email string) (User, error) {
 	return u, err
 }
 
+// UserByID henter en bruker på id (brukes av oppdrags-agenten for å finne
+// eierens e-postkonto ved autonom sending).
+func (s *Store) UserByID(id string) (User, error) {
+	var u User
+	err := s.db.QueryRow(
+		`SELECT id, tenant_id, email, role FROM users WHERE id = ?`, id,
+	).Scan(&u.ID, &u.TenantID, &u.Email, &u.Role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return u, ErrNotFound
+	}
+	return u, err
+}
+
 func (s *Store) TenantByID(id string) (Tenant, error) {
 	var t Tenant
 	err := s.db.QueryRow(`SELECT id, name FROM tenants WHERE id = ?`, id).

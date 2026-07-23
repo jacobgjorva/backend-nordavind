@@ -40,14 +40,17 @@ func (s *Server) contactTool(tenantID string) map[string]any {
 			"description": "Eskalering til en person. Bruk KUN når du etter å ha forsøkt selv " +
 				"(kunnskap/verktøy) er sikker på at du ikke kommer videre og én bestemt person under " +
 				"åpenbart kan hjelpe; da vises et ferdig e-postkort brukeren selv sender. Bruk det ALDRI " +
-				"for noe du kan svare på eller løse selv.\n" + dir.String(),
+				"for noe du kan svare på eller løse selv.\n" +
+				"PÅBUD: enhver videresending eller henvisning til en kollega MÅ skje ved å kalle dette " +
+				"verktøyet — skriv det ALDRI som fritekst (f.eks. «Be Emir om hjelp»). Uten dette " +
+				"verktøykallet får ikke brukeren noe e-postkort.\n" + dir.String(),
 			"parameters": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"name":    map[string]any{"type": "string", "description": "personens navn fra registeret"},
 					"email":   map[string]any{"type": "string", "description": "personens e-postadresse fra registeret"},
 					"subject": map[string]any{"type": "string", "description": "kort emne"},
-					"body":    map[string]any{"type": "string", "description": "utkast, norsk, uten signatur. Skriv i FØRSTEPERSON som brukeren selv (mailen sendes fra brukerens konto), f.eks. «Hei <navn>, jeg har et problem med ... kan du hjelpe?» — aldri i tredjeperson om «brukeren»"},
+					"body":    map[string]any{"type": "string", "description": "utkast, norsk, uten signatur. Skriv i FØRSTEPERSON som brukeren selv (mailen sendes fra brukerens konto), f.eks. «Hei <navn>, jeg har et problem med ... kan du hjelpe?» — aldri i tredjeperson om «brukeren». Gi kollegaen et best mulig utgangspunkt: beskriv problemet konkret OG oppsummer hva som allerede er forsøkt (steg, verktøy, feilmeldinger) så hen slipper å spørre om det på nytt"},
 				},
 				"required": []string{"email", "subject", "body"},
 			},

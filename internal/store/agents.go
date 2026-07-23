@@ -23,7 +23,19 @@ type Agent struct {
 	WriteAccess     bool       `json:"write_access"`
 	Enabled         bool       `json:"enabled"`
 	PushEnabled     bool       `json:"push_enabled"`
-	CreatedAt       time.Time  `json:"created_at"`
+
+	// Oppdrags-modus: agenten jobber mot et mål over flere kjøringer og gir seg
+	// først når det er nådd.
+	Mission          bool   `json:"mission"`
+	SendMail         bool   `json:"send_mail"`         // tillatelse til å sende mail selv
+	MissionState     string `json:"mission_state"`     // komprimert tilstand (JSON)
+	MissionStatus    string `json:"mission_status"`    // running | done | paused
+	MissionCriteria  string `json:"mission_criteria"`  // hva som teller som fullført mål
+	CriteriaApproved bool   `json:"criteria_approved"` // bruker har godkjent kriteriene
+	MissionBudget    int    `json:"mission_budget"`    // totalt token-tak for hele oppdraget (0 = ubegrenset)
+	MissionActivity  string `json:"mission_activity"`  // live «hva jeg gjør/tenker» (JSON: thought + steps)
+
+	CreatedAt time.Time `json:"created_at"`
 	ChatID          string     `json:"chat_id"`
 	NextRunAt       *time.Time `json:"next_run_at,omitempty"`
 	LastRunAt       *time.Time `json:"last_run_at,omitempty"`
@@ -85,6 +97,14 @@ func (s *Store) migrateAgents() error {
 		`ALTER TABLE agents ADD COLUMN last_run_at TIMESTAMP`,
 		`ALTER TABLE agents ADD COLUMN chat_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE agents ADD COLUMN push_enabled INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE agents ADD COLUMN mission INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE agents ADD COLUMN send_mail INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE agents ADD COLUMN mission_state TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN mission_status TEXT NOT NULL DEFAULT 'running'`,
+		`ALTER TABLE agents ADD COLUMN mission_criteria TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN criteria_approved INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE agents ADD COLUMN mission_budget INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE agents ADD COLUMN mission_activity TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.db.Exec(col); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column") {
@@ -148,10 +168,12 @@ func (s *Store) CreateAgent(tenantID, userID string, a Agent) (Agent, error) {
 	_, err = s.db.Exec(
 		`INSERT INTO agents
 			(id, tenant_id, user_id, name, task, connection_id, schedule_label,
-			 interval_seconds, run_time, daily_token_limit, write_access, enabled, next_run_at, chat_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+			 interval_seconds, run_time, daily_token_limit, write_access, enabled, next_run_at, chat_id,
+			 mission, send_mail, mission_status)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 'running')`,
 		a.ID, tenantID, userID, a.Name, a.Task, a.ConnectionID, a.ScheduleLabel,
 		a.IntervalSeconds, a.RunTime, a.DailyTokenLimit, boolToInt(a.WriteAccess), next, a.ChatID,
+		boolToInt(a.Mission), boolToInt(a.SendMail),
 	)
 	return a, err
 }
@@ -161,7 +183,7 @@ func (s *Store) ListAgents(userID string) ([]Agent, error) {
 	rows, err := s.db.Query(
 		`SELECT id, name, task, connection_id, schedule_label, interval_seconds,
 		        run_time, daily_token_limit, write_access, enabled, created_at,
-		        next_run_at, last_run_at, chat_id
+		        next_run_at, last_run_at, chat_id, mission, send_mail, mission_status
 		 FROM agents WHERE user_id = ? ORDER BY created_at DESC`,
 		userID,
 	)
@@ -173,14 +195,17 @@ func (s *Store) ListAgents(userID string) ([]Agent, error) {
 	var out []Agent
 	for rows.Next() {
 		var a Agent
-		var write, enabled int
+		var write, enabled, mission, sendMail int
 		if err := rows.Scan(&a.ID, &a.Name, &a.Task, &a.ConnectionID, &a.ScheduleLabel,
 			&a.IntervalSeconds, &a.RunTime, &a.DailyTokenLimit, &write, &enabled,
-			&a.CreatedAt, &a.NextRunAt, &a.LastRunAt, &a.ChatID); err != nil {
+			&a.CreatedAt, &a.NextRunAt, &a.LastRunAt, &a.ChatID,
+			&mission, &sendMail, &a.MissionStatus); err != nil {
 			return nil, err
 		}
 		a.WriteAccess = write != 0
 		a.Enabled = enabled != 0
+		a.Mission = mission != 0
+		a.SendMail = sendMail != 0
 		out = append(out, a)
 	}
 	return out, rows.Err()
@@ -190,9 +215,10 @@ func (s *Store) ListAgents(userID string) ([]Agent, error) {
 func (s *Store) DueAgents(now time.Time) ([]Agent, error) {
 	rows, err := s.db.Query(
 		`SELECT id, tenant_id, user_id, name, task, connection_id, schedule_label,
-		        interval_seconds, run_time, daily_token_limit, write_access, next_run_at, chat_id, push_enabled
+		        interval_seconds, run_time, daily_token_limit, write_access, next_run_at, chat_id, push_enabled,
+		        mission, send_mail, mission_state, mission_status
 		 FROM agents
-		 WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ?
+		 WHERE enabled = 1 AND mission = 0 AND next_run_at IS NOT NULL AND next_run_at <= ?
 		 ORDER BY next_run_at`,
 		now,
 	)
@@ -204,15 +230,141 @@ func (s *Store) DueAgents(now time.Time) ([]Agent, error) {
 	var out []Agent
 	for rows.Next() {
 		var a Agent
-		var write, push int
+		var write, push, mission, sendMail int
 		if err := rows.Scan(&a.ID, &a.TenantID, &a.UserID, &a.Name, &a.Task,
 			&a.ConnectionID, &a.ScheduleLabel, &a.IntervalSeconds, &a.RunTime,
-			&a.DailyTokenLimit, &write, &a.NextRunAt, &a.ChatID, &push); err != nil {
+			&a.DailyTokenLimit, &write, &a.NextRunAt, &a.ChatID, &push,
+			&mission, &sendMail, &a.MissionState, &a.MissionStatus); err != nil {
 			return nil, err
 		}
 		a.WriteAccess = write != 0
 		a.PushEnabled = push != 0
+		a.Mission = mission != 0
+		a.SendMail = sendMail != 0
 		a.Enabled = true
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// SetMissionState lagrer agentens komprimerte oppdrags-tilstand mellom kjøringer.
+func (s *Store) SetMissionState(agentID, state string) error {
+	_, err := s.db.Exec(`UPDATE agents SET mission_state = ? WHERE id = ?`, state, agentID)
+	return err
+}
+
+// FinishMission markerer oppdraget som fullført og stopper videre kjøring.
+func (s *Store) FinishMission(agentID string) error {
+	_, err := s.db.Exec(
+		`UPDATE agents SET mission_status = 'done', enabled = 0 WHERE id = ?`, agentID,
+	)
+	return err
+}
+
+// PauseMission stopper løkka uten å markere målet nådd (f.eks. token-tak truffet).
+func (s *Store) PauseMission(agentID, reason string) error {
+	_, err := s.db.Exec(
+		`UPDATE agents SET mission_status = ?, enabled = 0 WHERE id = ?`, reason, agentID,
+	)
+	return err
+}
+
+// SetMissionPlan lagrer mål (task), fullført-kriterier og token-tak. Kriteriene
+// må godkjennes før løkka kan starte, så approved nullstilles.
+func (s *Store) SetMissionPlan(id, userID, goal, criteria string, budget int) error {
+	if err := s.agentOwned(id, userID); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(
+		`UPDATE agents SET task=?, mission=1, mission_criteria=?, mission_budget=?,
+		        criteria_approved=0, mission_status='running', mission_state='', enabled=0
+		 WHERE id=? AND user_id=?`,
+		goal, criteria, budget, id, userID,
+	)
+	return err
+}
+
+// ApproveMission godkjenner kriteriene og aktiverer løkka.
+func (s *Store) ApproveMission(id, userID string) error {
+	res, err := s.db.Exec(
+		`UPDATE agents SET criteria_approved=1, enabled=1, mission_status='running'
+		 WHERE id=? AND user_id=? AND mission=1`,
+		id, userID,
+	)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// MissionTokensSpent summerer alle tokens oppdraget har brukt (mot token-taket).
+func (s *Store) MissionTokensSpent(agentID string) (int, error) {
+	var n sql.NullInt64
+	err := s.db.QueryRow(
+		`SELECT SUM(tokens_used) FROM agent_runs WHERE agent_id = ?`, agentID,
+	).Scan(&n)
+	if err != nil {
+		return 0, err
+	}
+	return int(n.Int64), nil
+}
+
+// missionScanCols er felt-lista for å lese en agent med alle oppdrags-felt.
+const missionScanCols = `id, tenant_id, user_id, name, task, connection_id, chat_id,
+	daily_token_limit, enabled, push_enabled,
+	mission, send_mail, mission_state, mission_status, mission_criteria, criteria_approved, mission_budget,
+	mission_activity`
+
+func scanMission(sc interface{ Scan(...any) error }) (Agent, error) {
+	var a Agent
+	var enabled, push, mission, sendMail, approved int
+	err := sc.Scan(&a.ID, &a.TenantID, &a.UserID, &a.Name, &a.Task, &a.ConnectionID, &a.ChatID,
+		&a.DailyTokenLimit, &enabled, &push,
+		&mission, &sendMail, &a.MissionState, &a.MissionStatus, &a.MissionCriteria, &approved, &a.MissionBudget,
+		&a.MissionActivity)
+	a.Enabled = enabled != 0
+	a.PushEnabled = push != 0
+	a.Mission = mission != 0
+	a.SendMail = sendMail != 0
+	a.CriteriaApproved = approved != 0
+	return a, err
+}
+
+// SetMissionActivity lagrer den live «hva jeg gjør»-tilstanden (tom = tømt).
+func (s *Store) SetMissionActivity(agentID, activity string) error {
+	_, err := s.db.Exec(`UPDATE agents SET mission_activity = ? WHERE id = ?`, activity, agentID)
+	return err
+}
+
+// MissionAgent leser én agent med alle oppdrags-felt (til løkke-runneren).
+func (s *Store) MissionAgent(id string) (Agent, error) {
+	a, err := scanMission(s.db.QueryRow(`SELECT `+missionScanCols+` FROM agents WHERE id = ?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return a, ErrNotFound
+	}
+	return a, err
+}
+
+// RunningMissions er godkjente, aktive oppdrag som ikke er ferdige — startes som
+// kontinuerlige løkker (også etter en omstart av serveren).
+func (s *Store) RunningMissions() ([]Agent, error) {
+	rows, err := s.db.Query(
+		`SELECT ` + missionScanCols + ` FROM agents
+		 WHERE mission=1 AND enabled=1 AND criteria_approved=1 AND mission_status='running'`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Agent
+	for rows.Next() {
+		a, err := scanMission(rows)
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, a)
 	}
 	return out, rows.Err()
@@ -323,42 +475,53 @@ func (s *Store) SetAgentPush(agentID, userID string, on bool) error {
 // GetAgent henter en agent brukeren eier (for redigering via chatten).
 func (s *Store) GetAgent(id, userID string) (Agent, error) {
 	var a Agent
-	var write, enabled int
+	var write, enabled, mission, approved int
 	err := s.db.QueryRow(
 		`SELECT id, name, task, connection_id, schedule_label, interval_seconds,
-		        run_time, daily_token_limit, write_access, enabled, created_at, chat_id
+		        run_time, daily_token_limit, write_access, enabled, created_at, chat_id,
+		        mission, mission_status, mission_criteria, criteria_approved, mission_budget
 		 FROM agents WHERE id = ? AND user_id = ?`,
 		id, userID,
 	).Scan(&a.ID, &a.Name, &a.Task, &a.ConnectionID, &a.ScheduleLabel,
 		&a.IntervalSeconds, &a.RunTime, &a.DailyTokenLimit, &write, &enabled,
-		&a.CreatedAt, &a.ChatID)
+		&a.CreatedAt, &a.ChatID,
+		&mission, &a.MissionStatus, &a.MissionCriteria, &approved, &a.MissionBudget)
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, ErrNotFound
 	}
 	a.WriteAccess = write != 0
 	a.Enabled = enabled != 0
+	a.Mission = mission != 0
+	a.CriteriaApproved = approved != 0
 	return a, err
 }
 
 // AgentByChat henter agenten som eier en chat (for pause-knappen i UI-et).
 func (s *Store) AgentByChat(chatID, userID string) (Agent, error) {
 	var a Agent
-	var write, enabled, push int
+	var write, enabled, push, mission, sendMail, approved int
 	err := s.db.QueryRow(
 		`SELECT id, name, task, connection_id, schedule_label, interval_seconds,
 		        run_time, daily_token_limit, write_access, enabled, created_at,
-		        next_run_at, last_run_at, chat_id, push_enabled
+		        next_run_at, last_run_at, chat_id, push_enabled,
+		        mission, send_mail, mission_status, mission_criteria, criteria_approved, mission_budget,
+		        mission_activity
 		 FROM agents WHERE chat_id = ? AND user_id = ?`,
 		chatID, userID,
 	).Scan(&a.ID, &a.Name, &a.Task, &a.ConnectionID, &a.ScheduleLabel,
 		&a.IntervalSeconds, &a.RunTime, &a.DailyTokenLimit, &write, &enabled,
-		&a.CreatedAt, &a.NextRunAt, &a.LastRunAt, &a.ChatID, &push)
+		&a.CreatedAt, &a.NextRunAt, &a.LastRunAt, &a.ChatID, &push,
+		&mission, &sendMail, &a.MissionStatus, &a.MissionCriteria, &approved, &a.MissionBudget,
+		&a.MissionActivity)
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, ErrNotFound
 	}
 	a.WriteAccess = write != 0
 	a.Enabled = enabled != 0
 	a.PushEnabled = push != 0
+	a.Mission = mission != 0
+	a.SendMail = sendMail != 0
+	a.CriteriaApproved = approved != 0
 	return a, err
 }
 

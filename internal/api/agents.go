@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -24,6 +25,8 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		RunTime         string `json:"run_time"`
 		DailyTokenLimit int    `json:"daily_token_limit"`
 		WriteAccess     bool   `json:"write_access"`
+		Mission         bool   `json:"mission"`
+		SendMail        bool   `json:"send_mail"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "ugyldig request", http.StatusBadRequest)
@@ -73,6 +76,8 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		RunTime:         strings.TrimSpace(req.RunTime),
 		DailyTokenLimit: req.DailyTokenLimit,
 		WriteAccess:     req.WriteAccess,
+		Mission:         req.Mission,
+		SendMail:        req.SendMail,
 	})
 	if err != nil {
 		s.log.Error("kunne ikke opprette agent", "err", err)
@@ -82,6 +87,93 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 	s.log.Info("agent opprettet", "id", agent.ID, "navn", agent.Name)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(agent)
+}
+
+// handleCreateDraftAgent oppretter en tom agent-chat brukeren lander i når hen
+// skriver /agent. Agenten er deaktivert (kjører ikke) til den er konfigurert.
+func (s *Server) handleCreateDraftAgent(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	agent, err := s.store.CreateAgent(user.TenantID, user.ID, store.Agent{
+		Name:            "Ny agent",
+		Task:            "",
+		IntervalSeconds: 86400,
+	})
+	if err != nil {
+		s.log.Error("kunne ikke opprette draft-agent", "err", err)
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	// Draft skal ikke kjøre før brukeren har konfigurert og aktivert den.
+	if err := s.store.SetAgentEnabled(agent.ID, user.ID, false); err != nil {
+		s.log.Error("kunne ikke deaktivere draft-agent", "err", err)
+	}
+	agent.Enabled = false
+
+	// Agenten åpner alltid med å spørre hva den skal gjøre.
+	if err := s.store.AppendAgentMessage(agent.ChatID, store.ChatMessage{
+		Role: "assistant", Content: "Ny agent her. Hva skal jeg gjøre?",
+	}); err != nil {
+		s.log.Error("kunne ikke seed'e draft-chat", "err", err)
+	}
+	s.log.Info("draft-agent opprettet", "id", agent.ID, "chat", agent.ChatID)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(agent)
+}
+
+// handleSetMissionPlan lagrer mål, fullført-kriterier og token-tak for et
+// oppdrag. Kriteriene må godkjennes (egen rute) før løkka starter.
+func (s *Server) handleSetMissionPlan(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Goal     string `json:"goal"`
+		Criteria string `json:"criteria"`
+		Budget   int    `json:"budget"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "ugyldig request", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(req.Goal) == "" || strings.TrimSpace(req.Criteria) == "" {
+		http.Error(w, "mål og kriterier må være satt", http.StatusBadRequest)
+		return
+	}
+	err := s.store.SetMissionPlan(r.PathValue("id"), user.ID,
+		strings.TrimSpace(req.Goal), strings.TrimSpace(req.Criteria), req.Budget)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleApproveMission godkjenner kriteriene og starter den kontinuerlige løkka.
+func (s *Server) handleApproveMission(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	err := s.store.ApproveMission(id, user.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	s.startMissionRunner(context.Background(), id)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleAgentConnections lister tenantens tilkoblinger (id + navn) som

@@ -30,7 +30,19 @@ const widgetSystemBase = "Du bygger ÉN widget for brukeren — én enkelt visua
 	"\n- text: en tekstblokk/overskrift. Felt: content (markdown)." +
 	"\nFor data-typene: skriv en SELECT som gir de riktige kolonnene, og oppgi connection_id fra " +
 	"skjemaet under. For line/bar/donut/sparkline: oppgi ALLTID både x (kategori/dato) og y (verdi) — " +
-	"SELECT må returnere begge kolonnene. Etter verktøykallet svarer du med maks ett kort ord (f.eks. «Ok»). Aldri lange svar."
+	"SELECT må returnere begge kolonnene." +
+	"\n\nInteraktive kontroller (valgfritt — virker klient-side på de hentede radene, endrer ikke SQL-en). " +
+	"Gjelder ALLE typer, også grafer (bar/line/donut), ikke bare table. Tolk selv hva som gir mening og legg det på. " +
+	"filters: kategoriske kolonner med få distinkte verdier (status, type, region) — aldri fritekst, id eller rene tall. " +
+	"search: kolonner det er naturlig å lete i (navn, e-post, ordrenr). " +
+	"sort: relevante sorteringer med lesbar etikett («Nyeste først», «Høyest beløp»), første er standard. " +
+	"group (bar/line/donut): en kolonne det er meningsfullt å summere y per. " +
+	"VIKTIG for grafer: en kontroll kan bare virke hvis kolonnen faktisk finnes i radene. Skal en graf " +
+	"kunne filtreres på f.eks. region, MÅ SELECT ta med region-kolonnen i tillegg til x og y (og typisk " +
+	"gruppere på x + region), slik at brukeren kan skru serien ned til én region. Uten kolonnen i resultatet " +
+	"blir det ingen filter-verdier. " +
+	"Legg kun på det som faktisk hjelper; en ren tidsserie eller kpi trenger ofte ingen kontroller." +
+	"\nEtter verktøykallet svarer du med maks ett kort ord (f.eks. «Ok»). Aldri lange svar."
 
 // widgetSystem legger til databaseskjemaet så modellen kan skrive SQL.
 func (s *Server) widgetSystem(ctx context.Context) string {
@@ -53,6 +65,40 @@ func widgetTools() []any {
 		"sql":           map[string]any{"type": "string", "description": "SELECT-spørring for table/bar/line"},
 		"x":             map[string]any{"type": "string", "description": "kategori-kolonne (bar/line)"},
 		"y":             map[string]any{"type": "string", "description": "verdi-kolonne (bar/line)"},
+		"search": map[string]any{
+			"type":        "array",
+			"items":       map[string]any{"type": "string"},
+			"description": "kolonner brukeren kan fritekstsøke i. Tom = ingen søk.",
+		},
+		"filters": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"column": map[string]any{"type": "string", "description": "kolonne det filtreres på"},
+					"label":  map[string]any{"type": "string", "description": "kort etikett i UI"},
+				},
+				"required": []string{"column"},
+			},
+			"description": "kolonner som får et filter-nedtrekk med distinkte verdier. Velg kategoriske kolonner (status, type, region), aldri fritekst/id/tall.",
+		},
+		"sort": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"column": map[string]any{"type": "string", "description": "kolonne det sorteres på"},
+					"label":  map[string]any{"type": "string", "description": "kort etikett i UI, f.eks. «Nyeste først»"},
+					"dir":    map[string]any{"type": "string", "description": "asc | desc"},
+				},
+				"required": []string{"column"},
+			},
+			"description": "valgbare sorteringer. Første element er standard.",
+		},
+		"group": map[string]any{
+			"type":        "string",
+			"description": "gruppe-kolonne som aggregerer y som sum per verdi (bar/line/donut). Brukeren kan slå den av.",
+		},
 	}
 	return []any{
 		map[string]any{
