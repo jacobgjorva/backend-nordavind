@@ -36,5 +36,9 @@ func (s *Server) handleUsageDaily(w http.ResponseWriter, r *http.Request) {
 		rows = []store.DailyUsage{}
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"days": days, "usage": rows})
+	json.NewEncoder(w).Encode(map[string]any{
+		"days":    days,
+		"usage":   rows,
+		"usd_nok": s.rates.get(r.Context(), s.client),
+	})
 }

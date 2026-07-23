@@ -21,8 +21,6 @@ func NewClient() *Client {
 	return &Client{http: &http.Client{Timeout: 8 * time.Second}}
 }
 
-func (c *Client) Enabled() bool { return true }
-
 type Result struct {
 	Title       string
 	URL         string

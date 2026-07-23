@@ -1,6 +1,7 @@
 package search
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"html"
@@ -18,6 +19,12 @@ var (
 	reBlock  = regexp.MustCompile(`(?i)</(p|div|li|tr|h[1-6])>|<br[^>]*>`)
 	reSpace  = regexp.MustCompile(`[ \t\r\f]+`)
 	reLines  = regexp.MustCompile(`\n{2,}`)
+
+	// DOCX: avsnitt/linjeskift → newline, deretter fjernes alle XML-tagger.
+	reDocxPara = regexp.MustCompile(`(?i)</w:p>`)
+	reDocxBr   = regexp.MustCompile(`(?i)<w:(br|tab)[^>]*/?>`)
+	reDocxTag  = regexp.MustCompile(`(?s)<[^>]+>`)
+	reDocx3nl  = regexp.MustCompile(`\n{3,}`)
 )
 
 // FetchPages henter innholdet fra sidene parallelt og returnerer ren tekst
@@ -34,6 +41,12 @@ func (c *Client) FetchPages(ctx context.Context, results []Result, maxChars int)
 	}
 	wg.Wait()
 	return texts
+}
+
+// FetchURL henter ren, lesbar tekst fra én konkret side (HTML/PDF). Tom streng
+// ved feil. Brukes av fetch_url-verktøyet så agenten kan lese en kilde dypt.
+func (c *Client) FetchURL(ctx context.Context, url string, maxChars int) string {
+	return c.fetchPage(ctx, url, maxChars)
 }
 
 func (c *Client) fetchPage(ctx context.Context, url string, maxChars int) string {
@@ -117,6 +130,46 @@ func ExtractPDF(raw []byte, maxChars int) (out string) {
 		text = string(r2[:maxChars])
 	}
 	return text
+}
+
+// ExtractDOCX henter ren tekst fra en .docx (Office Open XML): filen er en zip
+// der brødteksten ligger i word/document.xml. Avsnitt bevares som linjeskift.
+func ExtractDOCX(raw []byte, maxChars int) (out string) {
+	defer func() {
+		if recover() != nil {
+			out = ""
+		}
+	}()
+	zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	if err != nil {
+		return ""
+	}
+	var xmlData []byte
+	for _, f := range zr.File {
+		if f.Name == "word/document.xml" {
+			rc, err := f.Open()
+			if err != nil {
+				return ""
+			}
+			xmlData, _ = io.ReadAll(rc)
+			rc.Close()
+			break
+		}
+	}
+	if len(xmlData) == 0 {
+		return ""
+	}
+	s := string(xmlData)
+	s = reDocxPara.ReplaceAllString(s, "\n\n") // avsnittsslutt
+	s = reDocxBr.ReplaceAllString(s, "\n")     // linjeskift/tab
+	s = reDocxTag.ReplaceAllString(s, "")      // fjern resterende tagger
+	s = html.UnescapeString(s)
+	s = reSpace.ReplaceAllString(s, " ")
+	s = reDocx3nl.ReplaceAllString(strings.TrimSpace(s), "\n\n")
+	if r := []rune(s); len(r) > maxChars {
+		s = string(r[:maxChars])
+	}
+	return s
 }
 
 // stripBoilerplate fjerner meny/nav-støy: korte linjer uten tall (typisk

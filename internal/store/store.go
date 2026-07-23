@@ -49,7 +49,34 @@ func Open(path string) (*Store, error) {
 	if err := s.migrate(); err != nil {
 		return nil, err
 	}
-	return s, s.migrateUsage()
+	if err := s.migrateUsage(); err != nil {
+		return nil, err
+	}
+	if err := s.migrateChats(); err != nil {
+		return nil, err
+	}
+	if err := s.migrateConnections(); err != nil {
+		return nil, err
+	}
+	if err := s.migrateCorrections(); err != nil {
+		return nil, err
+	}
+	if err := s.migrateAgents(); err != nil {
+		return nil, err
+	}
+	if err := s.migrateWidgets(); err != nil {
+		return nil, err
+	}
+	if err := s.migrateKnowledge(); err != nil {
+		return nil, err
+	}
+	if err := s.migrateDocuments(); err != nil {
+		return nil, err
+	}
+	if err := s.migrateNotes(); err != nil {
+		return nil, err
+	}
+	return s, s.migrateEmployees()
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -83,21 +110,31 @@ func (s *Store) migrate() error {
 	return err
 }
 
-func newID() string {
+func newID() (string, error) {
 	b := make([]byte, 16)
-	rand.Read(b)
-	return hex.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 func (s *Store) CreateTenant(name string) (Tenant, error) {
-	t := Tenant{ID: newID(), Name: name}
-	_, err := s.db.Exec(`INSERT INTO tenants (id, name) VALUES (?, ?)`, t.ID, t.Name)
+	id, err := newID()
+	if err != nil {
+		return Tenant{}, err
+	}
+	t := Tenant{ID: id, Name: name}
+	_, err = s.db.Exec(`INSERT INTO tenants (id, name) VALUES (?, ?)`, t.ID, t.Name)
 	return t, err
 }
 
 func (s *Store) CreateUser(tenantID, email, role string) (User, error) {
-	u := User{ID: newID(), TenantID: tenantID, Email: email, Role: role}
-	_, err := s.db.Exec(
+	id, err := newID()
+	if err != nil {
+		return User{}, err
+	}
+	u := User{ID: id, TenantID: tenantID, Email: email, Role: role}
+	_, err = s.db.Exec(
 		`INSERT INTO users (id, tenant_id, email, role) VALUES (?, ?, ?, ?)`,
 		u.ID, u.TenantID, u.Email, u.Role,
 	)
@@ -108,6 +145,19 @@ func (s *Store) UserByEmail(email string) (User, error) {
 	var u User
 	err := s.db.QueryRow(
 		`SELECT id, tenant_id, email, role FROM users WHERE email = ?`, email,
+	).Scan(&u.ID, &u.TenantID, &u.Email, &u.Role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return u, ErrNotFound
+	}
+	return u, err
+}
+
+// UserByID henter en bruker på id (brukes av oppdrags-agenten for å finne
+// eierens e-postkonto ved autonom sending).
+func (s *Store) UserByID(id string) (User, error) {
+	var u User
+	err := s.db.QueryRow(
+		`SELECT id, tenant_id, email, role FROM users WHERE id = ?`, id,
 	).Scan(&u.ID, &u.TenantID, &u.Email, &u.Role)
 	if errors.Is(err, sql.ErrNoRows) {
 		return u, ErrNotFound
@@ -128,7 +178,9 @@ func (s *Store) TenantByID(id string) (Tenant, error) {
 // CreateLoginCode lager en 6-sifret engangskode for e-posten.
 func (s *Store) CreateLoginCode(email string) (string, error) {
 	b := make([]byte, 4)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
 	code := fmt.Sprintf("%06d", (uint32(b[0])<<24|uint32(b[1])<<16|uint32(b[2])<<8|uint32(b[3]))%1000000)
 	_, err := s.db.Exec(
 		`INSERT INTO login_codes (email, code, expires_at) VALUES (?, ?, ?)`,
@@ -162,7 +214,15 @@ func (s *Store) RedeemCode(email, code string) (string, User, error) {
 		return "", User{}, err
 	}
 
-	token := newID() + newID()
+	t1, err := newID()
+	if err != nil {
+		return "", User{}, err
+	}
+	t2, err := newID()
+	if err != nil {
+		return "", User{}, err
+	}
+	token := t1 + t2
 	if _, err := s.db.Exec(
 		`INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)`,
 		token, user.ID, time.Now().Add(sessionTTL),
@@ -185,4 +245,41 @@ func (s *Store) UserBySession(token string) (User, error) {
 		return u, ErrNotFound
 	}
 	return u, err
+}
+
+// ListUsers returnerer alle brukere i en tenant.
+func (s *Store) ListUsers(tenantID string) ([]User, error) {
+	rows, err := s.db.Query(
+		`SELECT id, tenant_id, email, role FROM users WHERE tenant_id = ? ORDER BY created_at`,
+		tenantID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.TenantID, &u.Email, &u.Role); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// DeleteUser fjerner en bruker og alle sesjonene deres.
+func (s *Store) DeleteUser(tenantID, userID string) error {
+	if _, err := s.db.Exec(`DELETE FROM sessions WHERE user_id = ?`, userID); err != nil {
+		return err
+	}
+	res, err := s.db.Exec(`DELETE FROM users WHERE id = ? AND tenant_id = ?`, userID, tenantID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

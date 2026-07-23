@@ -9,9 +9,11 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/config"
+	"github.com/jacobgjorva/backend-nordavind/internal/connector"
 	"github.com/jacobgjorva/backend-nordavind/internal/router"
 	"github.com/jacobgjorva/backend-nordavind/internal/search"
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
@@ -19,25 +21,40 @@ import (
 
 // Server ruter OpenAI-kompatible forespørsler videre til upstream-endepunktet.
 type Server struct {
-	cfg     config.Config
-	client  *http.Client
-	log     *slog.Logger
-	search  *search.Client
-	store   *store.Store
-	pricing *pricing
+	cfg      config.Config
+	client   *http.Client
+	log      *slog.Logger
+	search   *search.Client
+	store    *store.Store
+	pricing  *pricing
+	rates    *usdNok
+	credsKey []byte // krypteringsnøkkel for kundens databasekredensialer
+
+	// Kontinuerlige oppdrags-løkker som kjører akkurat nå (agent-id → aktiv),
+	// så vi ikke starter samme oppdrag to ganger.
+	missionMu      sync.Mutex
+	missionRunning map[string]bool
 }
 
 func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
+	key, err := connector.LoadKey(cfg.DBPath)
+	if err != nil {
+		log.Error("kunne ikke laste krypteringsnøkkel", "err", err)
+	}
 	s := &Server{
 		cfg: cfg,
 		// Ingen total timeout: streaming-svar kan stå åpne lenge.
-		client:  &http.Client{Timeout: 0},
-		log:     log,
-		search:  search.NewClient(),
-		store:   st,
-		pricing: newPricing(),
+		client:   &http.Client{Timeout: 0},
+		log:      log,
+		search:   search.NewClient(),
+		store:    st,
+		pricing:  newPricing(),
+		rates:    &usdNok{},
+		credsKey: key,
+
+		missionRunning: map[string]bool{},
 	}
-	go s.pricing.refreshLoop(&http.Client{Timeout: 30 * time.Second}, cfg.UpstreamBaseURL, cfg.UpstreamAPIKey)
+	s.startScheduler(context.Background())
 	return s
 }
 
@@ -62,8 +79,58 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/auth/verify", s.handleVerifyCode)
 	mux.HandleFunc("GET /v1/auth/me", s.requireAuth(s.handleMe))
 	mux.HandleFunc("GET /v1/usage/daily", s.requireAuth(s.handleUsageDaily))
+	mux.HandleFunc("GET /v1/chats", s.requireAuth(s.handleListChats))
+	mux.HandleFunc("POST /v1/chats", s.requireAuth(s.handleCreateChat))
+	mux.HandleFunc("GET /v1/chats/{id}", s.requireAuth(s.handleGetChat))
+	mux.HandleFunc("POST /v1/chats/{id}/messages", s.requireAuth(s.handleAppendChatMessage))
+	mux.HandleFunc("DELETE /v1/chats/{id}", s.requireAuth(s.handleDeleteChat))
+	mux.HandleFunc("POST /v1/chats/{id}/title", s.requireAuth(s.handleGenerateChatTitle))
+	mux.HandleFunc("PATCH /v1/chats/{id}", s.requireAuth(s.handleRenameChat))
+	mux.HandleFunc("GET /v1/connections", s.requireAdmin(s.handleListConnections))
+	mux.HandleFunc("POST /v1/connections", s.requireAdmin(s.handleCreateConnection))
+	mux.HandleFunc("POST /v1/connections/test", s.requireAdmin(s.handleTestConnection))
+	mux.HandleFunc("DELETE /v1/connections/{id}", s.requireAdmin(s.handleDeleteConnection))
+	mux.HandleFunc("GET /v1/connections/{id}/schema", s.requireAdmin(s.handleConnectionSchema))
+	mux.HandleFunc("PUT /v1/connections/{id}/config", s.requireAdmin(s.handleSaveConnectionConfig))
+	mux.HandleFunc("GET /v1/admin/users", s.requireAdmin(s.handleAdminListUsers))
+	mux.HandleFunc("POST /v1/admin/users", s.requireAdmin(s.handleAdminCreateUser))
+	mux.HandleFunc("DELETE /v1/admin/users/{id}", s.requireAdmin(s.handleAdminDeleteUser))
 	mux.HandleFunc("POST /v1/chat/completions", s.requireAuth(s.handleChatCompletions))
 	mux.HandleFunc("POST /v1/extract", s.requireAuth(s.handleExtract))
+	mux.HandleFunc("POST /v1/corrections", s.requireAuth(s.handleLogCorrection))
+	mux.HandleFunc("POST /v1/knowledge/extract", s.requireAuth(s.handleExtractKnowledge))
+	mux.HandleFunc("POST /v1/documents", s.requireAuth(s.handleCreateDocument))
+	mux.HandleFunc("GET /v1/documents", s.requireAuth(s.handleListDocuments))
+	mux.HandleFunc("POST /v1/documents/classify", s.requireAuth(s.handleClassifyDocument))
+	mux.HandleFunc("DELETE /v1/documents/{id}", s.requireAuth(s.handleDeleteDocument))
+	mux.HandleFunc("GET /v1/knowledge/pending", s.requireAdmin(s.handleListPending))
+	mux.HandleFunc("GET /v1/knowledge/graph", s.requireAuth(s.handleKnowledgeGraph))
+	mux.HandleFunc("POST /v1/knowledge/{id}/accept", s.requireAdmin(s.handleAcceptNode))
+	mux.HandleFunc("POST /v1/knowledge/{id}/reject", s.requireAdmin(s.handleRejectNode))
+	mux.HandleFunc("PUT /v1/knowledge/{id}", s.requireAdmin(s.handleUpdateNode))
+	mux.HandleFunc("DELETE /v1/knowledge/{id}", s.requireAdmin(s.handleDeleteNode))
+	mux.HandleFunc("GET /v1/agents", s.requireAuth(s.handleListAgents))
+	mux.HandleFunc("GET /v1/agent-connections", s.requireAuth(s.handleAgentConnections))
+	mux.HandleFunc("GET /v1/mail/account", s.requireAuth(s.handleGetMailAccount))
+	mux.HandleFunc("POST /v1/mail/send", s.requireAuth(s.handleMailSend))
+	mux.HandleFunc("GET /v1/employees", s.requireAuth(s.handleListEmployees))
+	mux.HandleFunc("POST /v1/employees", s.requireAdmin(s.handleCreateEmployee))
+	mux.HandleFunc("PUT /v1/employees/{id}", s.requireAdmin(s.handleUpdateEmployee))
+	mux.HandleFunc("DELETE /v1/employees/{id}", s.requireAdmin(s.handleDeleteEmployee))
+
+	mux.HandleFunc("POST /v1/widgets", s.requireAuth(s.handleCreateWidget))
+	mux.HandleFunc("GET /v1/widgets", s.requireAuth(s.handleListWidgets))
+	mux.HandleFunc("GET /v1/widgets/{slug}", s.requireAuth(s.handleGetWidget))
+	mux.HandleFunc("DELETE /v1/widgets/{slug}", s.requireAuth(s.handleDeleteWidget))
+	mux.HandleFunc("GET /v1/widgets/{slug}/query", s.requireAuth(s.handleWidgetQuery))
+	mux.HandleFunc("GET /v1/chats/{chatId}/agent", s.requireAuth(s.handleAgentByChat))
+	mux.HandleFunc("PATCH /v1/agents/{id}", s.requireAuth(s.handleSetAgentEnabled))
+	mux.HandleFunc("PUT /v1/agents/{id}", s.requireAuth(s.handleUpdateAgent))
+	mux.HandleFunc("POST /v1/agents/draft", s.requireAuth(s.handleCreateDraftAgent))
+	mux.HandleFunc("POST /v1/agents/{id}/mission", s.requireAuth(s.handleSetMissionPlan))
+	mux.HandleFunc("POST /v1/agents/{id}/mission/approve", s.requireAuth(s.handleApproveMission))
+	mux.HandleFunc("POST /v1/agents", s.requireAuth(s.handleCreateAgent))
+	mux.HandleFunc("DELETE /v1/agents/{id}", s.requireAuth(s.handleDeleteAgent))
 	return s.cors(mux)
 }
 
@@ -82,8 +149,24 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 	patched, full, pickedModel := withRoutingDefaults(body)
 
+	// Berik med relevant bransjekunnskap fra tenantens graf.
+	if kb := s.knowledgeFor(r.Context(), full); kb != "" {
+		injectSystem(full, kb)
+		if b, err := json.Marshal(full); err == nil {
+			patched = b
+		}
+	}
+
 	// Streaming-forespørsler kjøres i agent-løkken (web_search som verktøy).
 	if wantsStream, _ := full["stream"].(bool); wantsStream {
+		// Agent-oppsett startes eksplisitt med /agent (frontend setter flagget).
+		// Da kjøres veiviseren på en sterkere modell (Storm), reasoning AV — den
+		// skal skrive rent innhold (agent_setup-blokken), ikke resonnere.
+		if setup, _ := full["nordavind_agent_setup"].(bool); setup {
+			full["model"] = router.HeavyModel
+			full["reasoning"] = map[string]any{"enabled": false}
+			pickedModel = router.HeavyModel
+		}
 		s.runAgentLoop(r.Context(), w, full)
 		s.log.Info("chat/completions",
 			"mode", "agent",
@@ -148,12 +231,26 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 		if raw, ok := full["messages"].([]any); ok {
 			system := map[string]any{
 				"role": "system",
-				"content": "Svar kortest mulig på korrekt norsk, maks 5 setninger. Ingen innledning, " +
-					"oppsummering eller gjentakelse av spørsmålet. Aldri gjett: bruk web_search for " +
-					"fakta du er usikker på, og si fra hvis kildene ikke dekker svaret. Skriv aldri " +
-					"URL-er eller kildehenvisninger — de vises automatisk. Ved råd: land én tydelig " +
-					"anbefaling. Kun hvis forespørselen er for vag til å kunne besvares: still ett " +
-					"oppklarende spørsmål.",
+				"content": "I dag er " + time.Now().Format("2006-01-02") + ". " +
+					"Svar EKSTREMT tett: pakk mest mulig konkret verdi i færrest ord. Legg det viktigste i de " +
+					"FØRSTE 1-2 setningene — brukeren leser sjelden mer. Gi eksakte tall, retning/trend, tidsrom " +
+					"og en relevant nyanse der det finnes, men si HVERT poeng bare ÉN gang (aldri gjenta at noe " +
+					"«kan variere» e.l.) og STOPP straks verdien er levert — ikke fyll opp mot noe tak. Sikt mot " +
+					"1-2 setninger; flere kun hvis hver bærer NYTT, konkret innhold. Null fyll og tomme forbehold. " +
+					"Selv når du har mye data (f.eks. etter research): ALDRI en punkt-for-punkt-gjennomgang av flere " +
+					"ting — velg det viktigste og gi anbefalingen, ikke en rapport. " +
+					"Kun løpende tekst, aldri overskrifter eller lister. Gi kun svaret: ingen tankerekke, " +
+					"innledning eller oppsummering. GJETT ALDRI på fakta. For ENHVER konkret opplysning om " +
+					"virkeligheten — navn, tall, datoer, priser, statistikk, hendelser, «hvem/når/hvor mye/" +
+					"nyeste/hvor» — skal du anta at du IKKE vet det sikkert og bruke web_search FØR du svarer, " +
+					"også når spørsmålet virker trivielt. Kun ren logikk/regning/språk du er helt sikker på kan " +
+					"besvares uten søk. Dekker ikke kildene svaret, si det heller enn å gjette. Skriv aldri " +
+					"URL-er eller kildehenvisninger, de " +
+					"vises automatisk. Ved råd: land én tydelig anbefaling. Kun hvis forespørselen er for " +
+					"vag: still ett oppklarende spørsmål. Tone: avslappet og lun som en trygg kollega, " +
+					"uformell men aldri på bekostning av korthet eller presisjon. Bruk kun naturlige " +
+					"norske uttrykk, aldri direkte oversatt engelsk slang. Du kan tolke bilder brukeren " +
+					"laster opp via bindersen, si aldri at du ikke kan se bilder.",
 			}
 			full["messages"] = append([]any{system}, raw...)
 		}
@@ -163,29 +260,72 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 	if model != payload.Model {
 		full["model"] = model
 	}
-	if model == "auto" {
+	// Et nytt bilde i siste melding krever vision-modellen — overstyrer all
+	// annen ruting. Oppfølging uten bilde faller tilbake til Bris/Storm.
+	if router.LastUserHasImage(payload.Messages) {
+		model = router.VisionModel
+		full["model"] = model
+	} else if model == "auto" {
 		model = router.Pick(payload.Messages)
 		full["model"] = model
-		if model == router.HeavyModel {
-			// Tyngre spørsmål får resonnering uansett hva klienten ba om.
+		if model == router.TopModel {
+			// Tornado (GLM) resonnerer på de tyngste oppgavene.
 			full["reasoning"] = map[string]any{"enabled": true}
 		}
 	}
-	if _, ok := full["provider"]; !ok {
-		if model == router.MidModel {
-			// Enkelte tredjeparts-leverandører (f.eks. nebul) feiler på
-			// tool-streaming for Mistral — bruk Mistrals egen.
-			full["provider"] = map[string]any{"order": []string{"mistral"}}
-		} else {
-			full["provider"] = map[string]any{"sort": "throughput"}
+	// Kun TopModel skal resonnere. Slå reasoning eksplisitt av for alle andre
+	// (ikke stol på upstream-default) med mindre klienten selv har satt det.
+	if model != router.TopModel {
+		if _, set := full["reasoning"]; !set {
+			full["reasoning"] = map[string]any{"enabled": false}
 		}
 	}
-
+	// Bris/Storm er ikke multimodale — bytt ut gamle bilde-deler med en
+	// tekstplassholder så de kan svare på oppfølging uten å feile på bildedata.
+	if model != router.VisionModel {
+		stripImageParts(full)
+	}
 	patched, err := json.Marshal(full)
 	if err != nil {
 		return body, full, model
 	}
 	return patched, full, model
+}
+
+// stripImageParts erstatter bilde-deler i meldingene med en tekstplassholder,
+// slik at ikke-multimodale modeller (Bris/Storm) ikke feiler på bildedata.
+// Vision-modellens beskrivelse ligger allerede i samtalen som tekst.
+func stripImageParts(full map[string]any) {
+	msgs, ok := full["messages"].([]any)
+	if !ok {
+		return
+	}
+	for _, m := range msgs {
+		mm, ok := m.(map[string]any)
+		if !ok {
+			continue
+		}
+		parts, ok := mm["content"].([]any)
+		if !ok {
+			continue
+		}
+		var b strings.Builder
+		for _, p := range parts {
+			pm, ok := p.(map[string]any)
+			if !ok {
+				continue
+			}
+			switch pm["type"] {
+			case "text":
+				if t, ok := pm["text"].(string); ok {
+					b.WriteString(t)
+				}
+			case "image_url":
+				b.WriteString(" [bilde sendt tidligere] ")
+			}
+		}
+		mm["content"] = strings.TrimSpace(b.String())
+	}
 }
 
 // flushCopy kopierer upstream-responsen til klienten og flusher fortløpende,
@@ -214,7 +354,7 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 		if slices.Contains(s.cfg.AllowedOrigins, origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		}
 		if r.Method == http.MethodOptions {

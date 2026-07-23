@@ -1,0 +1,581 @@
+package store
+
+import (
+	"database/sql"
+	"errors"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// Agent er en automatisert prosedyre en bruker har satt opp. Den kjører en
+// oppgave mot en tilkobling på en fast frekvens.
+// Standard er kun lesetilgang; skrivetilgang må settes eksplisitt.
+type Agent struct {
+	ID              string     `json:"id"`
+	Name            string     `json:"name"`
+	Task            string     `json:"task"`
+	ConnectionID    string     `json:"connection_id"`
+	ScheduleLabel   string     `json:"schedule_label"`   // menneskelig, f.eks. "hver dag kl 08:00"
+	IntervalSeconds int        `json:"interval_seconds"` // hvor ofte den kjøres
+	RunTime         string     `json:"run_time"`         // HH:MM for dag/uke-intervaller
+	DailyTokenLimit int        `json:"daily_token_limit"`
+	WriteAccess     bool       `json:"write_access"`
+	Enabled         bool       `json:"enabled"`
+	PushEnabled     bool       `json:"push_enabled"`
+
+	// Oppdrags-modus: agenten jobber mot et mål over flere kjøringer og gir seg
+	// først når det er nådd.
+	Mission          bool   `json:"mission"`
+	SendMail         bool   `json:"send_mail"`         // tillatelse til å sende mail selv
+	MissionState     string `json:"mission_state"`     // komprimert tilstand (JSON)
+	MissionStatus    string `json:"mission_status"`    // running | done | paused
+	MissionCriteria  string `json:"mission_criteria"`  // hva som teller som fullført mål
+	CriteriaApproved bool   `json:"criteria_approved"` // bruker har godkjent kriteriene
+	MissionBudget    int    `json:"mission_budget"`    // totalt token-tak for hele oppdraget (0 = ubegrenset)
+	MissionActivity  string `json:"mission_activity"`  // live «hva jeg gjør/tenker» (JSON: thought + steps)
+
+	CreatedAt time.Time `json:"created_at"`
+	ChatID          string     `json:"chat_id"`
+	NextRunAt       *time.Time `json:"next_run_at,omitempty"`
+	LastRunAt       *time.Time `json:"last_run_at,omitempty"`
+
+	// Internt for scheduleren (ikke eksponert i JSON til klient).
+	TenantID string `json:"-"`
+	UserID   string `json:"-"`
+}
+
+func (s *Store) migrateAgents() error {
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS agents (
+			id                TEXT PRIMARY KEY,
+			tenant_id         TEXT NOT NULL,
+			user_id           TEXT NOT NULL,
+			name              TEXT NOT NULL,
+			task              TEXT NOT NULL,
+			connection_id     TEXT NOT NULL DEFAULT '',
+			schedule_label    TEXT NOT NULL DEFAULT '',
+			interval_seconds  INTEGER NOT NULL DEFAULT 86400,
+			run_time          TEXT NOT NULL DEFAULT '',
+			daily_token_limit INTEGER NOT NULL DEFAULT 0,
+			write_access      INTEGER NOT NULL DEFAULT 0,
+			enabled           INTEGER NOT NULL DEFAULT 1,
+			created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			next_run_at       TIMESTAMP,
+			last_run_at       TIMESTAMP,
+			chat_id           TEXT NOT NULL DEFAULT ''
+		);
+		CREATE INDEX IF NOT EXISTS idx_agents_user ON agents (user_id, created_at);
+		CREATE TABLE IF NOT EXISTS agent_runs (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			agent_id    TEXT NOT NULL,
+			started_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			status      TEXT NOT NULL,
+			output      TEXT NOT NULL DEFAULT '',
+			tokens_used INTEGER NOT NULL DEFAULT 0,
+			error       TEXT NOT NULL DEFAULT ''
+		);
+		CREATE INDEX IF NOT EXISTS idx_runs_agent ON agent_runs (agent_id, started_at);
+		CREATE TABLE IF NOT EXISTS push_notifications (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			tenant_id  TEXT NOT NULL,
+			user_id    TEXT NOT NULL,
+			agent_id   TEXT NOT NULL,
+			title      TEXT NOT NULL DEFAULT '',
+			body       TEXT NOT NULL DEFAULT '',
+			sent       INTEGER NOT NULL DEFAULT 0,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE INDEX IF NOT EXISTS idx_push_unsent ON push_notifications (sent, created_at);
+	`); err != nil {
+		return err
+	}
+	// Bakoverkompatibelt: legg til nye kolonner på eldre agents-tabeller.
+	for _, col := range []string{
+		`ALTER TABLE agents ADD COLUMN run_time TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN next_run_at TIMESTAMP`,
+		`ALTER TABLE agents ADD COLUMN last_run_at TIMESTAMP`,
+		`ALTER TABLE agents ADD COLUMN chat_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN push_enabled INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE agents ADD COLUMN mission INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE agents ADD COLUMN send_mail INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE agents ADD COLUMN mission_state TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN mission_status TEXT NOT NULL DEFAULT 'running'`,
+		`ALTER TABLE agents ADD COLUMN mission_criteria TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN criteria_approved INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE agents ADD COLUMN mission_budget INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE agents ADD COLUMN mission_activity TEXT NOT NULL DEFAULT ''`,
+	} {
+		if _, err := s.db.Exec(col); err != nil &&
+			!strings.Contains(err.Error(), "duplicate column") {
+			return err
+		}
+	}
+	// Indeks på next_run_at først etter at kolonnen finnes.
+	_, err := s.db.Exec(
+		`CREATE INDEX IF NOT EXISTS idx_agents_due ON agents (enabled, next_run_at)`,
+	)
+	return err
+}
+
+// NextRun beregner neste kjøretidspunkt. For dag/uke-intervaller med et
+// klokkeslett justeres det til riktig tid på døgnet; ellers now + intervall.
+func NextRun(now time.Time, intervalSeconds int, runTime string) time.Time {
+	step := time.Duration(intervalSeconds) * time.Second
+	if runTime != "" && intervalSeconds >= 86400 {
+		parts := strings.SplitN(runTime, ":", 2)
+		if len(parts) == 2 {
+			hh, e1 := strconv.Atoi(parts[0])
+			mm, e2 := strconv.Atoi(parts[1])
+			if e1 == nil && e2 == nil {
+				cand := time.Date(now.Year(), now.Month(), now.Day(), hh, mm, 0, 0, now.Location())
+				for !cand.After(now) {
+					cand = cand.Add(step)
+				}
+				return cand
+			}
+		}
+	}
+	return now.Add(step)
+}
+
+// CreateAgent lagrer en ny agent, oppretter en egen chat for output og
+// setter første kjøretidspunkt.
+func (s *Store) CreateAgent(tenantID, userID string, a Agent) (Agent, error) {
+	id, err := newID()
+	if err != nil {
+		return a, err
+	}
+	a.ID = id
+	a.CreatedAt = time.Now()
+	a.Enabled = true
+	next := NextRun(a.CreatedAt, a.IntervalSeconds, a.RunTime)
+	a.NextRunAt = &next
+
+	// Egen chat for agentens output, koblet begge veier.
+	chatID, err := newID()
+	if err != nil {
+		return a, err
+	}
+	a.ChatID = chatID
+	if _, err := s.db.Exec(
+		`INSERT INTO chats (id, tenant_id, user_id, title, agent_id) VALUES (?, ?, ?, ?, ?)`,
+		a.ChatID, tenantID, userID, a.Name, a.ID,
+	); err != nil {
+		return a, err
+	}
+
+	_, err = s.db.Exec(
+		`INSERT INTO agents
+			(id, tenant_id, user_id, name, task, connection_id, schedule_label,
+			 interval_seconds, run_time, daily_token_limit, write_access, enabled, next_run_at, chat_id,
+			 mission, send_mail, mission_status)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 'running')`,
+		a.ID, tenantID, userID, a.Name, a.Task, a.ConnectionID, a.ScheduleLabel,
+		a.IntervalSeconds, a.RunTime, a.DailyTokenLimit, boolToInt(a.WriteAccess), next, a.ChatID,
+		boolToInt(a.Mission), boolToInt(a.SendMail),
+	)
+	return a, err
+}
+
+// ListAgents returnerer brukerens agenter, nyest først.
+func (s *Store) ListAgents(userID string) ([]Agent, error) {
+	rows, err := s.db.Query(
+		`SELECT id, name, task, connection_id, schedule_label, interval_seconds,
+		        run_time, daily_token_limit, write_access, enabled, created_at,
+		        next_run_at, last_run_at, chat_id, mission, send_mail, mission_status
+		 FROM agents WHERE user_id = ? ORDER BY created_at DESC`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Agent
+	for rows.Next() {
+		var a Agent
+		var write, enabled, mission, sendMail int
+		if err := rows.Scan(&a.ID, &a.Name, &a.Task, &a.ConnectionID, &a.ScheduleLabel,
+			&a.IntervalSeconds, &a.RunTime, &a.DailyTokenLimit, &write, &enabled,
+			&a.CreatedAt, &a.NextRunAt, &a.LastRunAt, &a.ChatID,
+			&mission, &sendMail, &a.MissionStatus); err != nil {
+			return nil, err
+		}
+		a.WriteAccess = write != 0
+		a.Enabled = enabled != 0
+		a.Mission = mission != 0
+		a.SendMail = sendMail != 0
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// DueAgents returnerer aktiverte agenter som skal kjøres nå.
+func (s *Store) DueAgents(now time.Time) ([]Agent, error) {
+	rows, err := s.db.Query(
+		`SELECT id, tenant_id, user_id, name, task, connection_id, schedule_label,
+		        interval_seconds, run_time, daily_token_limit, write_access, next_run_at, chat_id, push_enabled,
+		        mission, send_mail, mission_state, mission_status
+		 FROM agents
+		 WHERE enabled = 1 AND mission = 0 AND next_run_at IS NOT NULL AND next_run_at <= ?
+		 ORDER BY next_run_at`,
+		now,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Agent
+	for rows.Next() {
+		var a Agent
+		var write, push, mission, sendMail int
+		if err := rows.Scan(&a.ID, &a.TenantID, &a.UserID, &a.Name, &a.Task,
+			&a.ConnectionID, &a.ScheduleLabel, &a.IntervalSeconds, &a.RunTime,
+			&a.DailyTokenLimit, &write, &a.NextRunAt, &a.ChatID, &push,
+			&mission, &sendMail, &a.MissionState, &a.MissionStatus); err != nil {
+			return nil, err
+		}
+		a.WriteAccess = write != 0
+		a.PushEnabled = push != 0
+		a.Mission = mission != 0
+		a.SendMail = sendMail != 0
+		a.Enabled = true
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// SetMissionState lagrer agentens komprimerte oppdrags-tilstand mellom kjøringer.
+func (s *Store) SetMissionState(agentID, state string) error {
+	_, err := s.db.Exec(`UPDATE agents SET mission_state = ? WHERE id = ?`, state, agentID)
+	return err
+}
+
+// FinishMission markerer oppdraget som fullført og stopper videre kjøring.
+func (s *Store) FinishMission(agentID string) error {
+	_, err := s.db.Exec(
+		`UPDATE agents SET mission_status = 'done', enabled = 0 WHERE id = ?`, agentID,
+	)
+	return err
+}
+
+// PauseMission stopper løkka uten å markere målet nådd (f.eks. token-tak truffet).
+func (s *Store) PauseMission(agentID, reason string) error {
+	_, err := s.db.Exec(
+		`UPDATE agents SET mission_status = ?, enabled = 0 WHERE id = ?`, reason, agentID,
+	)
+	return err
+}
+
+// SetMissionPlan lagrer mål (task), fullført-kriterier og token-tak. Kriteriene
+// må godkjennes før løkka kan starte, så approved nullstilles.
+func (s *Store) SetMissionPlan(id, userID, goal, criteria string, budget int) error {
+	if err := s.agentOwned(id, userID); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(
+		`UPDATE agents SET task=?, mission=1, mission_criteria=?, mission_budget=?,
+		        criteria_approved=0, mission_status='running', mission_state='', enabled=0
+		 WHERE id=? AND user_id=?`,
+		goal, criteria, budget, id, userID,
+	)
+	return err
+}
+
+// ApproveMission godkjenner kriteriene og aktiverer løkka.
+func (s *Store) ApproveMission(id, userID string) error {
+	res, err := s.db.Exec(
+		`UPDATE agents SET criteria_approved=1, enabled=1, mission_status='running'
+		 WHERE id=? AND user_id=? AND mission=1`,
+		id, userID,
+	)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// MissionTokensSpent summerer alle tokens oppdraget har brukt (mot token-taket).
+func (s *Store) MissionTokensSpent(agentID string) (int, error) {
+	var n sql.NullInt64
+	err := s.db.QueryRow(
+		`SELECT SUM(tokens_used) FROM agent_runs WHERE agent_id = ?`, agentID,
+	).Scan(&n)
+	if err != nil {
+		return 0, err
+	}
+	return int(n.Int64), nil
+}
+
+// missionScanCols er felt-lista for å lese en agent med alle oppdrags-felt.
+const missionScanCols = `id, tenant_id, user_id, name, task, connection_id, chat_id,
+	daily_token_limit, enabled, push_enabled,
+	mission, send_mail, mission_state, mission_status, mission_criteria, criteria_approved, mission_budget,
+	mission_activity`
+
+func scanMission(sc interface{ Scan(...any) error }) (Agent, error) {
+	var a Agent
+	var enabled, push, mission, sendMail, approved int
+	err := sc.Scan(&a.ID, &a.TenantID, &a.UserID, &a.Name, &a.Task, &a.ConnectionID, &a.ChatID,
+		&a.DailyTokenLimit, &enabled, &push,
+		&mission, &sendMail, &a.MissionState, &a.MissionStatus, &a.MissionCriteria, &approved, &a.MissionBudget,
+		&a.MissionActivity)
+	a.Enabled = enabled != 0
+	a.PushEnabled = push != 0
+	a.Mission = mission != 0
+	a.SendMail = sendMail != 0
+	a.CriteriaApproved = approved != 0
+	return a, err
+}
+
+// SetMissionActivity lagrer den live «hva jeg gjør»-tilstanden (tom = tømt).
+func (s *Store) SetMissionActivity(agentID, activity string) error {
+	_, err := s.db.Exec(`UPDATE agents SET mission_activity = ? WHERE id = ?`, activity, agentID)
+	return err
+}
+
+// MissionAgent leser én agent med alle oppdrags-felt (til løkke-runneren).
+func (s *Store) MissionAgent(id string) (Agent, error) {
+	a, err := scanMission(s.db.QueryRow(`SELECT `+missionScanCols+` FROM agents WHERE id = ?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return a, ErrNotFound
+	}
+	return a, err
+}
+
+// RunningMissions er godkjente, aktive oppdrag som ikke er ferdige — startes som
+// kontinuerlige løkker (også etter en omstart av serveren).
+func (s *Store) RunningMissions() ([]Agent, error) {
+	rows, err := s.db.Query(
+		`SELECT ` + missionScanCols + ` FROM agents
+		 WHERE mission=1 AND enabled=1 AND criteria_approved=1 AND mission_status='running'`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Agent
+	for rows.Next() {
+		a, err := scanMission(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// RescheduleAgent setter last_run_at og beregner neste kjøretidspunkt.
+func (s *Store) RescheduleAgent(a Agent, ranAt time.Time) error {
+	next := NextRun(ranAt, a.IntervalSeconds, a.RunTime)
+	_, err := s.db.Exec(
+		`UPDATE agents SET last_run_at = ?, next_run_at = ? WHERE id = ?`,
+		ranAt, next, a.ID,
+	)
+	return err
+}
+
+// AgentRun er én logget kjøring av en agent.
+type AgentRun struct {
+	Status     string
+	Output     string
+	TokensUsed int
+	Error      string
+}
+
+// RecordRun logger resultatet av en agent-kjøring.
+func (s *Store) RecordRun(agentID string, r AgentRun) error {
+	_, err := s.db.Exec(
+		`INSERT INTO agent_runs (agent_id, status, output, tokens_used, error)
+		 VALUES (?, ?, ?, ?, ?)`,
+		agentID, r.Status, r.Output, r.TokensUsed, r.Error,
+	)
+	return err
+}
+
+// AgentTokensToday summerer tokens agenten har brukt siden midnatt (for
+// å håndheve daglig grense).
+func (s *Store) AgentTokensToday(agentID string, since time.Time) (int, error) {
+	var n sql.NullInt64
+	err := s.db.QueryRow(
+		`SELECT SUM(tokens_used) FROM agent_runs WHERE agent_id = ? AND started_at >= ?`,
+		agentID, since,
+	).Scan(&n)
+	if err != nil {
+		return 0, err
+	}
+	return int(n.Int64), nil
+}
+
+// UpdateAgentConfig oppdaterer en agents konfigurasjon og planlegger neste
+// kjøring på nytt. Chattens tittel følger agentnavnet.
+func (s *Store) UpdateAgentConfig(id, userID string, a Agent) error {
+	if err := s.agentOwned(id, userID); err != nil {
+		return err
+	}
+	next := NextRun(time.Now(), a.IntervalSeconds, a.RunTime)
+	if _, err := s.db.Exec(
+		`UPDATE agents SET name=?, task=?, connection_id=?, schedule_label=?,
+		        interval_seconds=?, run_time=?, daily_token_limit=?, write_access=?, next_run_at=?
+		 WHERE id=? AND user_id=?`,
+		a.Name, a.Task, a.ConnectionID, a.ScheduleLabel, a.IntervalSeconds,
+		a.RunTime, a.DailyTokenLimit, boolToInt(a.WriteAccess), next, id, userID,
+	); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`UPDATE chats SET title=? WHERE agent_id=?`, a.Name, id)
+	return err
+}
+
+// SetAgentEnabled setter agenten på pause (false) eller aktiv (true).
+func (s *Store) SetAgentEnabled(agentID, userID string, enabled bool) error {
+	res, err := s.db.Exec(
+		`UPDATE agents SET enabled = ? WHERE id = ? AND user_id = ?`,
+		boolToInt(enabled), agentID, userID,
+	)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// EnqueuePush legger et push-varsel i køen (sent=0). Selve leveringen til
+// mobil-appen kobles på senere; nå lagres/logges bare varselet.
+func (s *Store) EnqueuePush(tenantID, userID, agentID, title, body string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO push_notifications (tenant_id, user_id, agent_id, title, body) VALUES (?, ?, ?, ?, ?)`,
+		tenantID, userID, agentID, title, body,
+	)
+	return err
+}
+
+// SetAgentPush slår push-varsel på/av for en agent.
+func (s *Store) SetAgentPush(agentID, userID string, on bool) error {
+	res, err := s.db.Exec(
+		`UPDATE agents SET push_enabled = ? WHERE id = ? AND user_id = ?`,
+		boolToInt(on), agentID, userID,
+	)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// GetAgent henter en agent brukeren eier (for redigering via chatten).
+func (s *Store) GetAgent(id, userID string) (Agent, error) {
+	var a Agent
+	var write, enabled, mission, approved int
+	err := s.db.QueryRow(
+		`SELECT id, name, task, connection_id, schedule_label, interval_seconds,
+		        run_time, daily_token_limit, write_access, enabled, created_at, chat_id,
+		        mission, mission_status, mission_criteria, criteria_approved, mission_budget
+		 FROM agents WHERE id = ? AND user_id = ?`,
+		id, userID,
+	).Scan(&a.ID, &a.Name, &a.Task, &a.ConnectionID, &a.ScheduleLabel,
+		&a.IntervalSeconds, &a.RunTime, &a.DailyTokenLimit, &write, &enabled,
+		&a.CreatedAt, &a.ChatID,
+		&mission, &a.MissionStatus, &a.MissionCriteria, &approved, &a.MissionBudget)
+	if errors.Is(err, sql.ErrNoRows) {
+		return a, ErrNotFound
+	}
+	a.WriteAccess = write != 0
+	a.Enabled = enabled != 0
+	a.Mission = mission != 0
+	a.CriteriaApproved = approved != 0
+	return a, err
+}
+
+// AgentByChat henter agenten som eier en chat (for pause-knappen i UI-et).
+func (s *Store) AgentByChat(chatID, userID string) (Agent, error) {
+	var a Agent
+	var write, enabled, push, mission, sendMail, approved int
+	err := s.db.QueryRow(
+		`SELECT id, name, task, connection_id, schedule_label, interval_seconds,
+		        run_time, daily_token_limit, write_access, enabled, created_at,
+		        next_run_at, last_run_at, chat_id, push_enabled,
+		        mission, send_mail, mission_status, mission_criteria, criteria_approved, mission_budget,
+		        mission_activity
+		 FROM agents WHERE chat_id = ? AND user_id = ?`,
+		chatID, userID,
+	).Scan(&a.ID, &a.Name, &a.Task, &a.ConnectionID, &a.ScheduleLabel,
+		&a.IntervalSeconds, &a.RunTime, &a.DailyTokenLimit, &write, &enabled,
+		&a.CreatedAt, &a.NextRunAt, &a.LastRunAt, &a.ChatID, &push,
+		&mission, &sendMail, &a.MissionStatus, &a.MissionCriteria, &approved, &a.MissionBudget,
+		&a.MissionActivity)
+	if errors.Is(err, sql.ErrNoRows) {
+		return a, ErrNotFound
+	}
+	a.WriteAccess = write != 0
+	a.Enabled = enabled != 0
+	a.PushEnabled = push != 0
+	a.Mission = mission != 0
+	a.SendMail = sendMail != 0
+	a.CriteriaApproved = approved != 0
+	return a, err
+}
+
+// DeleteAgent fjerner en agent brukeren eier, med tilhørende chat og logg.
+func (s *Store) DeleteAgent(agentID, userID string) error {
+	var chatID string
+	err := s.db.QueryRow(
+		`SELECT chat_id FROM agents WHERE id = ? AND user_id = ?`, agentID, userID,
+	).Scan(&chatID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if chatID != "" {
+		if _, err := tx.Exec(`DELETE FROM chat_messages WHERE chat_id = ?`, chatID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM chats WHERE id = ?`, chatID); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`DELETE FROM agent_runs WHERE agent_id = ?`, agentID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM agents WHERE id = ? AND user_id = ?`, agentID, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// agentOwned sjekker at agenten tilhører brukeren.
+func (s *Store) agentOwned(agentID, userID string) error {
+	var one int
+	err := s.db.QueryRow(
+		`SELECT 1 FROM agents WHERE id = ? AND user_id = ?`, agentID, userID,
+	).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	return err
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
