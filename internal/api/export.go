@@ -216,7 +216,7 @@ func (s *Server) runStoredQuery(ctx context.Context, tenantID, userID, connID, s
 		return nil, nil, fmt.Errorf("kunne ikke koble til databasen")
 	}
 	defer db.Close()
-	return connector.SafeQuery(ctx, db, dc.creds.Driver, sqlText, dc.allowed)
+	return connector.SafeQueryN(ctx, db, dc.creds.Driver, sqlText, dc.allowed, maxExportRows)
 }
 
 // handleCreateLiveExport lager en live Excel-eksport: kjører spørringen én gang

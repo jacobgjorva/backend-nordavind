@@ -203,10 +203,21 @@ func ReferencedTables(query string) []string {
 	return out
 }
 
-// SafeQuery kjører kun én SELECT-setning mot tillatte tabeller.
+// SafeQuery kjører kun én SELECT-setning mot tillatte tabeller, med standard
+// radgrense (100 — dimensjonert for LLM-kontekst).
+func SafeQuery(ctx context.Context, db *sql.DB, driver, query string, allowed []string) ([]string, [][]string, error) {
+	return SafeQueryN(ctx, db, driver, query, allowed, maxRows)
+}
+
+// SafeQueryN er SafeQuery med eksplisitt radgrense — widgets og eksport trenger
+// langt flere rader enn LLM-konteksten (100 rader kuttet tidsserier til to
+// måneder når dimensjonskolonner blåste opp radantallet).
 // Radgrensen håndheves alltid ved lesing; LIMIT legges kun på for
 // dialekter som støtter det (SQL Server bruker TOP og hopper over).
-func SafeQuery(ctx context.Context, db *sql.DB, driver, query string, allowed []string) ([]string, [][]string, error) {
+func SafeQueryN(ctx context.Context, db *sql.DB, driver, query string, allowed []string, rowCap int) ([]string, [][]string, error) {
+	if rowCap <= 0 {
+		rowCap = maxRows
+	}
 	q := strings.TrimSpace(commentRe.ReplaceAllString(query, " "))
 	q = strings.TrimSuffix(q, ";")
 	if strings.Contains(q, ";") {
@@ -239,7 +250,7 @@ func SafeQuery(ctx context.Context, db *sql.DB, driver, query string, allowed []
 	}
 
 	if driver != "mssql" && !limitRe.MatchString(q) {
-		q = fmt.Sprintf("%s LIMIT %d", q, maxRows)
+		q = fmt.Sprintf("%s LIMIT %d", q, rowCap)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
@@ -270,7 +281,7 @@ func SafeQuery(ctx context.Context, db *sql.DB, driver, query string, allowed []
 	for i := range vals {
 		ptrs[i] = &vals[i]
 	}
-	for rows.Next() && len(out) < maxRows {
+	for rows.Next() && len(out) < rowCap {
 		if err := rows.Scan(ptrs...); err != nil {
 			return nil, nil, err
 		}
