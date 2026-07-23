@@ -175,6 +175,126 @@ func (s *Server) handleRenameChat(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"title": title})
 }
 
+// handleSetChatFolder flytter en chat inn i (eller ut av) en mappe.
+func (s *Server) handleSetChatFolder(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		FolderID string `json:"folder_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "ugyldig request", http.StatusBadRequest)
+		return
+	}
+	err := s.store.SetChatFolder(r.PathValue("id"), user.ID, strings.TrimSpace(req.FolderID))
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleListFolders returnerer brukerens mapper.
+func (s *Server) handleListFolders(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	folders, err := s.store.ListFolders(user.ID)
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	if folders == nil {
+		folders = []store.Folder{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"folders": folders})
+}
+
+// handleCreateFolder oppretter en mappe.
+func (s *Server) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		name = "Ny mappe"
+	}
+	if t := []rune(name); len(t) > 60 {
+		name = string(t[:60])
+	}
+	f, err := s.store.CreateFolder(user.TenantID, user.ID, name)
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(f)
+}
+
+// handleRenameFolder endrer mappenavn.
+func (s *Server) handleRenameFolder(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "ugyldig request", http.StatusBadRequest)
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		http.Error(w, "tomt navn", http.StatusBadRequest)
+		return
+	}
+	if t := []rune(name); len(t) > 60 {
+		name = string(t[:60])
+	}
+	err := s.store.RenameFolder(r.PathValue("id"), user.ID, name)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDeleteFolder sletter en mappe (chattene løsnes).
+func (s *Server) handleDeleteFolder(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	err := s.store.DeleteFolder(r.PathValue("id"), user.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleGenerateChatTitle lager en kort tittel fra første utveksling og
 // lagrer den på samtalen.
 func (s *Server) handleGenerateChatTitle(w http.ResponseWriter, r *http.Request) {
