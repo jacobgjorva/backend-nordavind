@@ -239,6 +239,10 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			if dbCtx != nil {
 				tools = append(tools, dbCtx.tool, showTableTool)
 			}
+			// M365-filverktøy kun når brukeren har koblet Microsoft 365.
+			if _, ok := s.m365Connected(ctx); ok {
+				tools = append(tools, m365SearchTool, m365ReadTool)
+			}
 			// Eskalerings-verktøy (registeret ligger i verktøy-beskrivelsen).
 			if user, ok := ctx.Value(userKey).(store.User); ok {
 				if ct := s.contactTool(user.TenantID); ct != nil {
@@ -432,6 +436,35 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					result = s.runDeleteAgent(ctx, aa)
 				default:
 					result = s.runListAgents(ctx)
+				}
+			case "m365_search":
+				var ma struct {
+					Query string `json:"query"`
+				}
+				_ = json.Unmarshal([]byte(c.Args.String()), &ma)
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Søker i OneDrive: " + ma.Query})
+				emit("data: " + string(meta))
+				if uid, ok := s.m365Connected(ctx); ok {
+					result = s.runM365Search(ctx, uid, ma.Query)
+				} else {
+					result = "Microsoft 365 er ikke koblet til."
+				}
+			case "m365_read":
+				var ma struct {
+					FileID string `json:"file_id"`
+					Name   string `json:"name"`
+				}
+				_ = json.Unmarshal([]byte(c.Args.String()), &ma)
+				step := "Leser fil"
+				if ma.Name != "" {
+					step = "Leser: " + ma.Name
+				}
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": step})
+				emit("data: " + string(meta))
+				if uid, ok := s.m365Connected(ctx); ok {
+					result = s.runM365Read(ctx, uid, ma.FileID, ma.Name)
+				} else {
+					result = "Microsoft 365 er ikke koblet til."
 				}
 			case "connect_database":
 				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Tester tilkoblingen"})
