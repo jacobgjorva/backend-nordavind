@@ -66,6 +66,37 @@ var deepMarkers = []string{
 	"gjør en skikkelig", "skikkelig jobb", "grav", "kartlegg grundig",
 }
 
+// showTableTool viser siste databasesvar som en rendret tabell for brukeren.
+// Modellen sender IKKE dataene selv — backend rendrer dem deterministisk fra
+// spørringen, så tabellen kan aldri bli feilskrevet eller utelatt.
+var showTableTool = map[string]any{
+	"type": "function",
+	"function": map[string]any{
+		"name": "show_table",
+		"description": "Vis resultatet av siste query_database-kall som en ferdig tabell for brukeren. " +
+			"KALL ALLTID denne når brukeren ber om en tabell, liste eller oversikt over data. Dataene " +
+			"hentes automatisk fra spørringen — ikke gjengi radene i tekst.",
+		"parameters": map[string]any{"type": "object", "properties": map[string]any{}},
+	},
+}
+
+// tableBlock bygger ```table-blokken frontend rendrer som tabell (med Excel-knapp).
+func tableBlock(cols []string, rows [][]string) string {
+	spec, _ := json.Marshal(map[string]any{"columns": cols, "rows": rows})
+	return "```table\n" + string(spec) + "\n```\n\n"
+}
+
+// tableIntent er sann når brukeren eksplisitt ber om en tabell/oversikt i rader.
+func tableIntent(text string) bool {
+	lower := strings.ToLower(text)
+	for _, m := range []string{"tabell", "table", "liste over", "oversikt over"} {
+		if strings.Contains(lower, m) {
+			return true
+		}
+	}
+	return false
+}
+
 // deepIntent er sann når siste brukermelding ber om grundig/uforstyrret arbeid.
 func deepIntent(full map[string]any) bool {
 	lower := strings.ToLower(lastUserText(full))
@@ -154,6 +185,13 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		injectSystem(full, s.widgetSystem(ctx))
 	}
 
+	// Connector-agent: hjelper brukeren koble til eksterne kilder via verktøy.
+	connectorMode, _ := full["nordavind_connector"].(bool)
+	delete(full, "nordavind_connector")
+	if connectorMode {
+		injectSystem(full, s.connectorAgentSystem())
+	}
+
 	// Agent-chat: enten oppdrags-planlegging (før kriteriene er godkjent) eller
 	// vanlig redigering av en ferdig konfigurert agent.
 	editID, _ := full["nordavind_agent_edit"].(string)
@@ -183,6 +221,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			// ikke modellen svare på dataspørsmål — den må skrive SQL-en inn i
 			// widgeten. Skjemaet ligger allerede i system-prompten.
 			full["tools"] = widgetTools()
+		} else if connectorMode {
+			// Connector-agent: KUN tilkoblings-verktøyene.
+			full["tools"] = connectorAgentTools()
 		} else if setup {
 			// Agent-oppsett: KUN agent-verktøy. Ingen web_search/query_database/
 			// contact_person — veiviseren skal samle inn oppsettet og la
@@ -196,7 +237,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		} else {
 			tools := []any{webSearchTool, fetchURLTool}
 			if dbCtx != nil {
-				tools = append(tools, dbCtx.tool)
+				tools = append(tools, dbCtx.tool, showTableTool)
 			}
 			// Eskalerings-verktøy (registeret ligger i verktøy-beskrivelsen).
 			if user, ok := ctx.Value(userKey).(store.User); ok {
@@ -235,6 +276,13 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	start := time.Now()
 	var promptTokens, completionTokens, searches int
 	usedTool := false // om noen verktøy (søk/lese/db) er kjørt — styrer tom-svar-vernet
+	// Tabell-garanti: show_table-verktøyet rendrer siste databasesvar
+	// deterministisk, og ba brukeren om tabell rendrer vi uansett fra første
+	// svar med rader — prompt alene er ikke til å stole på her.
+	wantsTable := tableIntent(lastUserText(full))
+	tableShown := false
+	var lastCols []string
+	var lastRows [][]string
 	defer func() {
 		s.recordUsage(ctx, full, promptTokens, completionTokens, searches, time.Since(start))
 	}()
@@ -326,6 +374,40 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Spør databasen"})
 				emit("data: " + string(meta))
 				result = s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL)
+				// Send spørringen som metadata så tabellen i svaret kan tilby
+				// live Excel-kobling (frontend fester den til meldingen).
+				if strings.TrimSpace(args.SQL) != "" {
+					qm, _ := json.Marshal(map[string]any{"nordavind_query": map[string]string{
+						"connection_id": args.ConnectionID,
+						"sql":           args.SQL,
+					}})
+					emit("data: " + string(qm))
+				}
+				// Husk siste resultat (til show_table) og rendr tabellen
+				// deterministisk med en gang når brukeren ba om tabell.
+				var qr struct {
+					Columns []string   `json:"columns"`
+					Rows    [][]string `json:"rows"`
+				}
+				if json.Unmarshal([]byte(result), &qr) == nil && len(qr.Columns) > 0 {
+					lastCols, lastRows = qr.Columns, qr.Rows
+					if wantsTable && !tableShown && len(qr.Rows) > 0 {
+						emit(contentSSE(tableBlock(qr.Columns, qr.Rows)))
+						tableShown = true
+						result += "\n\n(Tabellen er allerede vist til brukeren — IKKE gjengi radene i tekst, legg til maks én kort setning.)"
+					}
+				}
+			case "show_table":
+				switch {
+				case tableShown:
+					result = "Tabellen er allerede vist til brukeren. Svar med maks én kort setning."
+				case len(lastCols) > 0:
+					emit(contentSSE(tableBlock(lastCols, lastRows)))
+					tableShown = true
+					result = "Tabellen vises nå til brukeren. Svar med maks én kort setning — ikke gjengi radene."
+				default:
+					result = "Ingen data å vise ennå — kjør query_database først, så show_table."
+				}
 			case "fetch_url":
 				step := "Leser en side"
 				if u := strings.TrimSpace(args.URL); u != "" {
@@ -351,6 +433,18 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				default:
 					result = s.runListAgents(ctx)
 				}
+			case "connect_database":
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Tester tilkoblingen"})
+				emit("data: " + string(meta))
+				result = s.runConnectDatabase(ctx, c.Args.String(), emit)
+			case "connect_m365":
+				result = s.runConnectM365(ctx, emit)
+			case "check_m365":
+				result = s.runCheckM365(ctx)
+			case "save_m365_app":
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Lagrer app-registreringen"})
+				emit("data: " + string(meta))
+				result = s.runSaveM365App(ctx, c.Args.String())
 			case "start_mission":
 				var m struct {
 					Goal     string `json:"goal"`

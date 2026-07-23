@@ -87,6 +87,19 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/chats/{id}/title", s.requireAuth(s.handleGenerateChatTitle))
 	mux.HandleFunc("PATCH /v1/chats/{id}", s.requireAuth(s.handleRenameChat))
 	mux.HandleFunc("PUT /v1/chats/{id}/folder", s.requireAuth(s.handleSetChatFolder))
+	mux.HandleFunc("POST /v1/export/xlsx", s.requireAuth(s.handleExportXLSX))
+	mux.HandleFunc("POST /v1/export/live", s.requireAuth(s.handleCreateLiveExport))
+	mux.HandleFunc("POST /v1/export/onedrive", s.requireAuth(s.handleExportOneDrive))
+	mux.HandleFunc("GET /v1/m365/status", s.requireAuth(s.handleM365Status))
+	mux.HandleFunc("GET /v1/m365/connect", s.requireAuth(s.handleM365Connect))
+	mux.HandleFunc("DELETE /v1/m365", s.requireAuth(s.handleM365Disconnect))
+	// OAuth-callback kommer fra Microsofts redirect — ingen sesjon, state-vernet.
+	mux.HandleFunc("GET /v1/m365/callback", s.handleM365Callback)
+	mux.HandleFunc("GET /v1/export/links", s.requireAuth(s.handleListExportLinks))
+	mux.HandleFunc("DELETE /v1/export/links/{id}", s.requireAuth(s.handleRevokeExportLink))
+	// Live-lenkene autentiseres av selve tokenet (Excel har ingen sesjon).
+	mux.HandleFunc("GET /v1/live/{token}/data.xlsx", s.handleLiveXLSX)
+	mux.HandleFunc("GET /v1/live/{token}/table", s.handleLiveHTML)
 	mux.HandleFunc("GET /v1/folders", s.requireAuth(s.handleListFolders))
 	mux.HandleFunc("POST /v1/folders", s.requireAuth(s.handleCreateFolder))
 	mux.HandleFunc("PATCH /v1/folders/{id}", s.requireAuth(s.handleRenameFolder))
@@ -244,7 +257,9 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 					"1-2 setninger; flere kun hvis hver bærer NYTT, konkret innhold. Null fyll og tomme forbehold. " +
 					"Selv når du har mye data (f.eks. etter research): ALDRI en punkt-for-punkt-gjennomgang av flere " +
 					"ting — velg det viktigste og gi anbefalingen, ikke en rapport. " +
-					"Kun løpende tekst, aldri overskrifter eller lister. Gi kun svaret: ingen tankerekke, " +
+					"Kun løpende tekst, aldri overskrifter eller lister. UNNTAK: ber brukeren eksplisitt om en " +
+					"tabell (eller struktur), svar med en ```table kodeblokk med JSON {\"columns\":[...],\"rows\":[[...]]} " +
+					"som inneholder radene fra dataene — maks én kort setning i tillegg. Gi kun svaret: ingen tankerekke, " +
 					"innledning eller oppsummering. GJETT ALDRI på fakta. For ENHVER konkret opplysning om " +
 					"virkeligheten — navn, tall, datoer, priser, statistikk, hendelser, «hvem/når/hvor mye/" +
 					"nyeste/hvor» — skal du anta at du IKKE vet det sikkert og bruke web_search FØR du svarer, " +
