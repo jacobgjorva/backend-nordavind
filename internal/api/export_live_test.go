@@ -24,6 +24,16 @@ func TestBuildLiveWorkbook(t *testing.T) {
 		if f.Name == "customXml/item1.xml" {
 			sawMashup = true
 		}
+		if f.Name == "xl/workbook.xml" {
+			rc, _ := f.Open()
+			data, _ := io.ReadAll(rc)
+			rc.Close()
+			for _, want := range []string{`name="Ark1" sheetId="1" state="hidden"`, `name="Config" sheetId="2" state="hidden"`} {
+				if !strings.Contains(string(data), want) {
+					t.Fatalf("ark ikke skjult: mangler %s", want)
+				}
+			}
+		}
 		if f.Name == "xl/sharedStrings.xml" {
 			rc, _ := f.Open()
 			data, _ := io.ReadAll(rc)

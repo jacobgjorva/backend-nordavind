@@ -427,6 +427,29 @@ func buildLiveWorkbook(liveURL string) ([]byte, error) {
 	zw := zip.NewWriter(&out)
 	urlRe := regexp.MustCompile(`<si><t>http[^<]*</t></si>`)
 	for _, f := range zr.File {
+		// Skjul tomme Ark1 og Config — brukeren skal lande rett i Spørring.
+		if f.Name == "xl/workbook.xml" {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, err
+			}
+			data, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return nil, err
+			}
+			out := string(data)
+			out = strings.Replace(out, `<sheet name="Ark1" sheetId="1" r:id="rId1"/>`, `<sheet name="Ark1" sheetId="1" state="hidden" r:id="rId1"/>`, 1)
+			out = strings.Replace(out, `<sheet name="Config" sheetId="2" r:id="rId3"/>`, `<sheet name="Config" sheetId="2" state="hidden" r:id="rId3"/>`, 1)
+			w, err := zw.Create(f.Name)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := w.Write([]byte(out)); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if f.Name == "xl/sharedStrings.xml" {
 			rc, err := f.Open()
 			if err != nil {
