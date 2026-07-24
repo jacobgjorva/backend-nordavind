@@ -67,9 +67,6 @@ func (s *Server) m365Connected(ctx context.Context) (string, bool) {
 // runM365Search søker i brukerens drive via Graph.
 func (s *Server) runM365Search(ctx context.Context, userID, query string) string {
 	query = strings.TrimSpace(query)
-	if query == "" {
-		return "Tomt søk."
-	}
 	token, err := s.msAccessToken(ctx, userID)
 	if err != nil {
 		return "Microsoft 365 er ikke koblet til."
