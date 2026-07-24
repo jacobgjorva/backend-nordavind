@@ -88,6 +88,14 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if token != "" {
 			if user, err := s.store.UserBySession(token); err == nil {
+				// Admin-simulering: en admin kan tre inn i en annen brukers
+				// tilstand (X-Impersonate-User) — kun innen egen tenant.
+				if imp := strings.TrimSpace(r.Header.Get("X-Impersonate-User")); imp != "" && imp != user.ID && user.Role == "admin" {
+					if target, err := s.store.UserByID(imp); err == nil && target.TenantID == user.TenantID {
+						s.log.Info("admin simulerer bruker", "admin", user.Email, "som", target.Email)
+						user = target
+					}
+				}
 				next(w, r.WithContext(context.WithValue(r.Context(), userKey, user)))
 				return
 			}
