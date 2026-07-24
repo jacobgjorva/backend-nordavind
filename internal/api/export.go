@@ -451,6 +451,27 @@ func buildLiveWorkbook(liveURL string) ([]byte, error) {
 			}
 			continue
 		}
+		// Auto-oppdatering ved åpning: slipp «Data → Oppdater alle»-steget.
+		if f.Name == "xl/connections.xml" {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, err
+			}
+			data, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return nil, err
+			}
+			patched := strings.Replace(string(data), `keepAlive="1"`, `keepAlive="1" refreshOnLoad="1"`, 1)
+			w, err := zw.Create(f.Name)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := w.Write([]byte(patched)); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if f.Name == "xl/sharedStrings.xml" {
 			rc, err := f.Open()
 			if err != nil {

@@ -34,6 +34,14 @@ func TestBuildLiveWorkbook(t *testing.T) {
 				}
 			}
 		}
+		if f.Name == "xl/connections.xml" {
+			rc, _ := f.Open()
+			data, _ := io.ReadAll(rc)
+			rc.Close()
+			if !strings.Contains(string(data), `refreshOnLoad="1"`) {
+				t.Fatal("refreshOnLoad mangler i connections.xml")
+			}
+		}
 		if f.Name == "xl/sharedStrings.xml" {
 			rc, _ := f.Open()
 			data, _ := io.ReadAll(rc)
