@@ -606,9 +606,9 @@ const backstopNudge = "Verktøyene er ikke lenger tilgjengelige. Svar NÅ i MAKS
 	"viktigste fra det du har funnet — anbefaling/konklusjon først. ALDRI en liste eller punkt-for-punkt-" +
 	"gjennomgang av flere ting, ALDRI en lang oppsummering. Velg det ene som betyr mest. Svar aldri tomt."
 
-// backstopGraceful er den siste, varme utveien hvis alt annet gir tomt.
-const backstopGraceful = "Jeg fant en del, men rakk ikke å lande det rent nå. Vil du at jeg går grundig " +
-	"til verks på dette?"
+// backstopGraceful er den siste utveien hvis alt annet gir tomt: en ærlig,
+// kort feilmelding — aldri en påstand om utført arbeid.
+const backstopGraceful = "Klarte ikke hente et svar nå — prøv igjen."
 
 // streamBackstop kjøres når et svar kom tomt: ett synteser-kall (uten verktøy) på
 // samtalen slik den står — all verktøy-data er alt i konteksten. Gir det fortsatt
