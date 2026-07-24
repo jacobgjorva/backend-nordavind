@@ -282,6 +282,13 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	start := time.Now()
 	var promptTokens, completionTokens, searches int
 	usedTool := false // om noen verktøy (søk/lese/db) er kjørt — styrer tom-svar-vernet
+	// Handlings-verktøy (endrer tilstand: rutine, widget, agent, m365 …) gir
+	// korte kvitteringer med vilje — de skal ALDRI utløse backstop-syntesen.
+	actionTool := false
+	readTools := map[string]bool{
+		"web_search": true, "fetch_url": true, "query_database": true,
+		"m365_search": true, "m365_read": true, "list_agents": true, "show_table": true,
+	}
 	// Tabell-garanti: show_table-verktøyet rendrer siste databasesvar
 	// deterministisk, og ba brukeren om tabell rendrer vi uansett fra første
 	// svar med rader — prompt alene er ikke til å stole på her.
@@ -320,12 +327,12 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		if len(calls) == 0 {
 			trimmed := strings.TrimSpace(content)
 			switch {
-			case len(trimmed) < 40 && usedTool:
+			case len(trimmed) < 40 && usedTool && !actionTool:
 				// (Nesten) tomt etter verktøybruk → synteser fra det den fant.
 				step, _ := json.Marshal(map[string]any{"nordavind_step": "Oppsummerer funnene"})
 				emit("data: " + string(step))
 				s.streamBackstop(ctx, full, emit, &promptTokens, &completionTokens)
-			case trimmed == "":
+			case trimmed == "" && !actionTool:
 				emit(contentSSE(backstopGraceful))
 			case len([]rune(trimmed)) > wallCharLimit:
 				// Nødbrems: modellen ignorerte korthet og skrev en vegg →
@@ -363,6 +370,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 
 		// Utfør verktøykallene og legg resultatene inn i samtalen.
 		usedTool = true
+		for _, c := range calls {
+			if !readTools[c.Name] {
+				actionTool = true
+			}
+		}
 		assistantCalls := make([]any, 0, len(calls))
 		toolMsgs := make([]any, 0, len(calls))
 		for _, c := range calls {
