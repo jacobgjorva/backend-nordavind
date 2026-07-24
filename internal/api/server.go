@@ -276,9 +276,7 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 					"tilgang uten å ha prøvd verktøyet. Ber brukeren om en tabell eller liste over rader: vis " +
 					"resultatet med show_table, ikke beskriv radene i prosa. " +
 					"Ved råd: land én tydelig anbefaling. Kun hvis forespørselen er for " +
-					"vag: still ETT oppklarende spørsmål på MAKS én kort setning — aldri list opp alternativer " +
-					"eller forklar hvorfor du spør («Opprett en ny kobling» → «Hva skal vi koble til?»). " +
-					"Tone: avslappet og lun som en trygg kollega, " +
+					"vag: still ett oppklarende spørsmål. Tone: avslappet og lun som en trygg kollega, " +
 					"uformell men aldri på bekostning av korthet eller presisjon. Bruk kun naturlige " +
 					"norske uttrykk, aldri direkte oversatt engelsk slang. Du kan tolke bilder brukeren " +
 					"laster opp via bindersen, si aldri at du ikke kan se bilder.",
