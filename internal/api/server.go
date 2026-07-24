@@ -253,11 +253,11 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 			system := map[string]any{
 				"role": "system",
 				"content": "I dag er " + time.Now().Format("2006-01-02") + ". " +
-					"Svar EKSTREMT tett: pakk mest mulig konkret verdi i færrest ord. Legg det viktigste i de " +
-					"FØRSTE 1-2 setningene — brukeren leser sjelden mer. Gi eksakte tall, retning/trend, tidsrom " +
-					"og en relevant nyanse der det finnes, men si HVERT poeng bare ÉN gang (aldri gjenta at noe " +
-					"«kan variere» e.l.) og STOPP straks verdien er levert — ikke fyll opp mot noe tak. Sikt mot " +
-					"1-2 setninger; flere kun hvis hver bærer NYTT, konkret innhold. Null fyll og tomme forbehold. " +
+					"Svar KORTEST MULIG: kun det brukeren ber om, ingenting mer. Et faktaspørsmål besvares med " +
+					"selve svaret — «Hvor mange cm er det i en meter?» → «100 cm.» Ferdig. Ingen innramming, " +
+					"kontekst, forbehold eller oppfølgingstilbud med mindre brukeren ber om det. Trengs substans: " +
+					"legg det viktigste i FØRSTE setning, si hvert poeng bare ÉN gang, og STOPP straks verdien er " +
+					"levert — ikke fyll opp mot noe tak. Null fyll og tomme forbehold. " +
 					"Selv når du har mye data (f.eks. etter research): ALDRI en punkt-for-punkt-gjennomgang av flere " +
 					"ting — velg det viktigste og gi anbefalingen, ikke en rapport. " +
 					"Kun løpende tekst, aldri overskrifter eller lister. UNNTAK: ber brukeren eksplisitt om en " +
