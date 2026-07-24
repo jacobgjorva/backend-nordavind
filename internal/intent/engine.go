@@ -18,6 +18,7 @@ const (
 	MethodDirect = "direct" // klar vinner på ren cosine (ingen LLM)
 	MethodJudge  = "judge"  // enum-begrenset dommer-kall blant kandidatene
 	MethodNone   = "none"   // ingen flyt — fri chat (også ved feil: fail-open)
+	MethodMulti  = "multi"  // sammensatt ønske — to flyter nesten likt → fri chat
 )
 
 // Terskler. Kalibrert mot eval-settet (cmd/intent-eval skriver ut forslag);
@@ -31,6 +32,10 @@ const (
 	directMargin = 0.08
 	// candN: hvor mange kandidater dommeren får velge blant.
 	candN = 3
+	// multiMargin: scorer to flyter BEGGE over directScore med mindre avstand
+	// enn dette, tolkes meldingen som sammensatt («lag graf OG eksporter») og
+	// går til fri chat som har alle verktøy. Logges som MethodMulti.
+	multiMargin = 0.03
 	// embedTimeout/judgeTimeout: motoren skal aldri henge — fail-open.
 	embedTimeout = 6 * time.Second
 	judgeTimeout = 5 * time.Second
@@ -187,6 +192,12 @@ func (e *Engine) Resolve(ctx context.Context, message string, isAdmin bool) Deci
 		none.Candidates = cands
 		none.Elapsed = time.Since(start)
 		return none
+	}
+
+	// Sammensatt ønske: to flyter nesten likt, begge sterke → fri chat.
+	if len(cands) > 1 && cands[1].Score >= directScore &&
+		cands[0].Score-cands[1].Score < multiMargin {
+		return Decision{Method: MethodMulti, Candidates: cands, Elapsed: time.Since(start)}
 	}
 
 	// Klar vinner: matten bestemmer alene.

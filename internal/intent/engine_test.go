@@ -84,7 +84,7 @@ func TestDirectWinner(t *testing.T) {
 func TestJudgeOnTie(t *testing.T) {
 	em := registryStub()
 	// Nesten likt mellom to akser → margin for liten → dommer.
-	em.vecs["hei koble"] = []float32{0.7, 0.69, 0}
+	em.vecs["hei koble"] = []float32{0.9, 0.85, 0.2}
 	j := &stubJudge{pick: "smalltalk"}
 	e := buildEngine(t, em, j)
 	d := e.Resolve(context.Background(), "hei koble", true)
@@ -118,7 +118,7 @@ func TestEmbedderFailureFailsOpen(t *testing.T) {
 
 func TestJudgeFailureFallsBack(t *testing.T) {
 	em := registryStub()
-	em.vecs["hei koble"] = []float32{0.7, 0.69, 0}
+	em.vecs["hei koble"] = []float32{0.9, 0.85, 0.2}
 	e := buildEngine(t, em, &stubJudge{err: errors.New("nede")})
 	d := e.Resolve(context.Background(), "hei koble", true)
 	// Beste kandidat er over directScore → skal falle tilbake til den.
@@ -129,7 +129,7 @@ func TestJudgeFailureFallsBack(t *testing.T) {
 
 func TestJudgeOutsideEnumRejected(t *testing.T) {
 	em := registryStub()
-	em.vecs["hei koble"] = []float32{0.7, 0.69, 0}
+	em.vecs["hei koble"] = []float32{0.9, 0.85, 0.2}
 	e := buildEngine(t, em, &stubJudge{pick: "create_widget"}) // ikke kandidat
 	d := e.Resolve(context.Background(), "hei koble", true)
 	if d.Method != MethodDirect || d.Key != "connect_database" {
@@ -177,4 +177,51 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func TestMultiIntentGoesToFreeChat(t *testing.T) {
+	em := registryStub()
+	// Sterk på BÅDE connect_database og smalltalk, nesten likt → multi.
+	em.vecs["koble til basen og si hei"] = []float32{0.71, 0.7, 0}
+	e := buildEngine(t, em, &stubJudge{pick: "smalltalk"})
+	d := e.Resolve(context.Background(), "koble til basen og si hei", true)
+	if d.Method != MethodMulti || d.Key != "" {
+		t.Fatalf("ville ha multi → fri chat, fikk %+v", d)
+	}
+}
+
+func TestFlowTableCoversRegistry(t *testing.T) {
+	for _, in := range Registry {
+		f, ok := Flows[in.Key]
+		if !ok {
+			t.Fatalf("intent %s mangler flyt-rad", in.Key)
+		}
+		if !f.Deterministic {
+			if f.Model == "" {
+				t.Fatalf("%s: modellflyt uten Model", in.Key)
+			}
+			if f.MaxChars <= 0 {
+				t.Fatalf("%s: modellflyt uten MaxChars", in.Key)
+			}
+		}
+		if f.Fallback != FreeChatKey {
+			t.Fatalf("%s: fallback skal være %s i v1", in.Key, FreeChatKey)
+		}
+	}
+	free, ok := Flows[FreeChatKey]
+	if !ok || free.Fallback != "" || free.Deterministic {
+		t.Fatalf("fri chat-raden er feil: %+v", free)
+	}
+}
+
+func TestFlowForFallsBackToFreeChat(t *testing.T) {
+	if k, _ := FlowFor(Decision{Method: MethodMulti}); k != FreeChatKey {
+		t.Fatalf("multi skal gi fri chat, fikk %s", k)
+	}
+	if k, _ := FlowFor(Decision{Key: "finnes_ikke"}); k != FreeChatKey {
+		t.Fatalf("ukjent nøkkel skal gi fri chat, fikk %s", k)
+	}
+	if k, _ := FlowFor(Decision{Key: "data_question", Method: MethodDirect}); k != "data_question" {
+		t.Fatalf("ville ha data_question, fikk %s", k)
+	}
 }
