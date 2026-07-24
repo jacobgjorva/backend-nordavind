@@ -201,8 +201,10 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	if editID != "" {
 		if user, ok := ctx.Value(userKey).(store.User); ok {
 			if a, err := s.store.GetAgent(editID, user.ID); err == nil {
-				if !a.CriteriaApproved {
-					// Draft: hjelp brukeren definere mål + fullført-kriterier.
+				if !a.CriteriaApproved && !a.Enabled {
+					// Ferskt utkast: avgjør rutine vs engangsoppdrag og start.
+					// (En aktivert rutine er Enabled uten godkjente kriterier —
+					// den skal til vanlig redigering, ikke ny planlegging.)
 					injectSystem(full, missionPlanSystem)
 					planning = true
 				} else {
@@ -478,6 +480,10 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Lagrer app-registreringen"})
 				emit("data: " + string(meta))
 				result = s.runSaveM365App(ctx, c.Args.String())
+			case "setup_routine":
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Setter opp rutinen"})
+				emit("data: " + string(meta))
+				result = s.runSetupRoutine(ctx, editID, c.Args.String())
 			case "start_mission":
 				var m struct {
 					Goal     string `json:"goal"`
