@@ -34,6 +34,9 @@ type Server struct {
 	// så vi ikke starter samme oppdrag to ganger.
 	missionMu      sync.Mutex
 	missionRunning map[string]bool
+
+	// Intent-motoren (INTENT_ENGINE=shadow) — nil til den er bygget.
+	intent intentState
 }
 
 func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
@@ -55,6 +58,7 @@ func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 		missionRunning: map[string]bool{},
 	}
 	s.startScheduler(context.Background())
+	s.initIntentEngine()
 	return s
 }
 
@@ -169,6 +173,17 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	patched, full, pickedModel := withRoutingDefaults(body)
+
+	// Shadow-ruting: logg motorens valg for vanlige meldinger — endrer intet.
+	if _, widgetMode := full["nordavind_widget"]; !widgetMode {
+		if _, connMode := full["nordavind_connector"]; !connMode {
+			if setup, _ := full["nordavind_agent_setup"].(bool); !setup {
+				if user, ok := r.Context().Value(userKey).(store.User); ok {
+					s.shadowIntent(user, lastUserText(full))
+				}
+			}
+		}
+	}
 
 	// Berik med relevant bransjekunnskap fra tenantens graf.
 	if kb := s.knowledgeFor(r.Context(), full); kb != "" {
