@@ -1,6 +1,6 @@
 # Caddy: automatisk HTTPS (Let's Encrypt), statisk frontend + API-proxy.
 # Bytt ut domenet med ditt eget før bruk.
-{$NORDAVIND_DOMAIN}
+${NORDAVIND_DOMAIN}
 
 # API-et proxes til Go-backend på loopback.
 handle /v1/* {
