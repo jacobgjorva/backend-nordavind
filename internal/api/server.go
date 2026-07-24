@@ -174,12 +174,22 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 	patched, full, pickedModel := withRoutingDefaults(body)
 
-	// Shadow-ruting: logg motorens valg for vanlige meldinger — endrer intet.
+	// Intent-motoren: shadow logger bare; on styrer flyten.
 	if _, widgetMode := full["nordavind_widget"]; !widgetMode {
 		if _, connMode := full["nordavind_connector"]; !connMode {
 			if setup, _ := full["nordavind_agent_setup"].(bool); !setup {
 				if user, ok := r.Context().Value(userKey).(store.User); ok {
-					s.shadowIntent(user, lastUserText(full))
+					switch s.cfg.IntentMode {
+					case "shadow":
+						s.shadowIntent(user, lastUserText(full))
+					case "on":
+						if block := s.applyIntent(user, full); block != "" {
+							s.respondSSEBlock(w, block)
+							s.log.Info("chat/completions", "mode", "intent-deterministic",
+								"dur", time.Since(start).Round(time.Millisecond))
+							return
+						}
+					}
 				}
 			}
 		}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jacobgjorva/backend-nordavind/internal/intent"
 	"github.com/jacobgjorva/backend-nordavind/internal/search"
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
@@ -174,6 +175,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// forespørselen sendes videre til upstream.
 	setup, _ := full["nordavind_agent_setup"].(bool)
 	delete(full, "nordavind_agent_setup")
+	// Flyt-kontrakten (intent-modus): leses ut her, skal aldri videre upstream.
+	flowKey, _ := full[flowKeyField].(string)
+	answerLimit := answerCharLimit(full)
+	delete(full, flowKeyField)
+	delete(full, flowMaxField)
 	if setup {
 		injectSystem(full, agentSetupSystem)
 	}
@@ -236,6 +242,36 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			// Oppdrags-planlegging: KUN start_mission. Modellen forstår oppgaven,
 			// utleder selv fullført-kriterier, og starter løkka med det samme.
 			full["tools"] = missionStartTools()
+		} else if flowKey != "" && flowKey != intent.FreeChatKey {
+			// Intent-modus: flyten bestemmer verktøysettet — modellen ser
+			// KUN det den trenger, og kan ikke velge feil verktøy.
+			var tools []any
+			switch flowKey {
+			case "data_question", "show_table":
+				if dbCtx != nil {
+					tools = append(tools, dbCtx.tool, showTableTool)
+				} else {
+					// Ingen database: oppfør deg som fri chat (fail-open).
+					tools = append(tools, webSearchTool, fetchURLTool)
+				}
+			case "web_fact":
+				tools = append(tools, webSearchTool, fetchURLTool)
+			case "smalltalk":
+				// Ingen verktøy — rent samtalesvar.
+			case "connect_database", "connect_m365":
+				tools = append(tools, connectorAgentTools()...)
+			default:
+				// Ukjent/uvirket flyt: fullt sett som fri chat.
+				tools = append(tools, webSearchTool, fetchURLTool)
+				if dbCtx != nil {
+					tools = append(tools, dbCtx.tool, showTableTool)
+				}
+			}
+			if len(tools) > 0 {
+				full["tools"] = tools
+			} else {
+				delete(full, "tools")
+			}
 		} else {
 			tools := []any{webSearchTool, fetchURLTool}
 			if dbCtx != nil {
@@ -332,17 +368,19 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		if len(calls) == 0 {
 			trimmed := strings.TrimSpace(content)
 			switch {
-			case len(trimmed) < 40 && usedTool && !actionTool:
+			case len([]rune(trimmed)) < 3 && usedTool && !actionTool:
+				// Reelt tomt (eller bare tegnsetting) etter verktøybruk —
+				// korte, gyldige svar («426 ordre.») skal IKKE hit.
 				// (Nesten) tomt etter verktøybruk → synteser fra det den fant.
 				step, _ := json.Marshal(map[string]any{"nordavind_step": "Oppsummerer funnene"})
 				emit("data: " + string(step))
 				s.streamBackstop(ctx, full, emit, &promptTokens, &completionTokens)
 			case trimmed == "" && !actionTool:
 				emit(contentSSE(backstopGraceful))
-			case len([]rune(trimmed)) > wallCharLimit:
-				// Nødbrems: modellen ignorerte korthet og skrev en vegg →
-				// komprimer til noen få HELE setninger (sjelden, minimal sløsing).
-				step, _ := json.Marshal(map[string]any{"nordavind_step": "Strammer svaret"})
+			case len([]rune(trimmed)) > answerLimit:
+				// Over flytens (eller standard) grense: aldri kutt — skriv om
+				// til hele setninger. Statusen er bevisst selvironisk.
+				step, _ := json.Marshal(map[string]any{"nordavind_step": "Sorry, dette blir for mye greier, la meg omformulere meg"})
 				emit("data: " + string(step))
 				emit(contentSSE(s.compressAnswer(ctx, trimmed)))
 			default:
@@ -592,6 +630,18 @@ type sourceRef struct {
 // wallCharLimit: over dette regnes svaret som en «vegg» og komprimeres (nødbrems).
 const wallCharLimit = 600
 
+// answerCharLimit: flytens MaxChars når intent-modus har satt den, ellers
+// standard nødbrems-grense.
+func answerCharLimit(full map[string]any) int {
+	if v, ok := full[flowMaxField].(int); ok && v > 0 {
+		return v
+	}
+	if v, ok := full[flowMaxField].(float64); ok && v > 0 {
+		return int(v)
+	}
+	return wallCharLimit
+}
+
 const compressSystem = "Komprimer teksten under til MAKS 3 korte, HELE setninger på norsk. Anbefaling/" +
 	"konklusjon først, deretter bare det aller viktigste. Behold nøkkeltall og navn. ALDRI liste, " +
 	"overskrifter eller punkt-for-punkt. Behold samme mening, bare tettere. Svar kun med den komprimerte teksten."
@@ -641,7 +691,7 @@ func (s *Server) streamBackstop(ctx context.Context, full map[string]any, emit f
 	resp.Body.Close()
 	*promptTokens += usage.PromptTokens
 	*completionTokens += usage.CompletionTokens
-	if len(strings.TrimSpace(content)) < 40 {
+	if len([]rune(strings.TrimSpace(content))) < 3 {
 		emit(contentSSE(backstopGraceful))
 	}
 }
