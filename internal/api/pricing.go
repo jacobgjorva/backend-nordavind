@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// pricing holder pris per token (USD) per modell, hentet fra EUrouter.
+// pricing holder pris per token (USD) per modell, hentet fra Scaleway.
 type pricing struct {
 	mu    sync.RWMutex
 	perTk map[string][2]float64 // model -> [input, output]
