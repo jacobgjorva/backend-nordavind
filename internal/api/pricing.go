@@ -1,38 +1,71 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
-// Scaleway-priser i EUR per 1M tokens [input, output]. Deres API eksponerer
-// ingen pris, så vi holder tabellen selv.
-var scalewayEURPerM = map[string][2]float64{
-	"qwen3-235b-a22b-instruct-2507": {0.75, 2.25},
-	"qwen3.5-397b-a17b":             {0.60, 3.60},
-	"glm-5.2":                       {1.80, 5.50},
-	"qwen3.6-35b-a3b":               {0.25, 1.50},
-	"mistral-small-3.2-24b-instruct-2506": {0.15, 0.35},
-}
-
-// eurUsd omregner EUR-priser til USD, så nedstrøms USD→NOK-konvertering holder.
-const eurUsd = 1.08
-
-// pricing holder pris per token (USD) per modell.
+// pricing holder pris per token (USD) per modell, hentet fra Scaleway.
 type pricing struct {
 	mu    sync.RWMutex
-	perTk map[string][2]float64 // model -> [input, output] USD per token
+	perTk map[string][2]float64 // model -> [input, output]
 }
 
 func newPricing() *pricing {
-	perTk := make(map[string][2]float64, len(scalewayEURPerM))
-	for model, eur := range scalewayEURPerM {
-		perTk[model] = [2]float64{
-			eur[0] * eurUsd / 1e6,
-			eur[1] * eurUsd / 1e6,
-		}
+	return &pricing{perTk: map[string][2]float64{}}
+}
+
+// load henter prislisten; kalles i bakgrunnen ved oppstart og hver 6. time.
+func (p *pricing) load(ctx context.Context, client *http.Client, baseURL, apiKey string) error {
+	url := strings.TrimSuffix(baseURL, "/") + "/models"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
 	}
-	return &pricing{perTk: perTk}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	var body struct {
+		Data []struct {
+			ID      string `json:"id"`
+			Pricing struct {
+				Prompt     string `json:"prompt"`
+				Completion string `json:"completion"`
+			} `json:"pricing"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return err
+	}
+
+	next := make(map[string][2]float64, len(body.Data))
+	for _, m := range body.Data {
+		in, _ := strconv.ParseFloat(m.Pricing.Prompt, 64)
+		out, _ := strconv.ParseFloat(m.Pricing.Completion, 64)
+		next[m.ID] = [2]float64{in, out}
+	}
+	p.mu.Lock()
+	p.perTk = next
+	p.mu.Unlock()
+	return nil
+}
+
+func (p *pricing) refreshLoop(client *http.Client, baseURL, apiKey string) {
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		p.load(ctx, client, baseURL, apiKey)
+		cancel()
+		time.Sleep(6 * time.Hour)
+	}
 }
 
 // cost beregner USD for et forbruk. Modellnavn kan ha leverandørprefiks.

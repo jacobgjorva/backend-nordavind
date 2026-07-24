@@ -5,7 +5,7 @@ OpenAI-kompatibelt API-lag i Go. Ruter chat-forespørsler til EU-hostede open-we
 ## Oppsett
 
 ```sh
-cp .env.example .env   # fyll inn EUrouter-nøkkel
+cp .env.example .env   # fyll inn Scaleway-nøkkel
 go run ./cmd/server    # http://localhost:8080
 ```
 
