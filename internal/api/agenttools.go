@@ -52,17 +52,12 @@ const agentSetupSystem = "Du er i OPPSETT-modus. Du skal KUN sette opp agenten, 
 // missionPlanSystem styrer en fersk agent-chat. Agenten er en arbeidsmaskin:
 // forstår oppgaven, utleder selv fullført-kriterier, og starter løkka umiddelbart
 // via start_mission — uten å ekko målet, uten kort, uten å nevne token-tak.
-const missionPlanSystem = "Du er en autonom arbeidsagent brukeren nettopp opprettet. AVGJØR FØRST hva slags " +
-	"behov dette er:" +
-	"\n- GJENTAKENDE (ord som «hvert», «hver dag/morgen/uke», «daglig», «hvert 15. minutt», overvåkning som " +
-	"aldri blir «ferdig»): kall setup_routine med prompt (hva som gjøres HVER kjøring), interval_seconds " +
-	"(minimum 900) og label. IKKE start_mission — en rutine har ingen sluttilstand og skal aldri «fullføres»." +
-	"\n- ENGANGSMÅL (en oppgave som kan bli ferdig): utled SELV konkrete, målbare fullført-kriterier og kall " +
-	"start_mission med goal og criteria." +
-	"\nVær en arbeidsmaskin: ikke gjenta målet tilbake, ikke nevn tokens eller begrensninger. Svar KUN med en " +
-	"kort kvittering («Oppgave forstått, starter.» / «Rutine opprettet — kjører <frekvens>.») — ingenting mer. " +
-	"Kun hvis oppgaven er helt uforståelig: still ETT kort oppklarende spørsmål i stedet for å starte. " +
-	"IKKE utfør selve oppgaven her (ikke søk/spør database) — verktøyet setter i gang arbeidet."
+const missionPlanSystem = "Du setter opp en gjentakende agent-rutine for brukeren. Når brukeren beskriver " +
+	"behovet: kall setup_routine med prompt (hva som gjøres HVER kjøring), interval_seconds (minimum 900; " +
+	"time=3600, dag=86400, uke=604800) og en kort label («hvert 15. minutt», «hver morgen kl 08»). " +
+	"Beskriver brukeren noe uten frekvens: foreslå en fornuftig frekvens i prompten din, eller spør kort. " +
+	"Svar KUN med en kort kvittering («Rutine opprettet — kjører <frekvens>.») — ingenting mer. " +
+	"IKKE utfør selve oppgaven her (ikke søk/spør database) — rutinen gjør jobben på hver kjøring."
 
 // missionStartTools gir planleggeren to verktøy: start et engangsoppdrag,
 // eller sett opp en gjentakende rutine når behovet aldri «fullføres».
@@ -82,21 +77,6 @@ func missionStartTools() []any {
 						"name":             map[string]any{"type": "string", "description": "kort agentnavn"},
 					},
 					"required": []string{"prompt", "interval_seconds"},
-				},
-			},
-		},
-		map[string]any{
-			"type": "function",
-			"function": map[string]any{
-				"name":        "start_mission",
-				"description": "Start oppdraget nå. Du utleder selv fullført-kriteriene. Løkka begynner umiddelbart.",
-				"parameters": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"goal":     map[string]any{"type": "string", "description": "oppgaven, i klartekst"},
-						"criteria": map[string]any{"type": "string", "description": "målbare kriterier for når målet er nådd"},
-					},
-					"required": []string{"goal", "criteria"},
 				},
 			},
 		},

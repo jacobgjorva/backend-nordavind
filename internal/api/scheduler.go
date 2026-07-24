@@ -55,7 +55,13 @@ func (s *Server) startScheduler(ctx context.Context) {
 
 // resumeMissions starter løkker for alle godkjente, aktive oppdrag.
 func (s *Server) resumeMissions(ctx context.Context) {
+	// Oppdrags-modus er fjernet fra produktflyten — agenter er kun rutiner.
+	// Løkker gjenopptas ikke; funksjonen står til DB-feltene ryddes.
 	agents, err := s.store.RunningMissions()
+	_ = agents
+	if true {
+		return
+	}
 	if err != nil {
 		s.log.Error("kunne ikke hente aktive oppdrag", "err", err)
 		return

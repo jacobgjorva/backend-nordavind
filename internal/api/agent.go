@@ -484,13 +484,6 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Setter opp rutinen"})
 				emit("data: " + string(meta))
 				result = s.runSetupRoutine(ctx, editID, c.Args.String())
-			case "start_mission":
-				var m struct {
-					Goal     string `json:"goal"`
-					Criteria string `json:"criteria"`
-				}
-				_ = json.Unmarshal([]byte(c.Args.String()), &m)
-				result = s.runStartMission(ctx, editID, m.Goal, m.Criteria)
 			case "set_widget":
 				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Bygger widget"})
 				emit("data: " + string(meta))
