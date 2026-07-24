@@ -24,7 +24,9 @@ const (
 // Terskler. Kalibrert mot eval-settet (cmd/intent-eval skriver ut forslag);
 // endres KUN sammen med en grønn eval-kjøring — aldri på magefølelse.
 const (
-	// floorScore: under dette ligner meldingen ikke på noen flyt → fri chat.
+	// floorScore: under dette ligner meldingen ikke på noen flyt. Brukes kun
+	// som logg-signal og fallback-vern når dommeren feiler — usikre meldinger
+	// går alltid til dommeren, som selv kan svare fri chat.
 	floorScore = 0.42
 	// directScore + directMargin: over dette OG med klar avstand til nummer
 	// to velger matten alene, uten dommer.
@@ -187,30 +189,30 @@ func (e *Engine) Resolve(ctx context.Context, message string, isAdmin bool) Deci
 		cands = cands[:candN]
 	}
 
-	// Under gulvet: dette er fri chat.
-	if len(cands) == 0 || cands[0].Score < floorScore {
-		none.Candidates = cands
+	if len(cands) == 0 {
 		none.Elapsed = time.Since(start)
 		return none
 	}
 
-	// Sammensatt ønske: to flyter nesten likt, begge sterke → fri chat.
-	if len(cands) > 1 && cands[1].Score >= directScore &&
-		cands[0].Score-cands[1].Score < multiMargin {
-		return Decision{Method: MethodMulti, Candidates: cands, Elapsed: time.Since(start)}
-	}
-
-	// Klar vinner: matten bestemmer alene.
+	// Klar vinner: matten bestemmer alene. Nesten-like kandidater (tidligere
+	// MethodMulti → rett til fri chat) går nå til dommeren, som selv velger
+	// fri chat ved ekte sammensatte ønsker.
 	if cands[0].Score >= directScore &&
 		(len(cands) == 1 || cands[0].Score-cands[1].Score >= directMargin) {
 		return Decision{Key: cands[0].Key, Method: MethodDirect, Candidates: cands, Elapsed: time.Since(start)}
 	}
 
-	// Usikkert: dommeren velger blant kandidatene — og KUN blant dem.
-	keys := make([]string, len(cands))
-	for i, c := range cands {
-		keys[i] = c.Key
+	// Usikkert: dommeren klassifiserer mot HELE det rollefiltrerte registeret
+	// pluss et eksplisitt fri chat-valg — topp-3-innsnevring ga systematiske
+	// bom når riktig flyt ikke nådde topp 3 på ren tekstlikhet.
+	keys := make([]string, 0, len(Registry)+1)
+	for _, in := range Registry {
+		if in.AdminOnly && !isAdmin {
+			continue
+		}
+		keys = append(keys, in.Key)
 	}
+	keys = append(keys, FreeChatKey)
 	jctx, jcancel := context.WithTimeout(ctx, judgeTimeout)
 	defer jcancel()
 	pick, err := e.judge.Pick(jctx, msg, keys)
@@ -224,6 +226,9 @@ func (e *Engine) Resolve(ctx context.Context, message string, isAdmin bool) Deci
 		none.Candidates = cands
 		none.Elapsed = time.Since(start)
 		return none
+	}
+	if pick == FreeChatKey {
+		return Decision{Method: MethodJudge, Candidates: cands, Elapsed: time.Since(start)}
 	}
 	return Decision{Key: pick, Method: MethodJudge, Candidates: cands, Elapsed: time.Since(start)}
 }

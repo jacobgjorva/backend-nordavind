@@ -121,6 +121,8 @@ var Registry = []Intent{
 			"hvilke produkter selger best?",
 			"hvordan ligger vi an mot budsjettet?",
 			"når på dagen selger vi mest?",
+			"hva tar vi i pris for frakt?",
+			"hvor mye har vi solgt av et produkt denne måneden?",
 		},
 	},
 	{
@@ -206,7 +208,7 @@ var Registry = []Intent{
 	},
 	{
 		Key:         "create_routine",
-		Description: "Sette opp en gjentakende agent-rutine som kjører automatisk på fast intervall",
+		Description: "Sette opp en gjentakende agent-rutine: kjøre automatisk på fast intervall, overvåke noe løpende eller varsle når en terskel treffes",
 		Examples: []string{
 			"trenger verdi av bitcoin hvert 15 min",
 			"sjekk lagerstatus hver morgen kl 07",
@@ -226,6 +228,8 @@ var Registry = []Intent{
 			"sett rutinen på pause",
 			"bytt tidspunktet til kl 06",
 			"stopp bitcoin-agenten",
+			"endre kursvarselet til hvert kvarter",
+			"juster varslingsgrensen på rutinen",
 		},
 	},
 	{
@@ -242,7 +246,7 @@ var Registry = []Intent{
 	},
 	{
 		Key:         "web_fact",
-		Description: "Faktaspørsmål om verden utenfor bedriften: nyheter, priser, kurser, personer, hendelser",
+		Description: "Faktaspørsmål om verden utenfor bedriften: nyheter, priser, satser, regelverk, begreper, personer, hendelser — alt som må slås opp på nettet",
 		Examples: []string{
 			"hva er kursen på polight-aksjen?",
 			"når ble Telenor grunnlagt?",
@@ -251,6 +255,16 @@ var Registry = []Intent{
 			"hva blir været i Oslo i morgen?",
 			"hva er en embedding?",
 			"forklar hva inflasjon er",
+			"hva ligger boligprisene på nå?",
+			"hvor mye koster bensin i dag?",
+			"hva er dagens strømpris?",
+			"hva betyr ROI?",
+			"hvilke regler gjelder for overtid?",
+			"hva er mva-satsen på matvarer?",
+			"hvem vant kampen i går?",
+			"hva er siste nytt i teknologibransjen?",
+			"søk opp åpningstidene til posten",
+			"sjekk hva konkurrentene priser dette til",
 		},
 	},
 	{

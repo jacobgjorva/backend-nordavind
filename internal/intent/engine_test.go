@@ -91,8 +91,19 @@ func TestJudgeOnTie(t *testing.T) {
 	if d.Method != MethodJudge || d.Key != "smalltalk" {
 		t.Fatalf("ville ha judge smalltalk, fikk %+v", d)
 	}
-	if len(j.seen) == 0 || len(j.seen) > candN {
-		t.Fatalf("dommeren skal få 1-%d kandidater, fikk %v", candN, j.seen)
+	// Dommeren skal få hele det rollefiltrerte registeret + fri chat-valget.
+	if len(j.seen) != len(Registry)+1 || j.seen[len(j.seen)-1] != FreeChatKey {
+		t.Fatalf("dommeren skal få hele registeret + %s, fikk %v", FreeChatKey, j.seen)
+	}
+}
+
+func TestJudgePicksFreeChat(t *testing.T) {
+	em := registryStub()
+	em.vecs["hei koble"] = []float32{0.9, 0.85, 0.2}
+	e := buildEngine(t, em, &stubJudge{pick: FreeChatKey})
+	d := e.Resolve(context.Background(), "hei koble", true)
+	if d.Method != MethodJudge || d.Key != "" {
+		t.Fatalf("dommer-valgt fri chat skal gi tom nøkkel, fikk %+v", d)
 	}
 }
 
@@ -130,7 +141,7 @@ func TestJudgeFailureFallsBack(t *testing.T) {
 func TestJudgeOutsideEnumRejected(t *testing.T) {
 	em := registryStub()
 	em.vecs["hei koble"] = []float32{0.9, 0.85, 0.2}
-	e := buildEngine(t, em, &stubJudge{pick: "create_widget"}) // ikke kandidat
+	e := buildEngine(t, em, &stubJudge{pick: "finnes_ikke"}) // utenfor enum
 	d := e.Resolve(context.Background(), "hei koble", true)
 	if d.Method != MethodDirect || d.Key != "connect_database" {
 		t.Fatalf("svar utenfor enum skal avvises med fallback, fikk %+v", d)
@@ -179,14 +190,15 @@ func min(a, b int) int {
 	return b
 }
 
-func TestMultiIntentGoesToFreeChat(t *testing.T) {
+func TestNearTieGoesToJudge(t *testing.T) {
 	em := registryStub()
-	// Sterk på BÅDE connect_database og smalltalk, nesten likt → multi.
+	// Sterk på BÅDE connect_database og smalltalk, nesten likt → dommeren
+	// avgjør (og kan velge fri chat ved ekte sammensatte ønsker).
 	em.vecs["koble til basen og si hei"] = []float32{0.71, 0.7, 0}
-	e := buildEngine(t, em, &stubJudge{pick: "smalltalk"})
+	e := buildEngine(t, em, &stubJudge{pick: FreeChatKey})
 	d := e.Resolve(context.Background(), "koble til basen og si hei", true)
-	if d.Method != MethodMulti || d.Key != "" {
-		t.Fatalf("ville ha multi → fri chat, fikk %+v", d)
+	if d.Method != MethodJudge || d.Key != "" {
+		t.Fatalf("ville ha judge → fri chat, fikk %+v", d)
 	}
 }
 

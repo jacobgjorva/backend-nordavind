@@ -43,3 +43,30 @@
 {"text": "Opprett en ny kobling", "want": "connect_database"}
 {"text": "vis meg forbruket", "want": "usage_stats"}
 {"text": "hvordan ligger vi an mot budsjett?", "want": "data_question"}
+{"text": "hva er konsumprisindeksen for juni?", "want": "web_fact"}
+{"text": "hva er en holdingstruktur?", "want": "web_fact"}
+{"text": "forklar forskjellen på AS og ENK", "want": "web_fact"}
+{"text": "hva er siste nytt om kunstig intelligens?", "want": "web_fact"}
+{"text": "hvor mange innbyggere har Norge?", "want": "web_fact"}
+{"text": "hva ligger gullprisen på?", "want": "web_fact"}
+{"text": "når er det ferielov å ta ut restferie innen?", "want": "web_fact"}
+{"text": "hva er arbeidsgiveravgiften i 2026?", "want": "web_fact"}
+{"text": "hvem vant sykkelrittet i går?", "want": "web_fact"}
+{"text": "er det streik i transportsektoren nå?", "want": "web_fact"}
+{"text": "hva betyr EBITDA?", "want": "web_fact"}
+{"text": "hvilke land er med i EØS?", "want": "web_fact"}
+{"text": "hva sier finn.no om bruktpriser på varebiler?", "want": "web_fact"}
+{"text": "googl hva GDPR krever ved kundedata", "want": "web_fact"}
+{"text": "hva er minstelønn for lagerarbeidere?", "want": "web_fact"}
+{"text": "finn åpningstidene til tollvesenet", "want": "web_fact"}
+{"text": "hva er inflasjonen i eurosonen?", "want": "web_fact"}
+{"text": "hvor mye kostet strømmen i natt?", "want": "web_fact"}
+{"text": "hvor mye har vi solgt av produkt X denne måneden?", "want": "data_question"}
+{"text": "hva er snittprisen vi tar for frakt?", "want": "data_question"}
+{"text": "si fra når dollaren går under 10 kr", "want": "create_routine"}
+{"text": "endre bitcoin-varselet til hvert kvarter", "want": "edit_routine"}
+{"text": "skriv et sammendrag av denne artikkelen jeg limer inn", "want": ""}
+{"text": "hjelp meg å svare på denne e-posten fra Skatteetaten", "want": ""}
+{"text": "hvordan ligger vi an mot bransjesnittet vi la inn i fjor?", "want": "data_question"}
+{"text": "lag en graf over oljeprisen siste år", "want": "create_widget"}
+{"text": "hva synes du om prisstrategien vår?", "want": ""}

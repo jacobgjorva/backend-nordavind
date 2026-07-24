@@ -70,8 +70,27 @@ type ScalewayJudge struct {
 }
 
 func (s *ScalewayJudge) Pick(ctx context.Context, message string, keys []string) (string, error) {
-	system := "Velg hvilken flyt brukerens melding gjelder. Svar KUN med ett av disse ordene, ingenting annet: " +
-		strings.Join(keys, ", ")
+	// Dommeren får beskrivelsene, ikke bare nøkkelnavnene — nakne nøkler som
+	// «data_question» lyder riktige for verdensfakta og ga systematiske bom.
+	var b strings.Builder
+	b.WriteString("Velg hvilken flyt brukerens melding gjelder. " +
+		"Velg etter HANDLINGEN brukeren ber om, ikke temaet: " +
+		"«varsle meg når kursen …» er en rutine (handling: overvåke), ikke et faktaspørsmål, " +
+		"og «lag en graf over oljeprisen» er en widget (handling: lage graf).\n")
+	for _, k := range keys {
+		switch {
+		case k == FreeChatKey:
+			fmt.Fprintf(&b, "- %s: ingen av disse — vanlig samtale, tekstarbeid på innhold brukeren gir, eller sammensatte ønsker\n", k)
+		default:
+			if in, ok := byKey[k]; ok {
+				fmt.Fprintf(&b, "- %s: %s\n", k, in.Description)
+			} else {
+				fmt.Fprintf(&b, "- %s\n", k)
+			}
+		}
+	}
+	b.WriteString("Svar KUN med én av nøklene, ingenting annet: " + strings.Join(keys, ", "))
+	system := b.String()
 	body, _ := json.Marshal(map[string]any{
 		"model": s.Model,
 		"messages": []any{
