@@ -241,6 +241,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			if dbCtx != nil {
 				tools = append(tools, dbCtx.tool, showTableTool)
 			}
+			// Admin kan opprette tilkoblinger rett fra vanlig chat — ingen egen
+			// connector-chat. Verktøybeskrivelsene bærer veiledningen.
+			if user, ok := ctx.Value(userKey).(store.User); ok && user.Role == "admin" {
+				tools = append(tools, connectorAgentTools()...)
+			}
 			// M365-filverktøy kun når brukeren har koblet Microsoft 365.
 			if _, ok := s.m365Connected(ctx); ok {
 				tools = append(tools, m365SearchTool, m365ReadTool)
