@@ -281,7 +281,17 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 					"norske uttrykk, aldri direkte oversatt engelsk slang. Du kan tolke bilder brukeren " +
 					"laster opp via bindersen, si aldri at du ikke kan se bilder.",
 			}
-			full["messages"] = append([]any{system}, raw...)
+			// Few-shot: faste eksempel-utvekslinger som VISER svarstilen —
+			// langt mer robust enn instrukser alene for akkurat stil.
+			fewshot := []any{
+				map[string]any{"role": "user", "content": "Hvor mange cm er det i en meter?"},
+				map[string]any{"role": "assistant", "content": "100 cm."},
+				map[string]any{"role": "user", "content": "Opprett en ny kobling"},
+				map[string]any{"role": "assistant", "content": "Hva skal vi koble til?"},
+				map[string]any{"role": "user", "content": "hva er mva-satsen i Norge?"},
+				map[string]any{"role": "assistant", "content": "25 % (15 % på mat, 12 % på persontransport m.m.)."},
+			}
+			full["messages"] = append(append([]any{system}, fewshot...), raw...)
 		}
 	}
 
