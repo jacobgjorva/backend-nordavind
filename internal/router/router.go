@@ -7,7 +7,7 @@ import "strings"
 // reasoning-av, flash er for svak til verktøybruk, og glm-5-turbo lekker
 // engelsk resonnering i norske svar. Mistral er også 58 % billigere.
 const (
-	MidModel   = "mistral-large-3"
+	MidModel   = "qwen3-235b-a22b-instruct-2507"
 	HeavyModel = "glm-5.2"
 )
 
