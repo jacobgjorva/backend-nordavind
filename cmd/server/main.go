@@ -33,7 +33,12 @@ func main() {
 
 	srv := api.NewServer(cfg, log, st)
 	log.Info("nordavind backend lytter", "port", cfg.Port)
-	if err := http.ListenAndServe(":"+cfg.Port, srv.Handler()); err != nil {
+	// BIND_ADDR lar prod binde til loopback — backend skal kun nås via Caddy.
+	addr := os.Getenv("BIND_ADDR")
+	if addr == "" {
+		addr = ":" + cfg.Port
+	}
+	if err := http.ListenAndServe(addr, srv.Handler()); err != nil {
 		log.Error("server stoppet", "err", err)
 		os.Exit(1)
 	}
