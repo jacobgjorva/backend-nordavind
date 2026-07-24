@@ -12,7 +12,7 @@ import (
 const (
 	// Modellene kjøres på Scaleway (EU-eid, GDPR). Tre tekstnivåer:
 	// Bris (hverdag), Storm (tungt), Tornado (det aller tyngste).
-	MidModel   = "qwen3-235b-a22b-instruct-2507"
+	MidModel   = "mistral-medium-3.5-128b"
 	HeavyModel = "qwen3.5-397b-a17b"
 	TopModel   = "glm-5.2"
 	// VisionModel tolker bilder — Qwen3.6-35B er multimodal og rimelig.

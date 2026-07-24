@@ -308,6 +308,9 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 			}
 			// Few-shot: faste eksempel-utvekslinger som VISER svarstilen —
 			// langt mer robust enn instrukser alene for akkurat stil.
+			// Bildemeldinger er i praksis sin egen flyt: vision-modellen skal
+			// BESKRIVE, og korthets-eksemplene gjør den ordknapp til det
+			// meningsløse («T.») — de utelates derfor for bilder.
 			fewshot := []any{
 				map[string]any{"role": "user", "content": "Hvor mange cm er det i en meter?"},
 				map[string]any{"role": "assistant", "content": "100 cm."},
@@ -316,7 +319,11 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 				map[string]any{"role": "user", "content": "hva er mva-satsen i Norge?"},
 				map[string]any{"role": "assistant", "content": "25 % (15 % på mat, 12 % på persontransport m.m.)."},
 			}
-			full["messages"] = append(append([]any{system}, fewshot...), raw...)
+			if router.LastUserHasImage(payload.Messages) {
+				full["messages"] = append([]any{system}, raw...)
+			} else {
+				full["messages"] = append(append([]any{system}, fewshot...), raw...)
+			}
 		}
 	}
 
