@@ -1,0 +1,25 @@
+# systemd-enhet for Nordavind-backend. Hemmeligheter ligger i
+# /opt/nordavind/env (root:nordavind 640) — aldri i denne fila.
+[Unit]
+Description=Nordavind backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=nordavind
+Group=nordavind
+WorkingDirectory=/opt/nordavind
+EnvironmentFile=/opt/nordavind/env
+ExecStart=/opt/nordavind/server
+Restart=always
+RestartSec=3
+
+# Innstramming: prosessen kan kun skrive til data-katalogen.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/nordavind/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
