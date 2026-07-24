@@ -113,6 +113,10 @@ func (s *Server) runCheckM365(ctx context.Context) string {
 	if acc, err := s.store.M365Account(user.ID); err == nil {
 		return "TILKOBLET som " + acc.Email + "."
 	}
+	// Allerede koblet: si det i stedet for å starte ny OAuth.
+	if email, ok := s.m365Connected(ctx); ok {
+		return "Microsoft 365 er allerede koblet til som " + email + "."
+	}
 	if _, _, _, ok := s.msAppCreds(user.TenantID); !ok {
 		return "IKKE tilkoblet, og app-registrering mangler. Guid brukeren gjennom Azure-registreringen først."
 	}
@@ -207,6 +211,10 @@ func (s *Server) runConnectM365(ctx context.Context, emit func(string)) string {
 	user, ok := ctx.Value(userKey).(store.User)
 	if !ok {
 		return "Ikke innlogget."
+	}
+	// Allerede koblet: si det i stedet for å starte ny OAuth.
+	if email, ok := s.m365Connected(ctx); ok {
+		return "Microsoft 365 er allerede koblet til som " + email + "."
 	}
 	if _, _, _, ok := s.msAppCreds(user.TenantID); !ok {
 		return "App-registrering mangler for organisasjonen. Guid brukeren gjennom Azure-registreringen " +
