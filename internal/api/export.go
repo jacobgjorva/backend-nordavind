@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/connector"
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
@@ -585,6 +586,13 @@ func (s *Server) handleExportOneDrive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	itemID, webURL, err := s.graphUploadXLSX(r.Context(), token, safeFilename(req.Title), data)
+	if err != nil && strings.Contains(err.Error(), "resourceLocked") {
+		// Fila med samme navn står åpen i Excel (lås) — last opp under nytt
+		// navn med tidsstempel i stedet for å feile.
+		alt := strings.TrimSuffix(safeFilename(req.Title), ".xlsx") +
+			" " + time.Now().Format("2006-01-02 1504") + ".xlsx"
+		itemID, webURL, err = s.graphUploadXLSX(r.Context(), token, alt, data)
+	}
 	if err != nil {
 		s.log.Warn("onedrive-opplasting feilet", "err", err)
 		http.Error(w, "kunne ikke laste opp til OneDrive", http.StatusBadGateway)
