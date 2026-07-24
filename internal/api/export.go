@@ -1,6 +1,9 @@
 package api
 
 import (
+	"archive/zip"
+	"regexp"
+	_ "embed"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -408,6 +411,63 @@ func (s *Server) handleLiveXLSX(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+//go:embed templates/livemal.xlsx
+var liveTemplate []byte
+
+// buildLiveWorkbook kopierer Excel-malen byte-for-byte og bytter KUN live-
+// URL-en i sharedStrings (Config!A1, navngitt «LiveURL»). Malen er laget i
+// ekte Excel med innebygd Power Query (DataMashup kan ikke genereres av kode),
+// og M-koden leser cella — derfor holder det å patche én streng.
+func buildLiveWorkbook(liveURL string) ([]byte, error) {
+	zr, err := zip.NewReader(bytes.NewReader(liveTemplate), int64(len(liveTemplate)))
+	if err != nil {
+		return nil, err
+	}
+	var out bytes.Buffer
+	zw := zip.NewWriter(&out)
+	urlRe := regexp.MustCompile(`<si><t>http[^<]*</t></si>`)
+	for _, f := range zr.File {
+		if f.Name == "xl/sharedStrings.xml" {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, err
+			}
+			data, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return nil, err
+			}
+			esc := strings.ReplaceAll(liveURL, "&", "&amp;")
+			patched := urlRe.ReplaceAll(data, []byte("<si><t>"+esc+"</t></si>"))
+			w, err := zw.Create(f.Name)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := w.Write(patched); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		// Alle andre deler kopieres rått (bevarer DataMashup eksakt).
+		raw, err := f.OpenRaw()
+		if err != nil {
+			return nil, err
+		}
+		hdr := f.FileHeader
+		w, err := zw.CreateRaw(&hdr)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := io.Copy(w, raw); err != nil {
+			return nil, err
+		}
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
 // graphUploadXLSX laster opp/erstatter arbeidsboka i brukerens OneDrive under
 // /Nordavind/. Returnerer drive-item-id og webUrl.
 func (s *Server) graphUploadXLSX(ctx context.Context, accessToken, filename string, xlsx []byte) (string, string, error) {
@@ -474,15 +534,29 @@ func (s *Server) handleExportOneDrive(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "koble til Microsoft 365 i Connectors først", http.StatusPreconditionFailed)
 		return
 	}
-	cols, rows, err := s.runStoredQuery(r.Context(), user.TenantID, user.ID, req.ConnectionID, req.SQL)
-	if err != nil {
+	// Valider tilgang + spørring én gang før lenken utstedes.
+	if _, _, err := s.runStoredQuery(r.Context(), user.TenantID, user.ID, req.ConnectionID, req.SQL); err != nil {
 		http.Error(w, "spørringen feilet: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if len(rows) > maxExportRows {
-		rows = rows[:maxExportRows]
+	// Token-sikret live-lenke (kun hash lagres) — Power Query i malen
+	// henter ferske data herfra ved hver oppdatering.
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
 	}
-	data, err := xlsxBytes(req.Title, cols, rows)
+	linkToken := hex.EncodeToString(raw)
+	hash := sha256.Sum256([]byte(linkToken))
+	if _, err := s.store.CreateExportLink(
+		user.TenantID, user.ID, strings.TrimSpace(req.Title), req.ConnectionID,
+		strings.TrimSpace(req.SQL), hex.EncodeToString(hash[:]),
+	); err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	liveURL := strings.TrimSuffix(s.cfg.PublicBaseURL, "/") + "/v1/live/" + linkToken + "/data.xlsx"
+	data, err := buildLiveWorkbook(liveURL)
 	if err != nil {
 		http.Error(w, "kunne ikke bygge filen", http.StatusInternalServerError)
 		return

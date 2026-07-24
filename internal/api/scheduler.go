@@ -47,44 +47,11 @@ func (s *Server) startScheduler(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-pushTicker.C:
-				s.pushOneDriveExports(ctx)
 			}
 		}
 	}()
 }
 
-// pushOneDriveExports kjører hver lagrede spørring på nytt og erstatter
-// innholdet i OneDrive-arbeidsboka, så fila alltid har ferske tall.
-func (s *Server) pushOneDriveExports(ctx context.Context) {
-	exports, err := s.store.ListAllOneDriveExports()
-	if err != nil {
-		s.log.Error("kunne ikke hente onedrive-eksporter", "err", err)
-		return
-	}
-	for _, e := range exports {
-		token, err := s.msAccessToken(ctx, e.UserID)
-		if err != nil {
-			continue // frakoblet konto — hopp stille over
-		}
-		cols, rows, err := s.runStoredQuery(ctx, e.TenantID, e.UserID, e.ConnectionID, e.SQL)
-		if err != nil {
-			s.log.Warn("onedrive-push: spørring feilet", "id", e.ID, "err", err)
-			continue
-		}
-		if len(rows) > maxExportRows {
-			rows = rows[:maxExportRows]
-		}
-		data, err := xlsxBytes(e.Title, cols, rows)
-		if err != nil {
-			continue
-		}
-		if _, _, err := s.graphUploadXLSX(ctx, token, safeFilename(e.Title), data); err != nil {
-			s.log.Warn("onedrive-push feilet", "id", e.ID, "err", err)
-			continue
-		}
-		s.store.TouchOneDriveExport(e.ID)
-	}
-}
 
 // resumeMissions starter løkker for alle godkjente, aktive oppdrag.
 func (s *Server) resumeMissions(ctx context.Context) {
