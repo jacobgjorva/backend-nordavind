@@ -15,6 +15,7 @@ type Agent struct {
 	ID              string     `json:"id"`
 	Name            string     `json:"name"`
 	Personality     string     `json:"personality"` // brukersatt lynne, farger tolknings-tonen og trollet i farmen
+	Category        string     `json:"category"` // brukersatt kategori - styrer klynge og farge i agent-grafen
 	Task            string     `json:"task"`
 	ConnectionID    string     `json:"connection_id"`
 	ScheduleLabel   string     `json:"schedule_label"`   // menneskelig, f.eks. "hver dag kl 08:00"
@@ -124,6 +125,7 @@ func (s *Store) migrateAgents() error {
 		`ALTER TABLE agents ADD COLUMN plan_error TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE agents ADD COLUMN plan_built_at TIMESTAMP`,
 		`ALTER TABLE agents ADD COLUMN personality TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN category TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE agents ADD COLUMN last_snapshot TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE agents ADD COLUMN last_snapshot_at TIMESTAMP`,
 	} {
@@ -205,7 +207,7 @@ func (s *Store) ListAgents(userID string) ([]Agent, error) {
 		`SELECT id, name, task, connection_id, schedule_label, interval_seconds,
 		        run_time, daily_token_limit, write_access, enabled, created_at,
 		        next_run_at, last_run_at, chat_id, mission, send_mail, mission_status, plan_status,
-		        personality, mission_activity
+		        personality, mission_activity, category
 		 FROM agents WHERE user_id = ? ORDER BY created_at DESC`,
 		userID,
 	)
@@ -222,7 +224,7 @@ func (s *Store) ListAgents(userID string) ([]Agent, error) {
 			&a.IntervalSeconds, &a.RunTime, &a.DailyTokenLimit, &write, &enabled,
 			&a.CreatedAt, &a.NextRunAt, &a.LastRunAt, &a.ChatID,
 			&mission, &sendMail, &a.MissionStatus, &a.PlanStatus,
-			&a.Personality, &a.MissionActivity); err != nil {
+			&a.Personality, &a.MissionActivity, &a.Category); err != nil {
 			return nil, err
 		}
 		a.WriteAccess = write != 0
@@ -303,13 +305,21 @@ func (s *Store) ClearAgentPlan(agentID string) error {
 	return err
 }
 
-// SetAgentPersona setter navn og/eller personlighet (tomme felt beholdes).
+// AgentPersona er de brukersatte identitetsfeltene. Nil-peker = ikke endre;
+// tom streng = fjern verdien.
+type AgentPersona struct {
+	Name        string
+	Personality *string
+	Category    *string
+}
+
+// SetAgentPersona setter navn, personlighet og/eller kategori.
 // Chattens tittel følger navnet, som ellers.
-func (s *Store) SetAgentPersona(agentID, userID, name, personality string, setPersonality bool) error {
+func (s *Store) SetAgentPersona(agentID, userID string, p AgentPersona) error {
 	if err := s.agentOwned(agentID, userID); err != nil {
 		return err
 	}
-	if n := strings.TrimSpace(name); n != "" {
+	if n := strings.TrimSpace(p.Name); n != "" {
 		if _, err := s.db.Exec(`UPDATE agents SET name=? WHERE id=?`, n, agentID); err != nil {
 			return err
 		}
@@ -317,9 +327,15 @@ func (s *Store) SetAgentPersona(agentID, userID, name, personality string, setPe
 			return err
 		}
 	}
-	if setPersonality {
+	if p.Personality != nil {
 		if _, err := s.db.Exec(`UPDATE agents SET personality=? WHERE id=?`,
-			strings.TrimSpace(personality), agentID); err != nil {
+			strings.TrimSpace(*p.Personality), agentID); err != nil {
+			return err
+		}
+	}
+	if p.Category != nil {
+		if _, err := s.db.Exec(`UPDATE agents SET category=? WHERE id=?`,
+			strings.TrimSpace(*p.Category), agentID); err != nil {
 			return err
 		}
 	}
