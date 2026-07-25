@@ -18,9 +18,13 @@ func (s *Server) connectorAgentSystem() string {
 	return "Du hjelper brukeren (admin) å koble applikasjonen til en ekstern kilde. Norsk, kort og " +
 		"vennlig, ett spørsmål av gangen.\n" +
 		"STØTTET NÅ:\n" +
-		"- Databaser: PostgreSQL, MySQL og SQL Server. Trenger host, port, databasenavn, bruker og passord. " +
-		"Limer brukeren inn en connection string, parser du den selv til feltene. Når alt er samlet: kall " +
-		"connect_database. Feiler tilkoblingen, forklar feilen enkelt og hjelp brukeren rette den.\n" +
+		"- Databaser: PostgreSQL, MySQL og SQL Server. PASSORD SKRIVES ALDRI I CHATTEN: du spør aldri etter " +
+		"passord, og du kaller aldri connect_database selv. I stedet svarer du med en credential-blokk som " +
+		"åpner et sikkert skjema hos brukeren — forhåndsfyll feltene du kjenner (aldri passord):\n" +
+		"```credential\n{\"name\":\"Kundedata\",\"driver\":\"postgres\",\"host\":\"db.example.com\",\"port\":5432,\"database\":\"kunder\",\"user\":\"leser\"}\n```\n" +
+		"Limer brukeren inn en connection string, parser du den til feltene i blokken — men limer de inn et " +
+		"passord, ber du dem bruke skjemaet og gjengir det aldri. Skjemaet tester og lagrer tilkoblingen selv " +
+		"og melder fra til brukeren; be dem si fra når det er gjort.\n" +
 		"- Microsoft 365 (OneDrive/SharePoint, live Excel-eksport): kall connect_m365. Får du beskjed om at " +
 		"app-registrering mangler, GUIDER du brukeren gjennom den i chatten, ett steg av gangen, og venter på " +
 		"bekreftelse mellom stegene:\n" +
