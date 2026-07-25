@@ -25,6 +25,7 @@ func jsonMarshal(v any) (io.Reader, error) {
 
 var (
 	groundNumRe = regexp.MustCompile(`\d[\d .,]*\d|\d`)
+	groundURLRe = regexp.MustCompile(`https?://[^\s)\]"']+`)
 	// Egennavn midt i setning: stor forbokstav som ikke følger setningsslutt.
 	groundNameRe = regexp.MustCompile(`(^|[^.!?:\n]\s)([A-ZÆØÅ][a-zæøåA-ZÆØÅ]+(?:\s+[A-ZÆØÅ][a-zæøåA-ZÆØÅ]+)*)`)
 )
@@ -63,6 +64,18 @@ func groundingOffenders(prose string, sources []string) []string {
 		seen[d] = true
 		if !strings.Contains(srcDigits, d) && !strings.Contains(src, d) {
 			offenders = append(offenders, strings.TrimSpace(m))
+		}
+	}
+
+	// Lenker: en URL som ikke finnes i kildene er alltid dikt — hard blokk.
+	for _, u := range groundURLRe.FindAllString(prose, -1) {
+		lu := strings.ToLower(strings.TrimRight(u, "./"))
+		if seen[lu] {
+			continue
+		}
+		seen[lu] = true
+		if !strings.Contains(src, lu) {
+			offenders = append(offenders, u)
 		}
 	}
 
@@ -120,9 +133,12 @@ func (s *Server) regroundAnswer(ctx context.Context, full map[string]any, draft 
 	return content
 }
 
-// hasNameOffender: minst ett avvik er et egennavn (ikke bare tall).
+// hasNameOffender: minst ett avvik er et egennavn eller en lenke (ikke tall).
 func hasNameOffender(offenders []string) bool {
 	for _, o := range offenders {
+		if strings.HasPrefix(o, "http://") || strings.HasPrefix(o, "https://") {
+			return true
+		}
 		if normDigits(o) == "" || len(normDigits(o)) < len(strings.ReplaceAll(o, " ", ""))/2 {
 			if regexp.MustCompile(`[A-ZÆØÅa-zæøå]{2,}`).MatchString(o) {
 				return true

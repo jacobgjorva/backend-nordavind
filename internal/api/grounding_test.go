@@ -23,3 +23,11 @@ func TestGroundingIgnoresSmallCountsAndPlainText(t *testing.T) {
 		t.Fatalf("småtall og kildefaste navn skal passere, fikk %v", off)
 	}
 }
+
+func TestGroundingCatchesFabricatedLinks(t *testing.T) {
+	sources := []string{`{"columns":["id"],"rows":[["1"]]}`}
+	off := groundingOffenders("Fila ligger her: [ordre.xlsx](https://moestuecask.sharepoint.com/x/abc)", sources)
+	if len(off) == 0 || !hasNameOffender(off) {
+		t.Fatalf("diktet lenke skulle blokkeres hardt, fikk %v", off)
+	}
+}

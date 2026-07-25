@@ -404,7 +404,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		// overstyre HELE svaret).
 		streamThis := !usedTool && !(dbAttempted && !dbSucceeded) &&
 			flowKey != "create_widget" && flowKey != "edit_widget" &&
-			flowKey != "create_presentation" && widgetSlug == ""
+			flowKey != "create_presentation" && flowKey != "export_excel" && widgetSlug == ""
 		calls, usage, content := s.relayRound(resp, emit, streamThis)
 		resp.Body.Close()
 		promptTokens += usage.PromptTokens
@@ -471,11 +471,19 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 						} else {
 							emit(contentSSE("Jeg fikk ikke formulert dette kildefast — se kildene over for detaljene."))
 						}
+						if flowKey == "export_excel" && lastDBResult != "" {
+							emit(contentSSE("\n\n```export\n" + lastDBResult + "\n```"))
+						}
 						emit("data: [DONE]")
 						return
 					}
 				}
 				emit(contentSSE(final))
+			}
+			// Eksportflyt: eksportkortet leveres ALLTID i kode — brukeren ba
+			// om eksport, da skal valget stå der uten oppfølgingsspørsmål.
+			if flowKey == "export_excel" && lastDBResult != "" && !strings.Contains(content, "```export") {
+				emit(contentSSE("\n\n```export\n" + lastDBResult + "\n```"))
 			}
 			// Bulletproof: ny widget skal ALLTID rendres, selv om modellen
 			// glemmer blokka i svaret sitt.

@@ -24,7 +24,8 @@ var m365SearchTool = map[string]any{
 		"name": "m365_search",
 		"description": "Søk i brukerens OneDrive/SharePoint-filer (Microsoft 365). Bruk når brukeren spør " +
 			"om egne filer, dokumenter, regneark eller presentasjoner. Returnerer navn, id og sist endret. " +
-			"Bruk konkrete søkeord; query='*' lister de nyeste filene.",
+			"Bruk konkrete søkeord; query='*' lister de nyeste filene. Gir søket ingen treff: utvid det " +
+			"SELV (bredere ord, synonymer, query='*') minst én gang FØR du melder tomt — spør aldri om lov.",
 		"parameters": map[string]any{
 			"type": "object",
 			"properties": map[string]any{

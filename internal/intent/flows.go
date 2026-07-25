@@ -105,9 +105,12 @@ var Flows = map[string]Flow{
 	},
 
 	"export_excel": {
-		// Eksport-modalen eies av UI-et; modellen skal bare peke på tabellen.
-		Deterministic: true,
-		Fallback:      FreeChatKey,
+		// Modellen henter dataene; eksportkortet appendes GARANTERT i kode
+		// (aldri «vil du at jeg skal eksportere?»).
+		Tools:    []string{ToolQueryDatabase, ToolShowTable},
+		Model:    "mid",
+		MaxChars: 150,
+		Fallback: FreeChatKey,
 	},
 
 	"data_question": {
