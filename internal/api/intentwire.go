@@ -149,7 +149,11 @@ func (s *Server) applyIntent(user store.User, full map[string]any) (block string
 	// dataspørsmål skal beholde db-verktøyene). Stateless: forrige melding
 	// ligger i payloaden og re-rutes — koster ett ekstra motor-kall kun for
 	// korte, usikre oppfølginger.
-	if d.Method != intent.MethodDirect && len([]rune(strings.TrimSpace(msg))) <= 60 {
+	// Også et DIREKTE smalltalk/fri chat-treff regnes som svakt for korte
+	// oppfølginger: «hva ser du?» ligner smalltalk-eksemplene tekstlig, men i
+	// en datadialog er det et dataspørsmål.
+	weak := d.Method != intent.MethodDirect || d.Key == "" || d.Key == "smalltalk"
+	if weak && len([]rune(strings.TrimSpace(msg))) <= 60 {
 		if prev := prevUserText(full); prev != "" {
 			pd := eng.Resolve(ctx, prev, user.Role == "admin")
 			if pk, pf := intent.FlowFor(pd); pf.Sticky && pd.Key != "" {
