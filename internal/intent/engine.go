@@ -212,9 +212,25 @@ func (e *Engine) Resolve(ctx context.Context, message string, isAdmin bool) Deci
 	if cands[0].Score >= directScore &&
 		(len(cands) == 1 || cands[0].Score-cands[1].Score >= directMargin) &&
 		!(cands[0].Key != FreeChatKey && cands[0].Score-best[FreeChatKey] < freeChatMargin) {
+		// Panel-vern: skal treffet spawne en DETERMINISTISK flyt (panel/skjema
+		// som overtar chatten), må dommeren bekrefte det først — ren
+		// tekstlikhet får aldri alene kapre samtalen («se om X har et api …»
+		// traff forbrukspanelet direkte). Modellflyter beholder direct: der
+		// koster en bom bare verktøyskop, ikke et feil panel.
+		if f, ok := Flows[cands[0].Key]; ok && f.Deterministic {
+			return e.judgeDecision(ctx, msg, isAdmin, cands, start, cands[0].Key)
+		}
 		return Decision{Key: cands[0].Key, Method: MethodDirect, Candidates: cands, Elapsed: time.Since(start)}
 	}
 
+	return e.judgeDecision(ctx, msg, isAdmin, cands, start, "")
+}
+
+// judgeDecision lar dommeren klassifisere mot hele det rollefiltrerte
+// registeret. directKey er satt når et direktetreff skal bekreftes: er
+// dommeren enig, logges det fortsatt som direct.
+func (e *Engine) judgeDecision(ctx context.Context, msg string, isAdmin bool, cands []Candidate, start time.Time, directKey string) Decision {
+	none := Decision{Method: MethodNone}
 	// Usikkert: dommeren klassifiserer mot HELE det rollefiltrerte registeret
 	// pluss et eksplisitt fri chat-valg — topp-3-innsnevring ga systematiske
 	// bom når riktig flyt ikke nådde topp 3 på ren tekstlikhet.
@@ -249,6 +265,10 @@ func (e *Engine) Resolve(ctx context.Context, message string, isAdmin bool) Deci
 	}
 	if pick == AskKey {
 		return Decision{Method: MethodAsk, Candidates: cands, Elapsed: time.Since(start)}
+	}
+	if pick == directKey {
+		// Bekreftet direktetreff — logges som direct for målbarhet.
+		return Decision{Key: pick, Method: MethodDirect, Candidates: cands, Elapsed: time.Since(start)}
 	}
 	return Decision{Key: pick, Method: MethodJudge, Candidates: cands, Elapsed: time.Since(start)}
 }

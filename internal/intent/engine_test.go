@@ -248,3 +248,23 @@ func TestAskLabelsCoverRegistry(t *testing.T) {
 		}
 	}
 }
+
+// Panel-vern: et direktetreff på en DETERMINISTISK flyt må bekreftes av
+// dommeren; er dommeren uenig, vinner dommeren.
+func TestDeterministicDirectNeedsJudge(t *testing.T) {
+	em := registryStub()
+	// connect_database er deterministisk i flyt-tabellen.
+	em.vecs["koble til basen"] = []float32{1, 0.05, 0}
+	j := &stubJudge{pick: "web_fact"}
+	e := buildEngine(t, em, j)
+	d := e.Resolve(context.Background(), "koble til basen", true)
+	if d.Method != MethodJudge || d.Key != "web_fact" {
+		t.Fatalf("dommeren skulle overstyrt panelet, fikk %+v", d)
+	}
+	// Er dommeren enig, logges det fortsatt som direct.
+	j.pick = "connect_database"
+	d = e.Resolve(context.Background(), "koble til basen", true)
+	if d.Method != MethodDirect || d.Key != "connect_database" {
+		t.Fatalf("bekreftet direktetreff skulle vært direct, fikk %+v", d)
+	}
+}
