@@ -372,7 +372,7 @@ func (s *Server) handleWidgetQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer db.Close()
-	cols, rows, err := connector.SafeQueryN(r.Context(), db, dc.creds.Driver, sql, dc.allowed, 5000)
+	cols, rows, err := connector.SafeQueryViewsN(r.Context(), db, dc.creds.Driver, sql, dc.allowed, dc.views, 5000)
 	if err != nil {
 		http.Error(w, "spørringen feilet: "+err.Error(), http.StatusBadGateway)
 		return
