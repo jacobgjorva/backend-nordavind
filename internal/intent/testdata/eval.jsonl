@@ -77,3 +77,4 @@
 {"text": "hva skjer med dataene våre hvis vi sier opp?", "want": ""}
 {"text": "excel-filene på onedrive skal være live", "want": "export_excel"}
 {"text": "hvem har tilgang til kundedatabasen?", "want": "manage_users"}
+{"text": "se om scaleway har et api som gir oss kostnad per token bruk", "want": "web_fact"}

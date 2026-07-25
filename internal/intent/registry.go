@@ -145,7 +145,7 @@ var Registry = []Intent{
 	},
 	{
 		Key:         "usage_stats",
-		Description: "Se plattformens eget AI-forbruk: tokens brukt, hva AI-en koster oss, kvoter per bruker — IKKE brukerens filer, dokumenter eller bedriftsdata",
+		Description: "Se plattformens eget AI-forbruk: tokens brukt, hva AI-en koster oss, kvoter per bruker — IKKE brukerens filer, og IKKE research om eksterne leverandører eller API-er",
 		Examples: []string{
 			"hvor mye tokens har vi brukt denne måneden?",
 			"hva koster AI-bruken oss?",
@@ -286,6 +286,9 @@ var Registry = []Intent{
 			"sjekk hva konkurrentene priser dette til",
 			"hva er best av mysql og postgres?",
 			"hva er forskjellen på to skytjenester?",
+			"se om leverandøren har et api for dette",
+			"undersøk hva tjenesten deres støtter",
+			"finn ut om verktøyet har en integrasjon",
 		},
 	},
 	{
