@@ -256,6 +256,13 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				}
 			case "web_fact":
 				tools = append(tools, webSearchTool, fetchURLTool)
+			case "m365_files":
+				if _, ok := s.m365Connected(ctx); ok {
+					tools = append(tools, m365SearchTool, m365ReadTool)
+				} else {
+					// Ikke koblet: oppfør deg som fri chat (fail-open).
+					tools = append(tools, webSearchTool, fetchURLTool)
+				}
 			case "smalltalk":
 				// Ingen verktøy — rent samtalesvar.
 			case "connect_database", "connect_m365":
@@ -265,6 +272,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				tools = append(tools, webSearchTool, fetchURLTool)
 				if dbCtx != nil {
 					tools = append(tools, dbCtx.tool, showTableTool)
+				}
+				if _, ok := s.m365Connected(ctx); ok {
+					tools = append(tools, m365SearchTool, m365ReadTool)
 				}
 			}
 			if len(tools) > 0 {
