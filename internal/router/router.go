@@ -27,13 +27,23 @@ var Aliases = map[string]string{
 	"kuling": VisionModel,
 }
 
-// Resolve oversetter et alias til faktisk modellnavn; ukjente navn
-// returneres uendret.
+// katalog: modellene som FÅR gå upstream. Alt annet (utgåtte modeller fra
+// gamle klienter/localStorage, tastefeil) normaliseres til MidModel — en
+// deprekert modell skal aldri kunne overleve i omløp.
+var katalog = map[string]bool{
+	MidModel: true, HeavyModel: true, TopModel: true, VisionModel: true,
+}
+
+// Resolve oversetter et alias til faktisk modellnavn; "auto" slippes gjennom
+// (løses av kompleksitetsrutingen), alle ukjente navn tvinges til MidModel.
 func Resolve(model string) string {
 	if real, ok := Aliases[strings.ToLower(model)]; ok {
 		return real
 	}
-	return model
+	if model == "auto" || model == "" || katalog[model] {
+		return model
+	}
+	return MidModel
 }
 
 // heavyMarkers er signaler på at spørsmålet krever tolkning, analyse
