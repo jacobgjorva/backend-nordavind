@@ -795,14 +795,17 @@ func (s *Server) runWebSearch(ctx context.Context, query string) (string, []sour
 	if len(results) > 3 {
 		results = results[:3]
 	}
-	pages := s.search.FetchPages(ctx, results, 2800)
+	// FART: kun treff-sammendragene returneres (1-2 s) — full sidehenting av
+	// tre nettsider (opptil 8 s hver) gjøres BARE når modellen eksplisitt ber
+	// om dybde via fetch_url. Sammendragene dekker de fleste faktaspørsmål.
 	s.log.Info("websøk", "query", query, "treff", len(results))
 
 	refs := make([]sourceRef, 0, len(results))
 	for _, r := range results {
 		refs = append(refs, sourceRef{Title: r.Title, URL: r.URL})
 	}
-	return search.FormatContext(query, results, pages), refs
+	return search.FormatContext(query, results, nil) +
+		"\nTrenger du mer enn sammendragene: kall fetch_url på den mest relevante kilden.", refs
 }
 
 // flowNeedsDB: flyten lover databaseverktøy i flyt-tabellen.
