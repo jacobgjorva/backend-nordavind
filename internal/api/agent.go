@@ -24,8 +24,9 @@ var webSearchTool = map[string]any{
 		"name": "web_search",
 		"description": "Søk på nettet. Bruk når svaret krever fersk informasjon eller fakta om " +
 			"spesifikke entiteter (personer, selskaper, produkter, steder, hendelser) du ikke er " +
-			"sikker på. Gjør ett kall per entitet/tema. Ga ikke resultatene svaret: søk igjen " +
-			"med en annen formulering før du gir opp.",
+			"sikker på. Gjør ett kall per entitet/tema. FANT DU IKKE SVARET: gjør MINST to nye søk " +
+			"med ulike vinkler (synonymer, offisielle begreper, engelsk) FØR du melder tomt — å gi opp " +
+			"etter ett søk er feil. Meld først «fant ikke» når flere vinkler faktisk er prøvd.",
 		"parameters": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -357,6 +358,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// overstyres svaret i kode — modellen diktet en «nyligste salgsrad» etter
 	// tre timeouts.
 	dbAttempted, dbSucceeded := false, false
+	// Kode-håndhevet søkeinnsats: «fant ikke» etter bare ett søk godtas aldri —
+	// modellen sendes tilbake for flere vinkler (én gang).
+	searchNudged := false
 	// Kildekontroll: alt verktøyene returnerer denne turen, ordrett — prosaen
 	// måles mot dette før den vises (grounding.go).
 	var toolResults []string
@@ -409,6 +413,16 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		completionTokens += usage.CompletionTokens
 		if len(calls) == 0 {
 			trimmed := strings.TrimSpace(content)
+			if !searchNudged && searches == 1 && gaveUpRe.MatchString(trimmed) && round < roundCap {
+				searchNudged = true
+				msgs, _ := full["messages"].([]any)
+				full["messages"] = append(msgs,
+					map[string]any{"role": "assistant", "content": trimmed},
+					map[string]any{"role": "user", "content": "Ikke gi deg etter ett søk: gjør minst to nye søk med helt andre vinkler (offisielle begreper, synonymer, engelsk) og svar deretter."})
+				step, _ := json.Marshal(map[string]any{"nordavind_step": "Søker med nye vinkler"})
+				emit("data: " + string(step))
+				continue
+			}
 			// Datavern: databasen ble forsøkt men ga aldri ett eneste svar —
 			// da finnes det ingen tall å gjengi. Ærlig feilmelding i kode i
 			// stedet for modellens tekst (som kan være fabrikkert).
@@ -886,3 +900,6 @@ func emitAfter(emit func(string), d time.Duration, status string) func() {
 	}()
 	return func() { close(done) }
 }
+
+// gaveUpRe: svar som melder tomt uten reell innsats.
+var gaveUpRe = regexp.MustCompile(`(?i)fant (ikke|ingen)|ingen pålitelig|ikke pålitelig informasjon`)
