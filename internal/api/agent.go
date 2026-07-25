@@ -386,10 +386,14 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			return
 		}
 
-		// Svaret bufres (streamContent=false): vi måler det FØR vi viser noe, så
-		// vi kan fange både tomt svar (backstop) og for lange svar (komprimering)
-		// uten å kappe midt i en setning. Arbeids-indikatoren dekker ventetiden.
-		calls, usage, content := s.relayRound(resp, emit, false)
+		// FART: svaret STRØMMES live (hybrid) — brukeren ser hvert ord i det
+		// det skrives. Kun spesialtilfeller bufres: widget-flyter (blokk-
+		// garantien) og turer der databasen har feilet (datavernet må kunne
+		// overstyre HELE svaret).
+		streamThis := !(dbAttempted && !dbSucceeded) &&
+			flowKey != "create_widget" && flowKey != "edit_widget" &&
+			flowKey != "create_presentation" && widgetSlug == ""
+		calls, usage, content := s.relayRound(resp, emit, streamThis)
 		resp.Body.Close()
 		promptTokens += usage.PromptTokens
 		completionTokens += usage.CompletionTokens
@@ -400,6 +404,22 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			// stedet for modellens tekst (som kan være fabrikkert).
 			if dbAttempted && !dbSucceeded {
 				emit(contentSSE("Databasen svarte ikke i tide på dette, så jeg har ingen tall å gi deg akkurat nå — prøv igjen om et lite øyeblikk."))
+				emit("data: [DONE]")
+				return
+			}
+			if streamThis {
+				// Alt synlig er allerede sendt live. Kun tomhets-backstop og
+				// grense-LOGG igjen (aldri omskriving av noe brukeren har sett).
+				switch {
+				case len([]rune(trimmed)) < 3 && usedTool && !actionTool:
+					step, _ := json.Marshal(map[string]any{"nordavind_step": "Oppsummerer funnene"})
+					emit("data: " + string(step))
+					s.streamBackstop(ctx, full, emit, &promptTokens, &completionTokens)
+				case trimmed == "" && !actionTool:
+					emit(contentSSE(backstopGraceful))
+				case len([]rune(trimmed)) > answerLimit:
+					s.log.Info("svar over myk grense (streamet)", "tegn", len([]rune(trimmed)), "grense", answerLimit)
+				}
 				emit("data: [DONE]")
 				return
 			}

@@ -177,14 +177,16 @@ func flowModel(level string) string {
 // muterer payloaden etter flyt-kontrakten. Returnerer et ferdig blokk-svar
 // for deterministiske panel-flyter ("" ellers). Fail-open hele veien: nil
 // motor eller fri chat → payloaden røres ikke.
-func (s *Server) applyIntent(user store.User, full map[string]any) (block string) {
+// applyIntent ruter meldingen innenfor kallerens tidsbudsjett. Returnerer et
+// ferdig blokk-svar for deterministiske flyter, og ellers en apply-funksjon
+// som kalleren kjører for å skru flyt-kontrakten på payloaden (mutasjon skjer
+// hos kalleren så ruting og kunnskapsoppslag kan kjøre parallelt uten race).
+func (s *Server) applyIntent(ctx context.Context, user store.User, full map[string]any) (block string, apply func()) {
 	eng := s.intent.get()
 	msg := lastUserText(full)
 	if eng == nil || msg == "" {
-		return ""
+		return "", nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
-	defer cancel()
 	d := s.intent.resolveCached(ctx, eng, msg, user.Role == "admin")
 
 	// Sticky v1: en KORT oppfølging uten klar egen intent (ikke direct) arver
@@ -231,7 +233,7 @@ func (s *Server) applyIntent(user store.User, full map[string]any) (block string
 		a := intent.AskLabels[d.Candidates[0].Key]
 		b := intent.AskLabels[d.Candidates[1].Key]
 		if a != "" && b != "" && a != b {
-			return "Bare så jeg treffer riktig: vil du " + a + ", eller " + b + "?"
+			return "Bare så jeg treffer riktig: vil du " + a + ", eller " + b + "?", nil
 		}
 	}
 
@@ -240,25 +242,25 @@ func (s *Server) applyIntent(user store.User, full map[string]any) (block string
 
 	if flow.Deterministic {
 		if panel, ok := deterministicPanels[key]; ok {
-			return "```admin\n" + panel + "\n```"
+			return "```admin\n" + panel + "\n```", nil
 		}
 		if key == "connect_database" {
-			return credentialBlock(msg)
+			return credentialBlock(msg), nil
 		}
 		if key == "connect_m365" {
-			return s.m365SetupBlock(user)
+			return s.m365SetupBlock(user), nil
 		}
 		// Deterministisk uten server-løype: fri chat (fallback).
-		return ""
+		return "", nil
 	}
-	// Flyt-kontrakt inn i payloaden. Kun flyter med definerte verktøy snevres;
-	// resten beholder dagens fulle oppsett (free_chat-kontrakten).
-	full[flowKeyField] = key
-	if flow.MaxChars > 0 {
-		full[flowMaxField] = flow.MaxChars
+	// Flyt-kontrakt: mutasjonen utsettes til kalleren (parallell-trygt).
+	return "", func() {
+		full[flowKeyField] = key
+		if flow.MaxChars > 0 {
+			full[flowMaxField] = flow.MaxChars
+		}
+		full["model"] = flowModel(flow.Model)
 	}
-	full["model"] = flowModel(flow.Model)
-	return ""
 }
 
 // m365SetupBlock er det deterministiske oppskrift-steget for connect_m365:

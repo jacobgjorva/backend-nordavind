@@ -190,11 +190,38 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 					case "shadow":
 						s.shadowIntent(user, lastUserText(full))
 					case "on":
-						if block := s.applyIntent(user, full); block != "" {
-							s.respondSSEBlock(w, block)
+						// FART: ruting og kunnskapsoppslag kjører PARALLELT med et
+						// hardt tidsbudsjett — ingen av dem får noensinne holde
+						// modellen tilbake lenger enn budsjettet (fail-open).
+						rctx, rcancel := context.WithTimeout(r.Context(), routingBudget)
+						type routed struct {
+							block string
+							apply func()
+						}
+						rCh := make(chan routed, 1)
+						kbCh := make(chan string, 1)
+						go func() {
+							b, a := s.applyIntent(rctx, user, full)
+							rCh <- routed{block: b, apply: a}
+						}()
+						go func() { kbCh <- s.knowledgeFor(rctx, full) }()
+						rd := <-rCh
+						kb := <-kbCh
+						rcancel()
+						if rd.block != "" {
+							s.respondSSEBlock(w, rd.block)
 							s.log.Info("chat/completions", "mode", "intent-deterministic",
 								"dur", time.Since(start).Round(time.Millisecond))
 							return
+						}
+						if rd.apply != nil {
+							rd.apply()
+						}
+						if kb != "" {
+							injectSystem(full, kb)
+						}
+						if b, err := json.Marshal(full); err == nil {
+							patched = b
 						}
 					}
 				}
@@ -202,11 +229,13 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Berik med relevant bransjekunnskap fra tenantens graf.
-	if kb := s.knowledgeFor(r.Context(), full); kb != "" {
-		injectSystem(full, kb)
-		if b, err := json.Marshal(full); err == nil {
-			patched = b
+	// Berik med relevant bransjekunnskap (kun moduser uten parallell-løypa over).
+	if s.cfg.IntentMode != "on" {
+		if kb := s.knowledgeFor(r.Context(), full); kb != "" {
+			injectSystem(full, kb)
+			if b, err := json.Marshal(full); err == nil {
+				patched = b
+			}
 		}
 	}
 
@@ -253,6 +282,11 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		"dur", time.Since(start).Round(time.Millisecond),
 	)
 }
+
+// routingBudget er maksimal tid ruting + kunnskapsoppslag får bruke FORAN
+// modellen. Typisk lander begge på 200-500 ms; ved treghet fail-open til
+// fri chat i stedet for å forsinke svaret.
+const routingBudget = 900 * time.Millisecond
 
 // withRoutingDefaults gjør to ting: løser "auto" til konkret modell ut fra
 // spørsmålets kompleksitet, og sorterer leverandører på throughput hvis
