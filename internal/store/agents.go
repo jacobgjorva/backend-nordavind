@@ -43,6 +43,11 @@ type Agent struct {
 	PlanError   string     `json:"plan_error"`   // hvorfor planen ikke ble bygget/er ødelagt
 	PlanBuiltAt *time.Time `json:"plan_built_at,omitempty"`
 
+	// Minne mellom kjøringer: rådataene forrige kjøring hentet. Er de identiske
+	// denne gangen, har ingenting endret seg — da trengs verken tolkning eller
+	// varsel. Snapshotet eksponeres ikke til klienten (kan være stort).
+	LastSnapshot string `json:"-"`
+
 	CreatedAt time.Time `json:"created_at"`
 	ChatID          string     `json:"chat_id"`
 	NextRunAt       *time.Time `json:"next_run_at,omitempty"`
@@ -117,6 +122,8 @@ func (s *Store) migrateAgents() error {
 		`ALTER TABLE agents ADD COLUMN plan_status TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE agents ADD COLUMN plan_error TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE agents ADD COLUMN plan_built_at TIMESTAMP`,
+		`ALTER TABLE agents ADD COLUMN last_snapshot TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN last_snapshot_at TIMESTAMP`,
 	} {
 		if _, err := s.db.Exec(col); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column") {
@@ -228,7 +235,7 @@ func (s *Store) DueAgents(now time.Time) ([]Agent, error) {
 	rows, err := s.db.Query(
 		`SELECT id, tenant_id, user_id, name, task, connection_id, schedule_label,
 		        interval_seconds, run_time, daily_token_limit, write_access, next_run_at, chat_id, push_enabled,
-		        mission, send_mail, mission_state, mission_status, plan, plan_status
+		        mission, send_mail, mission_state, mission_status, plan, plan_status, last_snapshot
 		 FROM agents
 		 WHERE enabled = 1 AND mission = 0 AND next_run_at IS NOT NULL AND next_run_at <= ?
 		 ORDER BY next_run_at`,
@@ -247,7 +254,7 @@ func (s *Store) DueAgents(now time.Time) ([]Agent, error) {
 			&a.ConnectionID, &a.ScheduleLabel, &a.IntervalSeconds, &a.RunTime,
 			&a.DailyTokenLimit, &write, &a.NextRunAt, &a.ChatID, &push,
 			&mission, &sendMail, &a.MissionState, &a.MissionStatus,
-			&a.Plan, &a.PlanStatus); err != nil {
+			&a.Plan, &a.PlanStatus, &a.LastSnapshot); err != nil {
 			return nil, err
 		}
 		a.WriteAccess = write != 0
@@ -281,11 +288,23 @@ func (s *Store) SetAgentPlan(agentID, plan string) error {
 }
 
 // ClearAgentPlan fjerner planen helt (brukes når oppgaven endres, så den gamle
-// planen aldri kjøres mot en ny oppgave).
+// planen aldri kjøres mot en ny oppgave). Snapshotet nullstilles med, siden
+// gamle data ikke er sammenlignbare med det en ny plan henter.
 func (s *Store) ClearAgentPlan(agentID string) error {
 	_, err := s.db.Exec(
-		`UPDATE agents SET plan = '', plan_status = '', plan_error = '', plan_built_at = NULL
+		`UPDATE agents SET plan = '', plan_status = '', plan_error = '', plan_built_at = NULL,
+		        last_snapshot = '', last_snapshot_at = NULL
 		 WHERE id = ?`, agentID,
+	)
+	return err
+}
+
+// SetAgentSnapshot lagrer rådataene fra siste kjøring, så neste kjøring kan se
+// hva som faktisk er endret.
+func (s *Store) SetAgentSnapshot(agentID, snapshot string) error {
+	_, err := s.db.Exec(
+		`UPDATE agents SET last_snapshot = ?, last_snapshot_at = ? WHERE id = ?`,
+		snapshot, time.Now(), agentID,
 	)
 	return err
 }

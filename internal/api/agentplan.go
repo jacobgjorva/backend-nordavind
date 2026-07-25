@@ -432,25 +432,49 @@ func planSummary(p agentPlan) string {
 	return b.String()
 }
 
-// executeAgentPlan kjører en ferdig plan: stegene utføres deterministisk uten
-// modellen, og modellen brukes kun til å tolke resultatet. Det gjør hver
-// kjøring billig og tallene konsistente over tid.
-func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (string, int, error) {
-	var plan agentPlan
-	if err := json.Unmarshal([]byte(a.Plan), &plan); err != nil {
-		return "", 0, fmt.Errorf("ugyldig lagret plan: %w", err)
-	}
-	if len(plan.Steps) == 0 {
-		return "", 0, fmt.Errorf("planen har ingen steg")
-	}
+// planRun er resultatet av én plan-kjøring.
+type planRun struct {
+	output    string // det brukerrettede svaret (tomt hvis ingenting er endret)
+	tokens    int
+	alert     bool // oppfyller alert_rule — verdt å vekke brukeren
+	unchanged bool // rådataene er identiske med forrige kjøring
+}
 
-	ctx, cancel := context.WithTimeout(ctx, agentHTTPTimeoutSeconds*time.Second)
-	defer cancel()
+// reportTool lar tolkningen svare strukturert, så koden — ikke modellen —
+// avgjør hva som postes og varsles om.
+var reportTool = map[string]any{
+	"type": "function",
+	"function": map[string]any{
+		"name":        "report",
+		"description": "Lever resultatet av kjøringen. Kall dette én gang, som eneste svar.",
+		"parameters": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"summary": map[string]any{
+					"type":        "string",
+					"description": "kort svar til brukeren på norsk, med de faktiske tallene",
+				},
+				"changed": map[string]any{
+					"type":        "boolean",
+					"description": "true hvis noe reelt har endret seg siden forrige kjøring",
+				},
+				"alert": map[string]any{
+					"type":        "boolean",
+					"description": "true KUN hvis regelen for når brukeren skal varsles er oppfylt",
+				},
+			},
+			"required": []string{"summary", "alert"},
+		},
+	},
+}
 
+// runPlanSteps utfører stegene deterministisk og returnerer både teksten
+// modellen skal tolke og et snapshot til sammenligning neste gang.
+func (s *Server) runPlanSteps(ctx context.Context, a store.Agent, plan agentPlan) (data, snapshot string, failed int) {
 	dbCtx := s.buildDBTool(a.TenantID, a.UserID, "")
+	var b strings.Builder
+	snap := make([]map[string]string, 0, len(plan.Steps))
 
-	var data strings.Builder
-	var failed int
 	for i, st := range plan.Steps {
 		var res string
 		switch strings.ToLower(strings.TrimSpace(st.Kind)) {
@@ -470,34 +494,104 @@ func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (string, i
 		default:
 			continue
 		}
-		fmt.Fprintf(&data, "### Steg %d: %s\n%s\n\n", i+1, st.Label, truncate(res, planStepChars))
+		res = truncate(res, planStepChars)
+		fmt.Fprintf(&b, "### Steg %d: %s\n%s\n\n", i+1, st.Label, res)
+		snap = append(snap, map[string]string{"label": st.Label, "data": res})
 	}
+	raw, _ := json.Marshal(snap)
+	return b.String(), string(raw), failed
+}
+
+// executeAgentPlan kjører en ferdig plan: stegene utføres deterministisk uten
+// modellen, og modellen brukes kun til å tolke det som faktisk er nytt. Er
+// dataene identiske med forrige kjøring, brukes ingen tokens i det hele tatt.
+func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (planRun, error) {
+	var run planRun
+	var plan agentPlan
+	if err := json.Unmarshal([]byte(a.Plan), &plan); err != nil {
+		return run, fmt.Errorf("ugyldig lagret plan: %w", err)
+	}
+	if len(plan.Steps) == 0 {
+		return run, fmt.Errorf("planen har ingen steg")
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, agentHTTPTimeoutSeconds*time.Second)
+	defer cancel()
+
+	data, snapshot, failed := s.runPlanSteps(ctx, a, plan)
 
 	// Hele planen feilet — kilden eller skjemaet har trolig endret seg.
 	// Marker planen som ødelagt og bygg den på nytt.
 	if failed == len(plan.Steps) {
 		s.store.SetPlanStatus(a.ID, "broken", "alle steg feilet ved kjøring")
 		s.startPlanBuild(a.ID)
-		return "", 0, fmt.Errorf("planen virker ikke lenger — bygger den på nytt")
+		return run, fmt.Errorf("planen virker ikke lenger — bygger den på nytt")
 	}
 
-	system := "Du tolker resultatet av en agent-kjøring for brukeren. Dataene under er allerede hentet " +
-		"— du skal ikke hente noe mer, og aldri be om tilgang. Svar kort og konkret på norsk, med de " +
-		"faktiske tallene. Ingen innledning, ingen spørsmål tilbake. Er det ingenting å melde, si det " +
-		"med én setning."
+	// Identiske rådata: ingenting har skjedd. Ingen tolkning, ingen melding,
+	// ingen tokens — agenten tier heller enn å gjenta seg selv.
+	if a.LastSnapshot != "" && snapshot == a.LastSnapshot {
+		run.unchanged = true
+		return run, nil
+	}
+
+	system := "Du tolker resultatet av en agent-kjøring for brukeren. Dataene er allerede hentet — du " +
+		"skal ikke hente noe mer, og aldri be om tilgang. Har du forrige kjørings data, er jobben din å " +
+		"si hva som er ENDRET: nevn tallene før og nå, ikke gjenta det som står stille. Kort og konkret " +
+		"på norsk, ingen innledning, ingen spørsmål tilbake. Avslutt med report."
 	userMsg := "Oppgave: " + a.Task +
 		"\n\nDette skal vurderes: " + plan.Watch +
-		"\nVerdt å si fra om: " + plan.AlertRule +
-		"\n\nFerske data:\n" + truncate(data.String(), planReportChar)
+		"\nBrukeren skal varsles når: " + plan.AlertRule
+	if a.LastSnapshot != "" {
+		userMsg += "\n\nForrige kjørings data:\n" + truncate(snapshotText(a.LastSnapshot), planReportChar)
+	} else {
+		userMsg += "\n\n(Første kjøring — ingen tidligere data å sammenligne med.)"
+	}
+	userMsg += "\n\nFerske data:\n" + truncate(data, planReportChar)
 
 	msg, err := s.chatOnce(ctx, router.MidModel, []any{
 		map[string]any{"role": "system", "content": system},
 		map[string]any{"role": "user", "content": userMsg},
-	}, nil, 800)
+	}, []any{reportTool}, 800)
+	run.tokens = msg.tokens
 	if err != nil {
-		return "", msg.tokens, err
+		return run, err
 	}
-	return msg.visible, msg.tokens, nil
+
+	run.output = msg.visible
+	for _, c := range msg.calls {
+		if c.name != "report" {
+			continue
+		}
+		var rep struct {
+			Summary string `json:"summary"`
+			Changed bool   `json:"changed"`
+			Alert   bool   `json:"alert"`
+		}
+		if err := json.Unmarshal([]byte(c.args), &rep); err == nil {
+			if strings.TrimSpace(rep.Summary) != "" {
+				run.output = strings.TrimSpace(rep.Summary)
+			}
+			run.alert = rep.Alert
+		}
+		break
+	}
+
+	s.store.SetAgentSnapshot(a.ID, snapshot)
+	return run, nil
+}
+
+// snapshotText gjør et lagret snapshot lesbart igjen for sammenligning.
+func snapshotText(snapshot string) string {
+	var snap []map[string]string
+	if err := json.Unmarshal([]byte(snapshot), &snap); err != nil {
+		return snapshot
+	}
+	var b strings.Builder
+	for i, st := range snap {
+		fmt.Fprintf(&b, "### Steg %d: %s\n%s\n\n", i+1, st["label"], st["data"])
+	}
+	return b.String()
 }
 
 // truncate kutter tekst til n tegn og markerer at det er kuttet.

@@ -55,6 +55,32 @@ func TestValidatePlanAvviserSQLUtenDatabase(t *testing.T) {
 	}
 }
 
+// Snapshotet lagres som JSON, men mates til modellen i samme format som ferske
+// data — ellers ville «forrige» og «nå» sett ulike ut av feil grunn.
+func TestSnapshotTextGjenskaperStegformat(t *testing.T) {
+	raw, _ := json.Marshal([]map[string]string{
+		{"label": "Omsetning siste 7 dager", "data": `{"rows":[[1200]]}`},
+		{"label": "Åpne avvik", "data": `{"rows":[[3]]}`},
+	})
+	got := snapshotText(string(raw))
+	for _, want := range []string{
+		"### Steg 1: Omsetning siste 7 dager",
+		`{"rows":[[1200]]}`,
+		"### Steg 2: Åpne avvik",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("mangler %q i:\n%s", want, got)
+		}
+	}
+}
+
+// Et snapshot som ikke lar seg parse skal fortsatt gi noe brukbart, ikke tomt.
+func TestSnapshotTextTalerUgyldigJSON(t *testing.T) {
+	if got := snapshotText("ikke json"); got != "ikke json" {
+		t.Errorf("ventet uendret tekst, fikk %q", got)
+	}
+}
+
 // runDBQuery svarer med tekst ved feil og JSON ved suksess — plan-validering
 // og -kjøring skiller på nettopp det.
 func TestPlanQueryFailed(t *testing.T) {

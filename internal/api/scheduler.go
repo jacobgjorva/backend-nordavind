@@ -187,18 +187,19 @@ func (s *Server) runAgentOnce(ctx context.Context, a store.Agent, now time.Time)
 	// og med samme tall hver gang. Uten plan (eller hvis den nettopp brakk)
 	// faller vi tilbake til fri kjøring, så agenten alltid gjør nytte.
 	var (
-		output string
-		tokens int
-		err    error
+		run     planRun
+		planned bool
+		err     error
 	)
 	if a.PlanStatus == "ready" && strings.TrimSpace(a.Plan) != "" {
-		output, tokens, err = s.executeAgentPlan(ctx, a)
+		run, err = s.executeAgentPlan(ctx, a)
+		planned = err == nil
 		if err != nil {
 			s.log.Warn("plan-kjøring feilet, faller tilbake til fri kjøring", "id", a.ID, "err", err)
-			output, tokens, err = s.executeAgent(ctx, a)
+			run.output, run.tokens, err = s.executeAgent(ctx, a)
 		}
 	} else {
-		output, tokens, err = s.executeAgent(ctx, a)
+		run.output, run.tokens, err = s.executeAgent(ctx, a)
 		// Ingen plan ennå: bygg den i bakgrunnen, så neste kjøring blir bedre.
 		if a.PlanStatus == "" {
 			s.startPlanBuild(a.ID)
@@ -206,19 +207,34 @@ func (s *Server) runAgentOnce(ctx context.Context, a store.Agent, now time.Time)
 	}
 	if err != nil {
 		s.log.Warn("agent-kjøring feilet", "id", a.ID, "err", err)
-		s.store.RecordRun(a.ID, store.AgentRun{Status: "error", TokensUsed: tokens, Error: err.Error()})
+		s.store.RecordRun(a.ID, store.AgentRun{Status: "error", TokensUsed: run.tokens, Error: err.Error()})
 		s.postToAgentChat(a, "Kjøringen feilet: "+err.Error())
 		return
 	}
-	s.store.RecordRun(a.ID, store.AgentRun{Status: "ok", Output: output, TokensUsed: tokens})
-	s.postToAgentChat(a, output)
-	s.log.Info("agent kjørt", "id", a.ID, "navn", a.Name, "tokens", tokens)
 
-	// Push-varsel: kun hvis brukeren har slått det på OG resultatet er verdt å
-	// varsle om (billig sjekk), så en rutinekjøring uten nytt ikke maser.
-	if a.PushEnabled {
-		go s.maybePush(a, output)
+	// Ingenting har endret seg siden sist: logg det, men ikke mas i chatten.
+	if run.unchanged {
+		s.store.RecordRun(a.ID, store.AgentRun{Status: "unchanged"})
+		s.log.Info("agent kjørt, ingen endring", "id", a.ID, "navn", a.Name)
+		return
 	}
+
+	s.store.RecordRun(a.ID, store.AgentRun{Status: "ok", Output: run.output, TokensUsed: run.tokens})
+	s.postToAgentChat(a, run.output)
+	s.log.Info("agent kjørt", "id", a.ID, "navn", a.Name, "tokens", run.tokens, "varsel", run.alert)
+
+	if !a.PushEnabled {
+		return
+	}
+	// Med plan har tolkningen allerede avgjort mot agentens egen varselregel —
+	// da trengs ingen ekstra klassifisering. Uten plan må vi spørre.
+	if planned {
+		if run.alert {
+			go s.pushNow(a, run.output)
+		}
+		return
+	}
+	go s.maybePush(a, run.output)
 }
 
 const pushClassifySystem = "Du vurderer et resultat fra en automatisk agent-kjøring. Er dette verdt å " +
@@ -241,11 +257,20 @@ func (s *Server) maybePush(a store.Agent, output string) {
 	if err != nil || !strings.Contains(strings.ToLower(raw), "ja") {
 		return
 	}
-	title := a.Name
+	s.pushNow(a, body)
+}
+
+// pushNow køer varselet uten å vurdere det på nytt — brukes når avgjørelsen
+// allerede er tatt (agentens egen varselregel).
+func (s *Server) pushNow(a store.Agent, output string) {
+	body := strings.TrimSpace(output)
+	if body == "" {
+		return
+	}
 	if len(body) > 200 {
 		body = body[:200]
 	}
-	if err := s.store.EnqueuePush(a.TenantID, a.UserID, a.ID, title, body); err != nil {
+	if err := s.store.EnqueuePush(a.TenantID, a.UserID, a.ID, a.Name, body); err != nil {
 		s.log.Warn("kunne ikke køe push", "id", a.ID, "err", err)
 		return
 	}
