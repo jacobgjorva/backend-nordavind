@@ -16,6 +16,7 @@ type Agent struct {
 	Name            string     `json:"name"`
 	Personality     string     `json:"personality"` // brukersatt lynne, farger tolknings-tonen og trollet i farmen
 	Category        string     `json:"category"` // brukersatt kategori - styrer klynge og farge i agent-grafen
+	HasResponse     bool       `json:"has_response"` // siste kjøring ga et resultat brukeren ikke har åpnet ennå
 	Task            string     `json:"task"`
 	ConnectionID    string     `json:"connection_id"`
 	ScheduleLabel   string     `json:"schedule_label"`   // menneskelig, f.eks. "hver dag kl 08:00"
@@ -126,6 +127,7 @@ func (s *Store) migrateAgents() error {
 		`ALTER TABLE agents ADD COLUMN plan_built_at TIMESTAMP`,
 		`ALTER TABLE agents ADD COLUMN personality TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE agents ADD COLUMN category TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN response_seen_at TIMESTAMP`,
 		`ALTER TABLE agents ADD COLUMN last_snapshot TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE agents ADD COLUMN last_snapshot_at TIMESTAMP`,
 	} {
@@ -233,7 +235,47 @@ func (s *Store) ListAgents(userID string) ([]Agent, error) {
 		a.SendMail = sendMail != 0
 		out = append(out, a)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Ulest svar: siste kjøring med faktisk output som er nyere enn sist
+	// brukeren åpnet agent-chatten. Én spørring for alle agentene.
+	unseen, err := s.db.Query(
+		`SELECT r.agent_id
+		 FROM agent_runs r
+		 JOIN agents a ON a.id = r.agent_id
+		 WHERE a.user_id = ? AND r.status = 'ok' AND r.output != ''
+		 GROUP BY r.agent_id
+		 HAVING MAX(r.started_at) > COALESCE(a.response_seen_at, '1970-01-01')`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer unseen.Close()
+	fresh := map[string]bool{}
+	for unseen.Next() {
+		var id string
+		if err := unseen.Scan(&id); err != nil {
+			return nil, err
+		}
+		fresh[id] = true
+	}
+	for i := range out {
+		out[i].HasResponse = fresh[out[i].ID]
+	}
+	return out, unseen.Err()
+}
+
+// MarkAgentResponseSeen registrerer at brukeren har åpnet agentens chat —
+// noden glir da tilbake fra svar-seksjonen i grafen.
+func (s *Store) MarkAgentResponseSeen(agentID, userID string) error {
+	_, err := s.db.Exec(
+		`UPDATE agents SET response_seen_at = ? WHERE id = ? AND user_id = ?`,
+		time.Now(), agentID, userID,
+	)
+	return err
 }
 
 // DueAgents returnerer aktiverte agenter som skal kjøres nå.

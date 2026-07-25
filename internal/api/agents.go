@@ -292,6 +292,11 @@ func (s *Server) handleAgentByChat(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "intern feil", http.StatusInternalServerError)
 		return
 	}
+	// Å åpne agent-chatten kvitterer ut et ulest svar (grafen flytter noden
+	// tilbake fra svar-seksjonen).
+	if err := s.store.MarkAgentResponseSeen(agent.ID, user.ID); err != nil {
+		s.log.Warn("kunne ikke markere svar som sett", "id", agent.ID, "err", err)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(agent)
 }
