@@ -407,18 +407,27 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		streamThis := !usedTool && !(dbAttempted && !dbSucceeded) &&
 			flowKey != "create_widget" && flowKey != "edit_widget" &&
 			flowKey != "create_presentation" && flowKey != "export_excel" && widgetSlug == ""
+		if resp.StatusCode != http.StatusOK {
+			s.log.Warn("upstream-runde ikke OK", "status", resp.StatusCode)
+		}
 		calls, usage, content := s.relayRound(resp, emit, streamThis)
+		// Tvunget verktøyvalg gjelder kun én runde.
+		delete(full, "tool_choice")
 		resp.Body.Close()
 		promptTokens += usage.PromptTokens
 		completionTokens += usage.CompletionTokens
 		if len(calls) == 0 {
 			trimmed := strings.TrimSpace(content)
-			if !searchNudged && searches == 1 && gaveUpRe.MatchString(trimmed) && round < roundCap {
+			if !searchNudged && searches == 1 && round < roundCap &&
+				(gaveUpRe.MatchString(trimmed) || len([]rune(trimmed)) < 3) {
 				searchNudged = true
+				s.log.Info("søke-nudge utløst")
 				msgs, _ := full["messages"].([]any)
 				full["messages"] = append(msgs,
 					map[string]any{"role": "assistant", "content": trimmed},
 					map[string]any{"role": "user", "content": "Ikke gi deg etter ett søk: gjør minst to nye søk med helt andre vinkler (offisielle begreper, synonymer, engelsk) og svar deretter."})
+				// Tving et faktisk søk i neste runde — instruks alene ble ignorert.
+				full["tool_choice"] = map[string]any{"type": "function", "function": map[string]any{"name": "web_search"}}
 				step, _ := json.Marshal(map[string]any{"nordavind_step": "Søker med nye vinkler"})
 				emit("data: " + string(step))
 				continue
@@ -489,6 +498,20 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 						emit("data: [DONE]")
 						return
 					}
+				}
+				// Innsats-sjekk ETTER kildekontrollen: også et forsiktig
+				// omforsøk som melder tomt etter få søk sendes tilbake.
+				if !searchNudged && searches <= 2 && round < roundCap && gaveUpRe.MatchString(final) {
+					searchNudged = true
+					s.log.Info("søke-nudge utløst", "searches", searches)
+					msgs, _ := full["messages"].([]any)
+					full["messages"] = append(msgs,
+						map[string]any{"role": "assistant", "content": final},
+						map[string]any{"role": "user", "content": "Ikke gi deg ennå: gjør minst to nye søk med helt andre vinkler (offisielle begreper, synonymer, engelsk) og svar deretter."})
+					full["tool_choice"] = map[string]any{"type": "function", "function": map[string]any{"name": "web_search"}}
+					step, _ := json.Marshal(map[string]any{"nordavind_step": "Søker med nye vinkler"})
+					emit("data: " + string(step))
+					continue
 				}
 				emit(contentSSE(final))
 			}
