@@ -116,17 +116,33 @@ func (s *Server) buildDBTool(tenantID, userID, onlyConnID string) *dbToolCtx {
 			fmt.Fprintf(&schema, "JOIN: %s.%s = %s.%s\n", l.FromTable, l.FromColumn, l.ToTable, l.ToColumn)
 		}
 		viewMap := map[string]string{}
+		replaced := map[string]bool{}
 		for _, v := range views {
 			fmt.Fprintf(&schema, "Ferdig spørring %q", v.Name)
 			if v.Description != "" {
 				fmt.Fprintf(&schema, " (%s)", v.Description)
 			}
 			fmt.Fprintf(&schema, ": %s — spørres som FROM %s\n", v.SQL, v.Name)
-			// SIKKERHET: råtabellene bak utsnittet legges ALDRI i allowed —
-			// utsnittet kjøres ved server-side ekspansjon (SafeQueryViewsN),
-			// ellers kunne modellen spørre forbi admin-tilgangen.
-			viewMap[strings.ToLower(v.Name)] = strings.TrimSuffix(strings.TrimSpace(v.SQL), ";")
+			// SIKKERHET: et utsnitt ERSTATTER tabellen sin — både utsnittsnavnet
+			// og selve tabellnavnet ekspanderes til utsnittets SQL server-side
+			// (SafeQueryViewsN). Uten dette kunne modellen spørre råtabellen
+			// direkte og hente rader utenfor admin-filteret (2023-utsnitt ga
+			// 2026-rader).
+			sql := strings.TrimSuffix(strings.TrimSpace(v.SQL), ";")
+			viewMap[strings.ToLower(v.Name)] = sql
+			base := strings.ToLower(strings.TrimSuffix(v.Name, "_query"))
+			viewMap[base] = sql
+			replaced[base] = true
 			allowed = append(allowed, v.Name)
+		}
+		if len(replaced) > 0 {
+			kept := allowed[:0]
+			for _, name := range allowed {
+				if !replaced[strings.ToLower(name)] {
+					kept = append(kept, name)
+				}
+			}
+			allowed = kept
 		}
 		t.conns[c.ID] = dbConn{conn: c, creds: creds, allowed: allowed, views: viewMap}
 	}
