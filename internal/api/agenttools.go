@@ -422,6 +422,8 @@ func (s *Server) runDeleteAgent(ctx context.Context, a agentToolArgs) string {
 	if !ok {
 		return "Ikke innlogget."
 	}
+	// Grafen først — etter sletting finnes ikke planen som peker på den.
+	s.deleteAgentChart(a.AgentID, user.ID)
 	if err := s.store.DeleteAgent(a.AgentID, user.ID); err != nil {
 		return "Fant ikke agenten."
 	}

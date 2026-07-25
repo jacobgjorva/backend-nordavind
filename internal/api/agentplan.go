@@ -34,6 +34,18 @@ type agentStep struct {
 	URL          string `json:"url,omitempty"`
 }
 
+// agentChart er grafen agenten viser sammen med rapporten. Den lagres som en
+// vanlig widget, så den henter ferske tall selv hver gang meldingen vises.
+type agentChart struct {
+	Type         string `json:"type"` // line | bar | donut
+	Title        string `json:"title"`
+	ConnectionID string `json:"connection_id"`
+	SQL          string `json:"sql"`
+	X            string `json:"x"` // kategori-/tidskolonne
+	Y            string `json:"y"` // verdikolonne
+	Group        string `json:"group,omitempty"`
+}
+
 // agentPlan er resultatet av spinup: de konkrete stegene som skal kjøres hver
 // gang, hva som skal følges med på, og når det er verdt å si fra.
 type agentPlan struct {
@@ -41,6 +53,9 @@ type agentPlan struct {
 	Steps     []agentStep `json:"steps"`      // utføres i rekkefølge, deterministisk
 	Watch     string      `json:"watch"`      // hva som skal vurderes i resultatet
 	AlertRule string      `json:"alert_rule"` // når det er verdt å varsle brukeren
+
+	Chart     *agentChart `json:"chart,omitempty"`      // valgfri graf
+	ChartSlug string      `json:"chart_slug,omitempty"` // widgeten grafen bor i
 }
 
 // upstreamMessage er ett svar fra modellen, normalisert på tvers av
@@ -156,6 +171,22 @@ var savePlanTool = map[string]any{
 					"type":        "string",
 					"description": "når resultatet er verdt å varsle om, med terskler der det gir mening",
 				},
+				"chart": map[string]any{
+					"type": "object",
+					"description": "valgfri graf som vises sammen med hver rapport. Ta den med når " +
+						"utviklingen over tid eller fordelingen mellom kategorier sier mer enn et tall. " +
+						"Grafen henter ferske data selv, så spørringen må være tidsrelativ.",
+					"properties": map[string]any{
+						"type":          map[string]any{"type": "string", "description": "line (utvikling over tid), bar (sammenligning) eller donut (fordeling)"},
+						"title":         map[string]any{"type": "string", "description": "kort tittel over grafen"},
+						"connection_id": map[string]any{"type": "string"},
+						"sql":           map[string]any{"type": "string", "description": "SELECT som gir én rad per punkt"},
+						"x":             map[string]any{"type": "string", "description": "kolonnen langs x-aksen — MÅ finnes i spørringen"},
+						"y":             map[string]any{"type": "string", "description": "verdikolonnen langs y-aksen — MÅ finnes i spørringen"},
+						"group":         map[string]any{"type": "string", "description": "valgfri kolonne som summerer y per verdi"},
+					},
+					"required": []string{"type", "title", "sql", "x", "y"},
+				},
 			},
 			"required": []string{"steps", "watch", "alert_rule"},
 		},
@@ -175,8 +206,12 @@ const planSystem = "Du er i SPINUP: du skal ikke levere svaret på oppgaven, du 
 	"hardkodede datoer — planen skal fortsatt være riktig om et halvt år.\n" +
 	"- Ikke ta med steg som gir det samme hver gang og aldri endrer seg. Planen skal hente det som " +
 	"faktisk må sjekkes på nytt.\n" +
-	"AVSLUTT med save_plan: stegene som skal kjøres hver gang, hva som skal vurderes (watch), og når " +
-	"det er verdt å varsle brukeren (alert_rule, med konkrete terskler der det gir mening). " +
+	"- Vurder om en graf hører hjemme i rapporten. Utvikling over tid eller fordeling mellom kategorier " +
+	"forstås raskere som graf enn som tall. Er svaret ett enkelt tall, dropp grafen. Både x og y skal " +
+	"være ekte kolonner fra spørringen — grafen skal aldri ha en umerket akse.\n" +
+	"AVSLUTT med save_plan: stegene som skal kjøres hver gang, hva som skal vurderes (watch), når " +
+	"det er verdt å varsle brukeren (alert_rule, med konkrete terskler der det gir mening), og " +
+	"eventuelt chart. " +
 	"Server-siden prøvekjører stegene dine — får du dem i retur med feil, rett dem og lagre på nytt."
 
 // planTools gir spinup de samme verktøyene som en kjøring, pluss save_plan.
@@ -282,6 +317,7 @@ func (s *Server) buildAgentPlan(ctx context.Context, agentID string) {
 			if c.name == "save_plan" {
 				plan, problems := s.validatePlan(ctx, dbCtx, c.args)
 				if len(problems) == 0 {
+					s.ensureChartWidget(a, &plan)
 					raw, _ := json.Marshal(plan)
 					if err := s.store.SetAgentPlan(agentID, string(raw)); err != nil {
 						s.failPlan(a, "Kunne ikke lagre planen: "+err.Error(), totalTokens)
@@ -405,7 +441,65 @@ func (s *Server) validatePlan(ctx context.Context, dbCtx *dbToolCtx, rawArgs str
 				n, st.Kind))
 		}
 	}
+	problems = append(problems, s.validateChart(ctx, dbCtx, plan.Chart)...)
 	return plan, problems
+}
+
+// chartTypes er grafene widget-motoren rendrer.
+var chartTypes = map[string]bool{"line": true, "bar": true, "donut": true}
+
+// validateChart prøvekjører grafens spørring og sjekker at både x- og y-kolonnen
+// faktisk finnes i resultatet — ellers ville grafen blitt tom eller uten akse.
+func (s *Server) validateChart(ctx context.Context, dbCtx *dbToolCtx, c *agentChart) []string {
+	if c == nil {
+		return nil
+	}
+	var problems []string
+	if !chartTypes[strings.ToLower(strings.TrimSpace(c.Type))] {
+		problems = append(problems, fmt.Sprintf("Grafen har ukjent type %q — bruk line, bar eller donut.", c.Type))
+	}
+	if strings.TrimSpace(c.SQL) == "" {
+		return append(problems, "Grafen mangler sql.")
+	}
+	if strings.TrimSpace(c.X) == "" || strings.TrimSpace(c.Y) == "" {
+		problems = append(problems, "Grafen må ha både x og y — begge aksene skal være merket.")
+	}
+	if dbCtx == nil {
+		return append(problems, "Grafen krever database, men ingen er tilgjengelig.")
+	}
+
+	res := s.runDBQuery(ctx, dbCtx, c.ConnectionID, c.SQL)
+	if planQueryFailed(res) {
+		return append(problems, "Grafens spørring feilet ved prøvekjøring: "+truncate(res, 600))
+	}
+	var out struct {
+		Columns []string   `json:"columns"`
+		Rows    [][]string `json:"rows"`
+	}
+	if err := json.Unmarshal([]byte(res), &out); err != nil {
+		return append(problems, "Kunne ikke lese grafens data: "+err.Error())
+	}
+	if len(out.Rows) == 0 {
+		problems = append(problems, "Grafens spørring gir ingen rader — grafen ville vært tom.")
+	}
+	has := func(col string) bool {
+		for _, c := range out.Columns {
+			if strings.EqualFold(c, col) {
+				return true
+			}
+		}
+		return false
+	}
+	for field, col := range map[string]string{"x": c.X, "y": c.Y} {
+		if col != "" && !has(col) {
+			problems = append(problems, fmt.Sprintf("Grafens %s-kolonne %q finnes ikke i spørringen. Kolonner: %s",
+				field, col, strings.Join(out.Columns, ", ")))
+		}
+	}
+	if g := strings.TrimSpace(c.Group); g != "" && !has(g) {
+		problems = append(problems, fmt.Sprintf("Grafens group-kolonne %q finnes ikke i spørringen.", g))
+	}
+	return problems
 }
 
 // planQueryFailed kjenner igjen feilsvarene runDBQuery gir (den returnerer
@@ -418,12 +512,84 @@ func planQueryFailed(res string) bool {
 	return true
 }
 
+// ensureChartWidget lagrer grafen som en vanlig widget og setter slug'en på
+// planen. Widgeten henter data selv, så grafen er fersk hver gang rapporten
+// vises — uten at agenten bruker et eneste token på den.
+func (s *Server) ensureChartWidget(a store.Agent, plan *agentPlan) {
+	c := plan.Chart
+	if c == nil {
+		return
+	}
+	slug := chartSlug(a)
+	spec := map[string]any{
+		"type":          strings.ToLower(strings.TrimSpace(c.Type)),
+		"title":         c.Title,
+		"connection_id": c.ConnectionID,
+		"sql":           c.SQL,
+		"x":             c.X,
+		"y":             c.Y,
+	}
+	if g := strings.TrimSpace(c.Group); g != "" {
+		spec["group"] = g
+	}
+	raw, _ := json.Marshal(spec)
+
+	// Finnes den fra en tidligere plan, skal den bare oppdateres.
+	if _, err := s.store.Widget(slug, a.UserID); err != nil {
+		if _, err := s.store.CreateWidget(a.TenantID, a.UserID, slug, c.Title); err != nil {
+			s.log.Warn("kunne ikke opprette agent-graf", "agent", a.ID, "slug", slug, "err", err)
+			plan.Chart = nil
+			return
+		}
+	}
+	if err := s.store.SetWidget(slug, a.UserID, c.Title, string(raw)); err != nil {
+		s.log.Warn("kunne ikke lagre agent-graf", "agent", a.ID, "slug", slug, "err", err)
+		plan.Chart = nil
+		return
+	}
+	plan.ChartSlug = slug
+	s.log.Info("agent-graf lagret", "agent", a.Name, "slug", slug, "type", spec["type"])
+}
+
+// deleteAgentChart fjerner grafen som hørte til agenten, så en slettet agent
+// ikke etterlater en widget i brukerens slash-meny.
+func (s *Server) deleteAgentChart(agentID, userID string) {
+	a, err := s.store.GetAgent(agentID, userID)
+	if err != nil || strings.TrimSpace(a.Plan) == "" {
+		return
+	}
+	var plan agentPlan
+	if err := json.Unmarshal([]byte(a.Plan), &plan); err != nil || plan.ChartSlug == "" {
+		return
+	}
+	if err := s.store.DeleteWidget(plan.ChartSlug, userID); err != nil {
+		s.log.Warn("kunne ikke slette agent-graf", "slug", plan.ChartSlug, "err", err)
+	}
+}
+
+// chartSlug gir agenten en stabil, unik slug, så en ny plan overtar den samme
+// grafen i stedet for å legge igjen foreldreløse widgets.
+func chartSlug(a store.Agent) string {
+	id := a.ID
+	if len(id) > 8 {
+		id = id[:8]
+	}
+	base := slugify(a.Name)
+	if base == "" {
+		base = "agent"
+	}
+	return slugify(base + "-" + id)
+}
+
 // planSummary er meldingen brukeren får i agent-chatten når planen er klar.
 func planSummary(p agentPlan) string {
 	var b strings.Builder
 	b.WriteString("Klar. Slik gjør jeg det hver kjøring:\n\n")
 	for i, st := range p.Steps {
 		fmt.Fprintf(&b, "%d. %s\n", i+1, st.Label)
+	}
+	if p.Chart != nil && p.ChartSlug != "" {
+		fmt.Fprintf(&b, "\nJeg viser også grafen «%s».\n", p.Chart.Title)
 	}
 	if p.Approach != "" {
 		b.WriteString("\n" + p.Approach + "\n")
@@ -647,7 +813,7 @@ func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (planRun, 
 		}
 		if err := json.Unmarshal([]byte(c.args), &rep); err == nil {
 			run.alert = rep.Alert
-			run.output = composeReport(rep.Summary, rep.Stats, rep.TableStep, pd.steps)
+			run.output = composeReport(rep.Summary, rep.Stats, rep.TableStep, pd.steps, plan.ChartSlug)
 		}
 		break
 	}
@@ -667,7 +833,7 @@ type reportStat struct {
 // composeReport setter sammen meldingen brukeren ser: nøkkeltall øverst, så
 // teksten, så en tabell rendret fra rådataene. Maks fire kort, så kjøringen
 // leses på ett blikk.
-func composeReport(summary string, stats []reportStat, tableStep int, steps []stepResult) string {
+func composeReport(summary string, stats []reportStat, tableStep int, steps []stepResult, chartSlug string) string {
 	var b strings.Builder
 	for i, s := range stats {
 		if i == 4 {
@@ -679,6 +845,9 @@ func composeReport(summary string, stats []reportStat, tableStep int, steps []st
 		b.WriteString(statBlock(s.Label, s.Value, s.Unit, s.Delta))
 	}
 	b.WriteString(strings.TrimSpace(summary))
+	if chartSlug != "" {
+		b.WriteString("\n\n```widget\n" + chartSlug + "\n```\n")
+	}
 	if tableStep >= 1 && tableStep <= len(steps) {
 		if tbl := tableFromStep(steps[tableStep-1]); tbl != "" {
 			b.WriteString("\n\n" + tbl)

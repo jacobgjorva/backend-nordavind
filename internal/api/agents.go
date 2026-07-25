@@ -363,6 +363,8 @@ func (s *Server) handleDeleteAgent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Grafen først — etter sletting finnes ikke planen som peker på den.
+	s.deleteAgentChart(r.PathValue("id"), user.ID)
 	err := s.store.DeleteAgent(r.PathValue("id"), user.ID)
 	if errors.Is(err, store.ErrNotFound) {
 		http.Error(w, "ikke funnet", http.StatusNotFound)

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
 
 // En plan uten steg, watch eller alert_rule skal avvises med presise problemer
@@ -89,7 +91,7 @@ func TestComposeReportByggerKortOgTabell(t *testing.T) {
 	}
 	got := composeReport("Ett nytt avvik.", []reportStat{
 		{Label: "Omsetning", Value: "1 200", Unit: "kr", Delta: "+12 %"},
-	}, 1, steps)
+	}, 1, steps, "")
 
 	for _, want := range []string{"```stat", `"delta":"+12 %"`, "Ett nytt avvik.", "```table", `"dato"`} {
 		if !strings.Contains(got, want) {
@@ -100,7 +102,7 @@ func TestComposeReportByggerKortOgTabell(t *testing.T) {
 
 // Uten stats og uten tabellsteg skal rapporten være ren tekst.
 func TestComposeReportUtenPynt(t *testing.T) {
-	got := composeReport("Ingenting å melde.", nil, 0, nil)
+	got := composeReport("Ingenting å melde.", nil, 0, nil, "")
 	if got != "Ingenting å melde." {
 		t.Errorf("ventet ren tekst, fikk %q", got)
 	}
@@ -110,7 +112,7 @@ func TestComposeReportUtenPynt(t *testing.T) {
 func TestComposeReportIgnorererUgyldigTabellsteg(t *testing.T) {
 	steps := []stepResult{{label: "A", kind: "sql", raw: `{"columns":["x"],"rows":[["1"]]}`}}
 	for _, step := range []int{-1, 0, 2, 99} {
-		got := composeReport("Tekst.", nil, step, steps)
+		got := composeReport("Tekst.", nil, step, steps, "")
 		if strings.Contains(got, "```table") {
 			t.Errorf("steg %d ga tabell den ikke skulle: %s", step, got)
 		}
@@ -123,8 +125,62 @@ func TestComposeReportBegrenserAntallKort(t *testing.T) {
 	for i := range stats {
 		stats[i] = reportStat{Label: "K", Value: "1"}
 	}
-	if n := strings.Count(composeReport("Tekst.", stats, 0, nil), "```stat"); n != 4 {
+	if n := strings.Count(composeReport("Tekst.", stats, 0, nil, ""), "```stat"); n != 4 {
 		t.Errorf("ventet 4 kort, fikk %d", n)
+	}
+}
+
+// Grafen vises som en widget-blokk, så den henter ferske tall selv.
+func TestComposeReportTarMedGraf(t *testing.T) {
+	got := composeReport("Omsetningen stiger.", nil, 0, nil, "salg-a1b2c3d4")
+	if !strings.Contains(got, "```widget\nsalg-a1b2c3d4\n```") {
+		t.Errorf("mangler widget-blokk i:\n%s", got)
+	}
+}
+
+// En graf uten x eller y ville fått en umerket akse — det skal avvises.
+func TestValidateChartKreverBeggeAkser(t *testing.T) {
+	s := &Server{}
+	problems := s.validateChart(context.Background(), nil, &agentChart{
+		Type: "line", Title: "Salg", SQL: "SELECT 1", X: "dato",
+	})
+	if !strings.Contains(strings.Join(problems, " "), "både x og y") {
+		t.Errorf("manglende y ble ikke fanget: %v", problems)
+	}
+}
+
+// Ukjent graftype skal fanges før planen lagres.
+func TestValidateChartAvviserUkjentType(t *testing.T) {
+	s := &Server{}
+	problems := s.validateChart(context.Background(), nil, &agentChart{
+		Type: "kakediagram", Title: "Salg", SQL: "SELECT 1", X: "dato", Y: "sum",
+	})
+	if !strings.Contains(strings.Join(problems, " "), "ukjent type") {
+		t.Errorf("ukjent graftype ble ikke fanget: %v", problems)
+	}
+}
+
+// Uten graf skal valideringen ikke ha noe å si.
+func TestValidateChartUtenGrafErStille(t *testing.T) {
+	s := &Server{}
+	if p := s.validateChart(context.Background(), nil, nil); len(p) != 0 {
+		t.Errorf("ventet ingen problemer, fikk %v", p)
+	}
+}
+
+// Slug'en må være stabil og unik per agent, så en ny plan overtar samme graf.
+func TestChartSlugErStabilOgUnik(t *testing.T) {
+	a := store.Agent{ID: "abcdef1234567890", Name: "Salg Nord"}
+	got := chartSlug(a)
+	if got != "salg-nord-abcdef12" {
+		t.Fatalf("uventet slug: %q", got)
+	}
+	if chartSlug(a) != got {
+		t.Error("slug er ikke stabil mellom kall")
+	}
+	navnløs := chartSlug(store.Agent{ID: "xyz12345", Name: ""})
+	if navnløs != "agent-xyz12345" {
+		t.Errorf("uventet slug uten navn: %q", navnløs)
 	}
 }
 
