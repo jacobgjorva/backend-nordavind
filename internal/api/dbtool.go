@@ -57,6 +57,21 @@ func (s *Server) buildDBTool(tenantID, userID, onlyConnID string) *dbToolCtx {
 			continue
 		}
 		views, _ := s.store.ConnectionViews(c.ID)
+		// SIKKERHET: et utsnitt arver tilgangen til tabellen det er laget for
+		// («<tabell>_query») — uten dette så brukere UTEN tabelltilgang likevel
+		// alle utsnittene på koblingen.
+		accessible := map[string]bool{}
+		for _, tb := range tables {
+			accessible[strings.ToLower(tb.Name)] = true
+		}
+		filtered := views[:0]
+		for _, v := range views {
+			base := strings.ToLower(strings.TrimSuffix(v.Name, "_query"))
+			if accessible[base] {
+				filtered = append(filtered, v)
+			}
+		}
+		views = filtered
 		if len(tables) == 0 && len(views) == 0 {
 			s.log.Warn("db-verktøy: dropper kobling, ingen tilgjengelige tabeller/views", "connection", c.Name, "id", c.ID, "user", userID)
 			continue
