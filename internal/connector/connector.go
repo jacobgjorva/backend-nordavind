@@ -297,12 +297,16 @@ func SafeQueryN(ctx context.Context, db *sql.DB, driver, query string, allowed [
 	// driveren støtter det, slik at en eventuell skrivende setning som
 	// slipper forbi mønstervernet avvises på DB-nivå. Faller tilbake til
 	// et vanlig kall for drivere som ikke støtter ReadOnly.
+	var rows *sql.Rows
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return nil, nil, err
+	if err == nil {
+		defer tx.Rollback()
+		rows, err = tx.QueryContext(ctx, q)
+	} else {
+		// Driveren støtter ikke read-only-transaksjoner (f.eks. enkelte
+		// SQL Server-oppsett): kjør vanlig kall — regex-vernet står fortsatt.
+		rows, err = db.QueryContext(ctx, q)
 	}
-	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, q)
 	if err != nil {
 		return nil, nil, err
 	}

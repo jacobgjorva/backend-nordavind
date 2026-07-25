@@ -251,6 +251,8 @@ func (s *Server) runDBQuery(ctx context.Context, t *dbToolCtx, connID, query str
 
 	cols, rows, err := connector.SafeQueryViewsN(ctx, db, dc.creds.Driver, query, dc.allowed, dc.views, 0)
 	if err != nil {
+		s.log.Warn("db-spørring feilet", "connection", dc.conn.Name, "driver", dc.creds.Driver,
+			"err", err, "sql", query)
 		// Gi modellen nok kontekst til å rette seg selv i neste runde.
 		msg := "Spørringen feilet: " + err.Error()
 		if strings.Contains(err.Error(), "ikke tilgjengelig") {
