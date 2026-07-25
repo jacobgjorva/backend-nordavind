@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	crand "crypto/rand"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -123,6 +124,35 @@ func (s *Server) runWidgetOp(ctx context.Context, slug, rawArgs string) string {
 	if !ok {
 		return "Ikke innlogget."
 	}
+	// Uten widget-kontekst (create_widget-flyten i vanlig chat): opprett en ny
+	// widget fra spec-en — før feilet dette med «Fant ikke widgeten».
+	createdNew := false
+	if strings.TrimSpace(slug) == "" {
+		createdNew = true
+		var t struct {
+			Title string `json:"title"`
+		}
+		json.Unmarshal([]byte(rawArgs), &t)
+		title := strings.TrimSpace(t.Title)
+		if title == "" {
+			title = "Widget"
+		}
+		ns := slugify(title)
+		if ns == "" {
+			ns = "widget"
+		}
+		created, err := s.store.CreateWidget(user.TenantID, user.ID, ns, title)
+		if err != nil {
+			// Navnekollisjon: gjør slugen unik og prøv én gang til.
+			created, err = s.store.CreateWidget(user.TenantID, user.ID,
+				ns+"-"+strings.ToLower(randToken(4)), title)
+			if err != nil {
+				s.log.Error("kunne ikke opprette widget fra chat", "err", err)
+				return "Kunne ikke opprette widgeten."
+			}
+		}
+		slug = created.Slug
+	}
 	w, err := s.store.Widget(slug, user.ID)
 	if err != nil {
 		return "Fant ikke widgeten."
@@ -149,7 +179,21 @@ func (s *Server) runWidgetOp(ctx context.Context, slug, rawArgs string) string {
 	if err := s.store.SetWidget(slug, user.ID, title, string(out)); err != nil {
 		return "Kunne ikke lagre."
 	}
+	if createdNew {
+		return "Widget opprettet (slug=" + slug + "). Svar med maks én kort setning — widgeten vises automatisk."
+	}
 	return "ok"
+}
+
+// randToken gir en kort tilfeldig suffiks for slug-kollisjoner.
+func randToken(n int) string {
+	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, n)
+	crand.Read(b)
+	for i := range b {
+		b[i] = chars[int(b[i])%len(chars)]
+	}
+	return string(b)
 }
 
 var slugRe = regexp.MustCompile(`[^a-z0-9-]+`)
@@ -372,7 +416,7 @@ func (s *Server) handleWidgetQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer db.Close()
-	cols, rows, err := connector.SafeQueryN(r.Context(), db, dc.creds.Driver, sql, dc.allowed, 5000)
+	cols, rows, err := connector.SafeQueryViewsN(r.Context(), db, dc.creds.Driver, sql, dc.allowed, dc.views, 5000)
 	if err != nil {
 		http.Error(w, "spørringen feilet: "+err.Error(), http.StatusBadGateway)
 		return

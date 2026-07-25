@@ -91,8 +91,19 @@ func TestJudgeOnTie(t *testing.T) {
 	if d.Method != MethodJudge || d.Key != "smalltalk" {
 		t.Fatalf("ville ha judge smalltalk, fikk %+v", d)
 	}
-	if len(j.seen) == 0 || len(j.seen) > candN {
-		t.Fatalf("dommeren skal få 1-%d kandidater, fikk %v", candN, j.seen)
+	// Dommeren skal få hele det rollefiltrerte registeret + fri chat + usikker.
+	if len(j.seen) != len(Registry)+1 || j.seen[len(j.seen)-1] != AskKey {
+		t.Fatalf("dommeren skal få hele registeret + %s + %s, fikk %v", FreeChatKey, AskKey, j.seen)
+	}
+}
+
+func TestJudgePicksFreeChat(t *testing.T) {
+	em := registryStub()
+	em.vecs["hei koble"] = []float32{0.9, 0.85, 0.2}
+	e := buildEngine(t, em, &stubJudge{pick: FreeChatKey})
+	d := e.Resolve(context.Background(), "hei koble", true)
+	if d.Method != MethodJudge || d.Key != "" {
+		t.Fatalf("dommer-valgt fri chat skal gi tom nøkkel, fikk %+v", d)
 	}
 }
 
@@ -130,7 +141,7 @@ func TestJudgeFailureFallsBack(t *testing.T) {
 func TestJudgeOutsideEnumRejected(t *testing.T) {
 	em := registryStub()
 	em.vecs["hei koble"] = []float32{0.9, 0.85, 0.2}
-	e := buildEngine(t, em, &stubJudge{pick: "create_widget"}) // ikke kandidat
+	e := buildEngine(t, em, &stubJudge{pick: "finnes_ikke"}) // utenfor enum
 	d := e.Resolve(context.Background(), "hei koble", true)
 	if d.Method != MethodDirect || d.Key != "connect_database" {
 		t.Fatalf("svar utenfor enum skal avvises med fallback, fikk %+v", d)
@@ -179,14 +190,15 @@ func min(a, b int) int {
 	return b
 }
 
-func TestMultiIntentGoesToFreeChat(t *testing.T) {
+func TestNearTieGoesToJudge(t *testing.T) {
 	em := registryStub()
-	// Sterk på BÅDE connect_database og smalltalk, nesten likt → multi.
+	// Sterk på BÅDE connect_database og smalltalk, nesten likt → dommeren
+	// avgjør (og kan velge fri chat ved ekte sammensatte ønsker).
 	em.vecs["koble til basen og si hei"] = []float32{0.71, 0.7, 0}
-	e := buildEngine(t, em, &stubJudge{pick: "smalltalk"})
+	e := buildEngine(t, em, &stubJudge{pick: FreeChatKey})
 	d := e.Resolve(context.Background(), "koble til basen og si hei", true)
-	if d.Method != MethodMulti || d.Key != "" {
-		t.Fatalf("ville ha multi → fri chat, fikk %+v", d)
+	if d.Method != MethodJudge || d.Key != "" {
+		t.Fatalf("ville ha judge → fri chat, fikk %+v", d)
 	}
 }
 
@@ -195,6 +207,9 @@ func TestFlowTableCoversRegistry(t *testing.T) {
 		f, ok := Flows[in.Key]
 		if !ok {
 			t.Fatalf("intent %s mangler flyt-rad", in.Key)
+		}
+		if in.Key == FreeChatKey {
+			continue // fri chat er selv bunnen — egen fallback-regel
 		}
 		if !f.Deterministic {
 			if f.Model == "" {
@@ -223,5 +238,33 @@ func TestFlowForFallsBackToFreeChat(t *testing.T) {
 	}
 	if k, _ := FlowFor(Decision{Key: "data_question", Method: MethodDirect}); k != "data_question" {
 		t.Fatalf("ville ha data_question, fikk %s", k)
+	}
+}
+
+func TestAskLabelsCoverRegistry(t *testing.T) {
+	for _, in := range Registry {
+		if AskLabels[in.Key] == "" {
+			t.Errorf("intent %s mangler AskLabel", in.Key)
+		}
+	}
+}
+
+// Panel-vern: et direktetreff på en DETERMINISTISK flyt må bekreftes av
+// dommeren; er dommeren uenig, vinner dommeren.
+func TestDeterministicDirectNeedsJudge(t *testing.T) {
+	em := registryStub()
+	// connect_database er deterministisk i flyt-tabellen.
+	em.vecs["koble til basen"] = []float32{1, 0.05, 0}
+	j := &stubJudge{pick: "web_fact"}
+	e := buildEngine(t, em, j)
+	d := e.Resolve(context.Background(), "koble til basen", true)
+	if d.Method != MethodJudge || d.Key != "web_fact" {
+		t.Fatalf("dommeren skulle overstyrt panelet, fikk %+v", d)
+	}
+	// Er dommeren enig, logges det fortsatt som direct.
+	j.pick = "connect_database"
+	d = e.Resolve(context.Background(), "koble til basen", true)
+	if d.Method != MethodDirect || d.Key != "connect_database" {
+		t.Fatalf("bekreftet direktetreff skulle vært direct, fikk %+v", d)
 	}
 }

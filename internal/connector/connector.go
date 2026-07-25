@@ -203,6 +203,43 @@ func ReferencedTables(query string) []string {
 	return out
 }
 
+// ExpandViews bytter FROM/JOIN-referanser til kuraterte utsnitt med
+// utsnittets SQL som subquery. Modellen kan dermed bruke utsnittsnavnet uten
+// at råtabellene bak trenger å være tillatt for fri spørring.
+func ExpandViews(query string, views map[string]string) string {
+	for name, sql := range views {
+		re := regexp.MustCompile(`(?i)\b(from|join)\s+` + regexp.QuoteMeta(name) + `\b`)
+		query = re.ReplaceAllString(query, "$1 ("+sql+") AS "+name)
+	}
+	return query
+}
+
+// SafeQueryViewsN er SafeQueryN med kuraterte utsnitt: modellens spørring
+// valideres mot tillatte tabeller + utsnittsnavn, deretter ekspanderes
+// utsnittene server-side. Råtabellene et utsnitt bruker er KUN kjørbare via
+// ekspansjonen — aldri direkte fra modellens egen SQL.
+func SafeQueryViewsN(ctx context.Context, db *sql.DB, driver, query string, allowedTables []string, views map[string]string, rowCap int) ([]string, [][]string, error) {
+	visible := make(map[string]bool, len(allowedTables)+len(views))
+	for _, t := range allowedTables {
+		visible[strings.ToLower(t)] = true
+	}
+	for name := range views {
+		visible[strings.ToLower(name)] = true
+	}
+	for _, r := range ReferencedTables(query) {
+		if !visible[r] {
+			return nil, nil, fmt.Errorf("tabellen %q er ikke tilgjengelig", r)
+		}
+	}
+	expanded := ExpandViews(query, views)
+	all := append([]string{}, allowedTables...)
+	for name, sql := range views {
+		all = append(all, name)
+		all = append(all, ReferencedTables(sql)...)
+	}
+	return SafeQueryN(ctx, db, driver, expanded, all, rowCap)
+}
+
 // SafeQuery kjører kun én SELECT-setning mot tillatte tabeller, med standard
 // radgrense (100 — dimensjonert for LLM-kontekst).
 func SafeQuery(ctx context.Context, db *sql.DB, driver, query string, allowed []string) ([]string, [][]string, error) {

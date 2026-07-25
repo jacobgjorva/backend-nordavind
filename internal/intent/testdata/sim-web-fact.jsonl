@@ -1,0 +1,50 @@
+{"text": "hva står euroen i mot kronen nå?", "want": "web_fact"}
+{"text": "hva er styringsrenten i dag?", "want": "web_fact"}
+{"text": "hvem er statsminister i Sverige?", "want": "web_fact"}
+{"text": "hva skjedde på børsen i dag?", "want": "web_fact"}
+{"text": "når går fristen for mva-rapportering ut?", "want": "web_fact"}
+{"text": "hva koster diesel nå?", "want": "web_fact"}
+{"text": "hva er markedsverdien til Equinor?", "want": "web_fact"}
+{"text": "hvilke nyheter er det om bygg og anlegg denne uka?", "want": "web_fact"}
+{"text": "hva er konsumprisindeksen for juni?", "want": "web_fact"}
+{"text": "hvem eier Komplett?", "want": "web_fact"}
+{"text": "hva blir været i Trondheim i helgen?", "want": "web_fact"}
+{"text": "hva er en holdingstruktur?", "want": "web_fact"}
+{"text": "forklar forskjellen på AS og ENK", "want": "web_fact"}
+{"text": "hva er siste nytt om kunstig intelligens?", "want": "web_fact"}
+{"text": "hvor mange innbyggere har Norge?", "want": "web_fact"}
+{"text": "hva ligger gullprisen på?", "want": "web_fact"}
+{"text": "når er det ferielov å ta ut restferie innen?", "want": "web_fact"}
+{"text": "hva er arbeidsgiveravgiften i 2026?", "want": "web_fact"}
+{"text": "hvem vant sykkelrittet i går?", "want": "web_fact"}
+{"text": "hva er kursen på DNB-aksjen?", "want": "web_fact"}
+{"text": "er det streik i transportsektoren nå?", "want": "web_fact"}
+{"text": "hva betyr EBITDA?", "want": "web_fact"}
+{"text": "hvilke land er med i EØS?", "want": "web_fact"}
+{"text": "sjekk hva konkurrenten Skeidar priser sofaer til", "want": "web_fact"}
+{"text": "hva sier finn.no om bruktpriser på varebiler?", "want": "web_fact"}
+{"text": "googl hva GDPR krever ved kundedata", "want": "web_fact"}
+{"text": "hva er minstelønn for lagerarbeidere?", "want": "web_fact"}
+{"text": "finn åpningstidene til tollvesenet", "want": "web_fact"}
+{"text": "hva er inflasjonen i eurosonen?", "want": "web_fact"}
+{"text": "hvor mye kostet strømmen i natt?", "want": "web_fact"}
+{"text": "hva er omsetningen vår hittil i år?", "want": "data_question"}
+{"text": "hvor mange ordre kom inn i går?", "want": "data_question"}
+{"text": "hva er vår største kunde målt i kroner?", "want": "data_question"}
+{"text": "hvor mye har vi solgt av produkt X denne måneden?", "want": "data_question"}
+{"text": "hva er snittprisen vi tar for frakt?", "want": "data_question"}
+{"text": "hvor mye lager har vi av varenummer 4402?", "want": "data_question"}
+{"text": "hvordan var salget vårt i påsken?", "want": "data_question"}
+{"text": "hva har AI-en kostet oss så langt?", "want": "usage_stats"}
+{"text": "vis siste fakturaer i en tabell", "want": "show_table"}
+{"text": "hvilken selger hos oss presterer best?", "want": "data_question"}
+{"text": "følg med på oljeprisen og varsle meg daglig", "want": "create_routine"}
+{"text": "si fra når dollaren går under 10 kr", "want": "create_routine"}
+{"text": "endre bitcoin-varselet til hvert kvarter", "want": "edit_routine"}
+{"text": "skriv et sammendrag av denne artikkelen jeg limer inn", "want": ""}
+{"text": "hjelp meg å svare på denne e-posten fra Skatteetaten", "want": ""}
+{"text": "hva kan du egentlig?", "want": "smalltalk"}
+{"text": "hva sier denne avtalen om oppsigelsestid?", "want": "contract_review"}
+{"text": "hvordan ligger vi an mot bransjesnittet vi la inn i fjor?", "want": "data_question"}
+{"text": "lag en graf over oljeprisen siste år", "want": "create_widget"}
+{"text": "hva synes du om prisstrategien vår?", "want": ""}

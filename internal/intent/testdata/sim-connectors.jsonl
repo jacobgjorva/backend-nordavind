@@ -1,0 +1,50 @@
+{"text": "vi har en postgres hos Azure vi vil ha inn", "want": "connect_database"}
+{"text": "sett opp kobling mot regnskapsdatabasen", "want": "connect_database"}
+{"text": "her er connection stringen til serveren vår", "want": "connect_database"}
+{"text": "jeg har host og bruker klart, hvor legger jeg det inn?", "want": "connect_database"}
+{"text": "koble til mssql-serveren på kontoret", "want": "connect_database"}
+{"text": "vi bytter database, må koble til den nye", "want": "connect_database"}
+{"text": "legg til en mysql-kilde", "want": "connect_database"}
+{"text": "hvordan får jeg lagt inn databasen vår her?", "want": "connect_database"}
+{"text": "tilkoblingen til lagerbasen feiler, kan vi prøve å sette den opp på nytt?", "want": "connect_database"}
+{"text": "kan dere lese fra sql server 2019?", "want": "connect_database"}
+{"text": "db.kunde.no port 5432, la oss koble til", "want": "connect_database"}
+{"text": "jeg vil koble til en testdatabase først", "want": "connect_database"}
+{"text": "koble til office-kontoen vår", "want": "connect_m365"}
+{"text": "vi trenger sharepoint-dokumentene inn i chatten", "want": "connect_m365"}
+{"text": "sett opp onedrive", "want": "connect_m365"}
+{"text": "logg meg inn med microsoft", "want": "connect_m365"}
+{"text": "azure-appen er registrert, hva nå?", "want": "connect_m365"}
+{"text": "outlook-integrasjonen, hvordan setter vi opp den?", "want": "connect_m365"}
+{"text": "teams-filene våre, får vi koblet dem til?", "want": "connect_m365"}
+{"text": "microsoft-innloggingen feilet, prøv igjen", "want": "connect_m365"}
+{"text": "jeg har client id og secret klart", "want": "connect_m365"}
+{"text": "excel-filene på onedrive skal være live", "want": "export_excel"}
+{"text": "hvilke kilder er koblet til nå?", "want": "manage_connections"}
+{"text": "slett testdatabasen", "want": "manage_connections"}
+{"text": "deaktiver den gamle koblingen", "want": "manage_connections"}
+{"text": "er regnskapsbasen fortsatt aktiv?", "want": "manage_connections"}
+{"text": "vis oversikten over integrasjonene", "want": "manage_connections"}
+{"text": "fjern m365-koblingen", "want": "manage_connections"}
+{"text": "hvem har tilgang til kundedatabasen?", "want": "manage_users"}
+{"text": "bytt navn på koblingen til «Regnskap»", "want": "manage_connections"}
+{"text": "koble fra alt som ikke er i bruk", "want": "manage_connections"}
+{"text": "virker tilkoblingene våre?", "want": "manage_connections"}
+{"text": "hvor mange rader har vi i ordretabellen?", "want": "data_question"}
+{"text": "hva står i kundedatabasen om ACKES?", "want": "data_question"}
+{"text": "vis tabellene fra regnskapsbasen", "want": "show_table"}
+{"text": "få ordrene ut i excel på onedrive", "want": "export_excel"}
+{"text": "last opp dette dokumentet til kunnskapsbasen", "want": "upload_document"}
+{"text": "hvor mye koster databasespørringene oss?", "want": "usage_stats"}
+{"text": "gi Kari tilgang til plattformen", "want": "manage_users"}
+{"text": "legg til Ola i ansattregisteret", "want": "employees_admin"}
+{"text": "lag en graf fra kundedatabasen", "want": "create_widget"}
+{"text": "hva er forskjellen på postgres og mysql?", "want": "web_fact"}
+{"text": "hva koster en azure sql-database i måneden?", "want": "web_fact"}
+{"text": "sjekk hver natt at databasen svarer", "want": "create_routine"}
+{"text": "passordet er hunter2, koble til nå", "want": "connect_database"}
+{"text": "er det trygt å gi dere databasetilgang?", "want": ""}
+{"text": "hvilke datakilder BURDE vi koble til?", "want": ""}
+{"text": "postgres://bruker:pass@host:5432/db", "want": "connect_database"}
+{"text": "hva skjer med dataene våre hvis vi sier opp?", "want": ""}
+{"text": "databasen svarer ikke, er koblingen nede?", "want": "manage_connections"}

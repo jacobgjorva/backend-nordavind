@@ -21,6 +21,9 @@ type dbConn struct {
 	conn    store.Connection
 	creds   connector.Creds
 	allowed []string
+	// views: kuraterte utsnitt (navn → SQL). Kjøres ved server-side
+	// ekspansjon — råtabellene bak er IKKE fritt spørrbare.
+	views map[string]string
 }
 
 // dbToolContext bygger query_database-verktøyet for innlogget bruker.
@@ -97,17 +100,20 @@ func (s *Server) buildDBTool(tenantID, userID, onlyConnID string) *dbToolCtx {
 		for _, l := range links {
 			fmt.Fprintf(&schema, "JOIN: %s.%s = %s.%s\n", l.FromTable, l.FromColumn, l.ToTable, l.ToColumn)
 		}
+		viewMap := map[string]string{}
 		for _, v := range views {
 			fmt.Fprintf(&schema, "Ferdig spørring %q", v.Name)
 			if v.Description != "" {
 				fmt.Fprintf(&schema, " (%s)", v.Description)
 			}
-			fmt.Fprintf(&schema, ": %s\n", v.SQL)
-			// Tabellene spørringen bruker må være kjørbare selv om de
-			// ikke er valgt enkeltvis.
-			allowed = append(allowed, connector.ReferencedTables(v.SQL)...)
+			fmt.Fprintf(&schema, ": %s — spørres som FROM %s\n", v.SQL, v.Name)
+			// SIKKERHET: råtabellene bak utsnittet legges ALDRI i allowed —
+			// utsnittet kjøres ved server-side ekspansjon (SafeQueryViewsN),
+			// ellers kunne modellen spørre forbi admin-tilgangen.
+			viewMap[strings.ToLower(v.Name)] = strings.TrimSuffix(strings.TrimSpace(v.SQL), ";")
+			allowed = append(allowed, v.Name)
 		}
-		t.conns[c.ID] = dbConn{conn: c, creds: creds, allowed: allowed}
+		t.conns[c.ID] = dbConn{conn: c, creds: creds, allowed: allowed, views: viewMap}
 	}
 	if len(t.conns) == 0 {
 		s.log.Warn("db-verktøy: ingen brukbare koblinger, modellen får ingen database", "tenant", tenantID, "user", userID, "onlyConnID", onlyConnID)
@@ -228,7 +234,7 @@ func (s *Server) runDBQuery(ctx context.Context, t *dbToolCtx, connID, query str
 	}
 	defer db.Close()
 
-	cols, rows, err := connector.SafeQuery(ctx, db, dc.creds.Driver, query, dc.allowed)
+	cols, rows, err := connector.SafeQueryViewsN(ctx, db, dc.creds.Driver, query, dc.allowed, dc.views, 0)
 	if err != nil {
 		// Gi modellen nok kontekst til å rette seg selv i neste runde.
 		msg := "Spørringen feilet: " + err.Error()

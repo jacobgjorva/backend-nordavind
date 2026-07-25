@@ -37,6 +37,7 @@ type caseLine struct {
 
 func main() {
 	verbose := flag.Bool("verbose", false, "skriv hver avgjørelse")
+	file := flag.String("file", "internal/intent/testdata/eval.jsonl", "fasit-sett (jsonl)")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -62,7 +63,7 @@ func main() {
 	}
 	fmt.Printf("Register embeddet på %s (hash %s)\n\n", time.Since(t0).Round(10*time.Millisecond), engine.RegistryHash)
 
-	f, err := os.Open("internal/intent/testdata/eval.jsonl")
+	f, err := os.Open(*file)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "fasit-sett:", err)
 		os.Exit(2)
@@ -91,7 +92,13 @@ func main() {
 		d := engine.Resolve(context.Background(), c.Text, true)
 		lat = append(lat, d.Elapsed)
 		methods[d.Method]++
-		ok := d.Key == c.Want
+		norm := func(k string) string {
+			if k == "free_chat" {
+				return ""
+			}
+			return k
+		}
+		ok := norm(d.Key) == norm(c.Want)
 		if ok {
 			hits++
 		} else {

@@ -255,3 +255,34 @@ func (s *Server) handleM365Disconnect(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// handleSaveM365App lagrer tenantens Azure app-registrering fra det sikre
+// panelet i chatten — secret krypteres, og verdiene går aldri via meldinger.
+func (s *Server) handleSaveM365App(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		ClientID     string `json:"client_id"`
+		ClientSecret string `json:"client_secret"`
+		DirectoryID  string `json:"directory_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil ||
+		strings.TrimSpace(req.ClientID) == "" || strings.TrimSpace(req.ClientSecret) == "" ||
+		strings.TrimSpace(req.DirectoryID) == "" {
+		http.Error(w, "mangler client_id, client_secret eller directory_id", http.StatusBadRequest)
+		return
+	}
+	enc, err := connector.Encrypt(s.credsKey, []byte(strings.TrimSpace(req.ClientSecret)))
+	if err != nil {
+		http.Error(w, "kryptering feilet", http.StatusInternalServerError)
+		return
+	}
+	if err := s.store.SetM365App(user.TenantID, strings.TrimSpace(req.ClientID),
+		strings.TrimSpace(req.DirectoryID), enc); err != nil {
+		http.Error(w, "kunne ikke lagre", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

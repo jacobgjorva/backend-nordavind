@@ -1,0 +1,17 @@
+{"shelf": "data_question", "text": "hvordan går salget denne uken?"}
+{"shelf": "data_question", "text": "hvem er de tre største kundene våre i år?"}
+{"shelf": "data_question", "text": "hvilke kunder har ikke bestilt på over tre måneder?"}
+{"shelf": "show_table", "text": "vis ordrene fra ACKES som tabell"}
+{"shelf": "show_table", "text": "trenger en liste over ukens leveranser"}
+{"shelf": "create_widget", "text": "lag en graf over omsetningen per måned i år"}
+{"shelf": "export_excel", "text": "eksporter ordrelisten til Excel"}
+{"shelf": "create_routine", "text": "følg med på ordreinngangen og varsle meg hver morgen"}
+{"shelf": "web_fact", "text": "hva er styringsrenten nå?"}
+{"shelf": "smalltalk", "text": "hei, hva kan du hjelpe meg med?"}
+{"shelf": "usage_stats", "text": "vis forbruket vårt"}
+{"shelf": "compose_email", "text": "skriv en e-post til ACKES og spør om de vil øke ordren for august"}
+{"shelf": "mail_lookup", "text": "har jeg fått svar fra Kari på tilbudet?"}
+{"shelf": "file_search", "text": "finn prislisten vår i OneDrive"}
+{"shelf": "knowledge_question", "text": "hva er rutinen vår for reklamasjoner?"}
+{"shelf": "text_edit", "text": "omskriv denne til engelsk: Vi bekrefter mottak av ordren og leverer innen tre virkedager."}
+{"shelf": "data_analysis", "text": "sammenlign salget hittil i år mot samme periode i fjor og forklar avviket"}

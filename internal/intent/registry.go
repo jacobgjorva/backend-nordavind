@@ -51,6 +51,9 @@ var Registry = []Intent{
 			"vi må få inn OneDrive",
 			"koble til outlook-kontoen",
 			"microsoft",
+			"app-registreringen i Azure er klar, hva er neste steg?",
+			"fullfør microsoft-oppsettet",
+			"innloggingen hos microsoft feilet, prøv igjen",
 		},
 		AdminOnly: true,
 	},
@@ -63,6 +66,10 @@ var Registry = []Intent{
 			"hvilke tilkoblinger har vi?",
 			"fjern databasetilkoblingen",
 			"vis datakildene våre",
+			"koble fra microsoft-kontoen",
+			"er databasekoblingen fortsatt aktiv?",
+			"hvem har tilgang til hvilke tabeller?",
+			"virker tilkoblingen?",
 		},
 		AdminOnly: true,
 	},
@@ -121,6 +128,8 @@ var Registry = []Intent{
 			"hvilke produkter selger best?",
 			"hvordan ligger vi an mot budsjettet?",
 			"når på dagen selger vi mest?",
+			"hva tar vi i pris for frakt?",
+			"hvor mye har vi solgt av et produkt denne måneden?",
 		},
 	},
 	{
@@ -136,7 +145,7 @@ var Registry = []Intent{
 	},
 	{
 		Key:         "usage_stats",
-		Description: "Se plattformens eget AI-forbruk: tokens brukt, hva AI-en koster oss, kvoter per bruker",
+		Description: "Se plattformens eget AI-forbruk: tokens brukt, hva AI-en koster oss, kvoter per bruker — IKKE brukerens filer, og IKKE research om eksterne leverandører eller API-er",
 		Examples: []string{
 			"hvor mye tokens har vi brukt denne måneden?",
 			"hva koster AI-bruken oss?",
@@ -206,7 +215,7 @@ var Registry = []Intent{
 	},
 	{
 		Key:         "create_routine",
-		Description: "Sette opp en gjentakende agent-rutine som kjører automatisk på fast intervall",
+		Description: "Sette opp en gjentakende agent-rutine: kjøre automatisk på fast intervall, overvåke noe løpende eller varsle når en terskel treffes",
 		Examples: []string{
 			"trenger verdi av bitcoin hvert 15 min",
 			"sjekk lagerstatus hver morgen kl 07",
@@ -226,6 +235,8 @@ var Registry = []Intent{
 			"sett rutinen på pause",
 			"bytt tidspunktet til kl 06",
 			"stopp bitcoin-agenten",
+			"endre kursvarselet til hvert kvarter",
+			"juster varslingsgrensen på rutinen",
 		},
 	},
 	{
@@ -241,8 +252,20 @@ var Registry = []Intent{
 		AdminOnly: true,
 	},
 	{
+		Key:         "m365_files",
+		Description: "Spørsmål om brukerens egne filer og dokumenter i OneDrive, SharePoint eller Microsoft 365: finne, telle, åpne eller lese dem",
+		Examples: []string{
+			"hvor mange filer har jeg?",
+			"kan du se filene mine?",
+			"finn presentasjonen fra forrige uke",
+			"hva ligger i OneDrive-mappen min?",
+			"åpne budsjett-regnearket mitt",
+			"søk i dokumentene mine etter avtalen",
+		},
+	},
+	{
 		Key:         "web_fact",
-		Description: "Faktaspørsmål om verden utenfor bedriften: nyheter, priser, kurser, personer, hendelser",
+		Description: "Faktaspørsmål om verden utenfor bedriften: nyheter, priser, satser, regelverk, begreper, personer, hendelser — alt som må slås opp på nettet",
 		Examples: []string{
 			"hva er kursen på polight-aksjen?",
 			"når ble Telenor grunnlagt?",
@@ -251,6 +274,36 @@ var Registry = []Intent{
 			"hva blir været i Oslo i morgen?",
 			"hva er en embedding?",
 			"forklar hva inflasjon er",
+			"hva ligger boligprisene på nå?",
+			"hvor mye koster bensin i dag?",
+			"hva er dagens strømpris?",
+			"hva betyr ROI?",
+			"hvilke regler gjelder for overtid?",
+			"hva er mva-satsen på matvarer?",
+			"hvem vant kampen i går?",
+			"hva er siste nytt i teknologibransjen?",
+			"søk opp åpningstidene til posten",
+			"sjekk hva konkurrentene priser dette til",
+			"hva er best av mysql og postgres?",
+			"hva er forskjellen på to skytjenester?",
+			"se om leverandøren har et api for dette",
+			"undersøk hva tjenesten deres støtter",
+			"finn ut om verktøyet har en integrasjon",
+		},
+	},
+	{
+		// free_chat som egen rad: rådgivning og åpne spørsmål skal kunne VINNE
+		// rutingen — uten denne kan de aldri slå flyt-nøklene på embedding.
+		Key:         FreeChatKey,
+		Description: "Rådgivning, meninger, tekstarbeid og åpne spørsmål om eller rundt plattformen: hva bør vi gjøre, er dette trygt, hjelp meg å skrive eller oppsummere",
+		Examples: []string{
+			"hva synes du vi burde gjøre her?",
+			"er det trygt å dele dataene våre?",
+			"hjelp meg å formulere en e-post til en kunde",
+			"oppsummer det vi har snakket om",
+			"oversett dette til engelsk",
+			"gi meg råd om prisstrategien vår",
+			"hvilke muligheter gir denne plattformen oss?",
 		},
 	},
 	{

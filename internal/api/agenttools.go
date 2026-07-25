@@ -224,6 +224,33 @@ func (s *Server) runSetupRoutine(ctx context.Context, agentID, rawArgs string) s
 	if args.IntervalSeconds < 900 {
 		args.IntervalSeconds = 900
 	}
+	// Uten agent-kontekst (create_routine-flyten i vanlig chat): opprett en ny
+	// rutine direkte — før feilet dette med «Fant ikke agenten».
+	if strings.TrimSpace(agentID) == "" {
+		name := strings.TrimSpace(args.Name)
+		if name == "" {
+			name = strings.TrimSpace(args.Label)
+		}
+		if name == "" {
+			name = "Rutine"
+		}
+		agent, err := s.store.CreateAgent(user.TenantID, user.ID, store.Agent{
+			Name:            name,
+			Task:            args.Prompt,
+			ScheduleLabel:   strings.TrimSpace(args.Label),
+			IntervalSeconds: args.IntervalSeconds,
+		})
+		if err != nil {
+			s.log.Error("kunne ikke opprette rutine fra chat", "err", err)
+			return "Kunne ikke opprette rutinen."
+		}
+		s.log.Info("rutine opprettet fra chat", "id", agent.ID, "navn", agent.Name)
+		freq := strings.TrimSpace(args.Label)
+		if freq == "" {
+			freq = fmt.Sprintf("hvert %d. minutt", args.IntervalSeconds/60)
+		}
+		return "Rutine «" + agent.Name + "» opprettet — kjører " + freq + "."
+	}
 	a, err := s.store.GetAgent(agentID, user.ID)
 	if err != nil {
 		return "Fant ikke agenten."

@@ -5,14 +5,19 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
+	"github.com/jacobgjorva/backend-nordavind/internal/intent"
 	"github.com/jacobgjorva/backend-nordavind/internal/search"
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
 
 // Modellen bestemmer selv når den trenger nettet — ingen forhåndsdommer.
+// widgetSlugRe plukker slugen ut av runWidgetOp-kvitteringen.
+var widgetSlugRe = regexp.MustCompile(`slug=([a-z0-9-]+)`)
+
 var webSearchTool = map[string]any{
 	"type": "function",
 	"function": map[string]any{
@@ -174,6 +179,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// forespørselen sendes videre til upstream.
 	setup, _ := full["nordavind_agent_setup"].(bool)
 	delete(full, "nordavind_agent_setup")
+	// Flyt-kontrakten (intent-modus): leses ut her, skal aldri videre upstream.
+	flowKey, _ := full[flowKeyField].(string)
+	answerLimit := answerCharLimit(full)
+	delete(full, flowKeyField)
+	delete(full, flowMaxField)
 	if setup {
 		injectSystem(full, agentSetupSystem)
 	}
@@ -182,6 +192,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	widgetSlug, _ := full["nordavind_widget"].(string)
 	delete(full, "nordavind_widget")
 	if widgetSlug != "" {
+		injectSystem(full, s.widgetSystem(ctx))
+	}
+	// Widget-flytene fra intent-ruting trenger samme feltskjema-instruks som
+	// widget-editoren — uten den famler modellen blindt med set_widget.
+	if widgetSlug == "" && (flowKey == "create_widget" || flowKey == "edit_widget" || flowKey == "create_presentation") {
 		injectSystem(full, s.widgetSystem(ctx))
 	}
 
@@ -236,6 +251,25 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			// Oppdrags-planlegging: KUN start_mission. Modellen forstår oppgaven,
 			// utleder selv fullført-kriterier, og starter løkka med det samme.
 			full["tools"] = missionStartTools()
+		} else if flowKey != "" && flowKey != intent.FreeChatKey {
+			// Intent-modus: flyt-tabellen bestemmer verktøysettet (flowtools.go).
+			// Kan flyten ikke innfris (mangler db/M365): fritt sett, fail-open.
+			if tools, ok := s.flowTools(ctx, flowKey, dbCtx); ok {
+				if len(tools) > 0 {
+					full["tools"] = tools
+				} else {
+					delete(full, "tools")
+				}
+			} else {
+				tools := []any{webSearchTool, fetchURLTool}
+				if dbCtx != nil {
+					tools = append(tools, dbCtx.tool, showTableTool)
+				}
+				if _, ok := s.m365Connected(ctx); ok {
+					tools = append(tools, m365SearchTool, m365ReadTool)
+				}
+				full["tools"] = tools
+			}
 		} else {
 			tools := []any{webSearchTool, fetchURLTool}
 			if dbCtx != nil {
@@ -287,6 +321,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	start := time.Now()
 	var promptTokens, completionTokens, searches int
 	usedTool := false // om noen verktøy (søk/lese/db) er kjørt — styrer tom-svar-vernet
+	// Slug for widget opprettet i denne turen (create_widget-flyten) — blokka
+	// appendes i KODE hvis modellen glemmer den; widgeten skal alltid vises.
+	createdWidget := ""
 	// Handlings-verktøy (endrer tilstand: rutine, widget, agent, m365 …) gir
 	// korte kvitteringer med vilje — de skal ALDRI utløse backstop-syntesen.
 	actionTool := false
@@ -332,21 +369,28 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		if len(calls) == 0 {
 			trimmed := strings.TrimSpace(content)
 			switch {
-			case len(trimmed) < 40 && usedTool && !actionTool:
+			case len([]rune(trimmed)) < 3 && usedTool && !actionTool:
+				// Reelt tomt (eller bare tegnsetting) etter verktøybruk —
+				// korte, gyldige svar («426 ordre.») skal IKKE hit.
 				// (Nesten) tomt etter verktøybruk → synteser fra det den fant.
 				step, _ := json.Marshal(map[string]any{"nordavind_step": "Oppsummerer funnene"})
 				emit("data: " + string(step))
 				s.streamBackstop(ctx, full, emit, &promptTokens, &completionTokens)
 			case trimmed == "" && !actionTool:
 				emit(contentSSE(backstopGraceful))
-			case len([]rune(trimmed)) > wallCharLimit:
-				// Nødbrems: modellen ignorerte korthet og skrev en vegg →
-				// komprimer til noen få HELE setninger (sjelden, minimal sløsing).
-				step, _ := json.Marshal(map[string]any{"nordavind_step": "Strammer svaret"})
+			case len([]rune(trimmed)) > answerLimit:
+				// Over flytens (eller standard) grense: aldri kutt — skriv om
+				// til hele setninger. Statusen er bevisst selvironisk.
+				step, _ := json.Marshal(map[string]any{"nordavind_step": "Sorry, dette blir for mye greier, la meg omformulere meg"})
 				emit("data: " + string(step))
 				emit(contentSSE(s.compressAnswer(ctx, trimmed)))
 			default:
 				emit(contentSSE(content))
+			}
+			// Bulletproof: ny widget skal ALLTID rendres, selv om modellen
+			// glemmer blokka i svaret sitt.
+			if createdWidget != "" && !strings.Contains(content, "```widget") {
+				emit(contentSSE("\n\n```widget\n" + createdWidget + "\n```"))
 			}
 			emit("data: [DONE]")
 			return
@@ -505,6 +549,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Bygger widget"})
 				emit("data: " + string(meta))
 				result = s.runWidgetOp(ctx, widgetSlug, c.Args.String())
+				if widgetSlug == "" {
+					if m := widgetSlugRe.FindStringSubmatch(result); m != nil {
+						createdWidget = m[1]
+					}
+				}
 				emit(`data: {"nordavind_widget_updated":true}`)
 			default:
 				if q := strings.TrimSpace(args.Query); q != "" {
@@ -592,6 +641,18 @@ type sourceRef struct {
 // wallCharLimit: over dette regnes svaret som en «vegg» og komprimeres (nødbrems).
 const wallCharLimit = 600
 
+// answerCharLimit: flytens MaxChars når intent-modus har satt den, ellers
+// standard nødbrems-grense.
+func answerCharLimit(full map[string]any) int {
+	if v, ok := full[flowMaxField].(int); ok && v > 0 {
+		return v
+	}
+	if v, ok := full[flowMaxField].(float64); ok && v > 0 {
+		return int(v)
+	}
+	return wallCharLimit
+}
+
 const compressSystem = "Komprimer teksten under til MAKS 3 korte, HELE setninger på norsk. Anbefaling/" +
 	"konklusjon først, deretter bare det aller viktigste. Behold nøkkeltall og navn. ALDRI liste, " +
 	"overskrifter eller punkt-for-punkt. Behold samme mening, bare tettere. Svar kun med den komprimerte teksten."
@@ -641,7 +702,7 @@ func (s *Server) streamBackstop(ctx context.Context, full map[string]any, emit f
 	resp.Body.Close()
 	*promptTokens += usage.PromptTokens
 	*completionTokens += usage.CompletionTokens
-	if len(strings.TrimSpace(content)) < 40 {
+	if len([]rune(strings.TrimSpace(content))) < 3 {
 		emit(contentSSE(backstopGraceful))
 	}
 }

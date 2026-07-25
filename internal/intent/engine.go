@@ -19,12 +19,20 @@ const (
 	MethodJudge  = "judge"  // enum-begrenset dommer-kall blant kandidatene
 	MethodNone   = "none"   // ingen flyt — fri chat (også ved feil: fail-open)
 	MethodMulti  = "multi"  // sammensatt ønske — to flyter nesten likt → fri chat
+	MethodSticky = "sticky" // kort oppfølging arvet forrige sticky-flyt
+	MethodAsk    = "ask"    // dommeren er reelt i tvil → still oppklaringsspørsmål
 )
+
+// AskKey er dommerens «reelt i tvil»-svar — ikke en flyt, men et signal om at
+// brukeren skal få ett kort oppklaringsspørsmål i stedet for en gjetning.
+const AskKey = "usikker"
 
 // Terskler. Kalibrert mot eval-settet (cmd/intent-eval skriver ut forslag);
 // endres KUN sammen med en grønn eval-kjøring — aldri på magefølelse.
 const (
-	// floorScore: under dette ligner meldingen ikke på noen flyt → fri chat.
+	// floorScore: under dette ligner meldingen ikke på noen flyt. Brukes kun
+	// som logg-signal og fallback-vern når dommeren feiler — usikre meldinger
+	// går alltid til dommeren, som selv kan svare fri chat.
 	floorScore = 0.42
 	// directScore + directMargin: over dette OG med klar avstand til nummer
 	// to velger matten alene, uten dommer.
@@ -32,13 +40,19 @@ const (
 	directMargin = 0.08
 	// candN: hvor mange kandidater dommeren får velge blant.
 	candN = 3
+	// freeChatMargin: er free_chat nærmere toppkandidaten enn dette, avgjør
+	// dommeren i stedet for direct — romsligere enn directMargin fordi
+	// rådgivningsformuleringer scorer systematisk lavere på tekstlikhet.
+	freeChatMargin = 0.16
 	// multiMargin: scorer to flyter BEGGE over directScore med mindre avstand
 	// enn dette, tolkes meldingen som sammensatt («lag graf OG eksporter») og
 	// går til fri chat som har alle verktøy. Logges som MethodMulti.
 	multiMargin = 0.03
-	// embedTimeout/judgeTimeout: motoren skal aldri henge — fail-open.
-	embedTimeout = 6 * time.Second
-	judgeTimeout = 5 * time.Second
+	// embedTimeout/judgeTimeout: motoren skal aldri henge — fail-open. Stramme
+	// frister: p50 er ~100-250 ms, og en Scaleway-utstikker skal koste maks
+	// ~2 s ekstra før chatten går videre som fri chat, aldri 10+.
+	embedTimeout = 1500 * time.Millisecond
+	judgeTimeout = 2500 * time.Millisecond
 )
 
 // Embedder gjør tekster om til vektorer. Injiseres (Scaleway i produksjon,
@@ -187,30 +201,53 @@ func (e *Engine) Resolve(ctx context.Context, message string, isAdmin bool) Deci
 		cands = cands[:candN]
 	}
 
-	// Under gulvet: dette er fri chat.
-	if len(cands) == 0 || cands[0].Score < floorScore {
-		none.Candidates = cands
+	if len(cands) == 0 {
 		none.Elapsed = time.Since(start)
 		return none
 	}
 
-	// Sammensatt ønske: to flyter nesten likt, begge sterke → fri chat.
-	if len(cands) > 1 && cands[1].Score >= directScore &&
-		cands[0].Score-cands[1].Score < multiMargin {
-		return Decision{Method: MethodMulti, Candidates: cands, Elapsed: time.Since(start)}
-	}
-
-	// Klar vinner: matten bestemmer alene.
+	// Klar vinner: matten bestemmer alene. Nesten-like kandidater (tidligere
+	// MethodMulti → rett til fri chat) går nå til dommeren, som selv velger
+	// fri chat ved ekte sammensatte ønsker. Samme regel gjelder fri chat:
+	// ligger free_chat innenfor direct-marginen av toppen, avgjør dommeren —
+	// rådgivningsspørsmål skal aldri tape på ren tekstlikhet.
 	if cands[0].Score >= directScore &&
-		(len(cands) == 1 || cands[0].Score-cands[1].Score >= directMargin) {
+		(len(cands) == 1 || cands[0].Score-cands[1].Score >= directMargin) &&
+		!(cands[0].Key != FreeChatKey && cands[0].Score-best[FreeChatKey] < freeChatMargin) {
+		// Panel-vern: skal treffet spawne en DETERMINISTISK flyt (panel/skjema
+		// som overtar chatten), må dommeren bekrefte det først — ren
+		// tekstlikhet får aldri alene kapre samtalen («se om X har et api …»
+		// traff forbrukspanelet direkte). Modellflyter beholder direct: der
+		// koster en bom bare verktøyskop, ikke et feil panel.
+		if f, ok := Flows[cands[0].Key]; ok && f.Deterministic {
+			return e.judgeDecision(ctx, msg, isAdmin, cands, start, cands[0].Key)
+		}
 		return Decision{Key: cands[0].Key, Method: MethodDirect, Candidates: cands, Elapsed: time.Since(start)}
 	}
 
-	// Usikkert: dommeren velger blant kandidatene — og KUN blant dem.
-	keys := make([]string, len(cands))
-	for i, c := range cands {
-		keys[i] = c.Key
+	return e.judgeDecision(ctx, msg, isAdmin, cands, start, "")
+}
+
+// judgeDecision lar dommeren klassifisere mot hele det rollefiltrerte
+// registeret. directKey er satt når et direktetreff skal bekreftes: er
+// dommeren enig, logges det fortsatt som direct.
+func (e *Engine) judgeDecision(ctx context.Context, msg string, isAdmin bool, cands []Candidate, start time.Time, directKey string) Decision {
+	none := Decision{Method: MethodNone}
+	// Usikkert: dommeren klassifiserer mot HELE det rollefiltrerte registeret
+	// pluss et eksplisitt fri chat-valg — topp-3-innsnevring ga systematiske
+	// bom når riktig flyt ikke nådde topp 3 på ren tekstlikhet.
+	keys := make([]string, 0, len(Registry)+1)
+	for _, in := range Registry {
+		if in.AdminOnly && !isAdmin {
+			continue
+		}
+		keys = append(keys, in.Key)
 	}
+	// free_chat er allerede en register-rad; usikker-valget legges alltid sist.
+	if !contains(keys, FreeChatKey) {
+		keys = append(keys, FreeChatKey)
+	}
+	keys = append(keys, AskKey)
 	jctx, jcancel := context.WithTimeout(ctx, judgeTimeout)
 	defer jcancel()
 	pick, err := e.judge.Pick(jctx, msg, keys)
@@ -224,6 +261,16 @@ func (e *Engine) Resolve(ctx context.Context, message string, isAdmin bool) Deci
 		none.Candidates = cands
 		none.Elapsed = time.Since(start)
 		return none
+	}
+	if pick == FreeChatKey {
+		return Decision{Method: MethodJudge, Candidates: cands, Elapsed: time.Since(start)}
+	}
+	if pick == AskKey {
+		return Decision{Method: MethodAsk, Candidates: cands, Elapsed: time.Since(start)}
+	}
+	if pick == directKey {
+		// Bekreftet direktetreff — logges som direct for målbarhet.
+		return Decision{Key: pick, Method: MethodDirect, Candidates: cands, Elapsed: time.Since(start)}
 	}
 	return Decision{Key: pick, Method: MethodJudge, Candidates: cands, Elapsed: time.Since(start)}
 }

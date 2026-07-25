@@ -103,6 +103,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/m365/status", s.requireAuth(s.handleM365Status))
 	mux.HandleFunc("GET /v1/m365/connect", s.requireAuth(s.handleM365Connect))
 	mux.HandleFunc("DELETE /v1/m365", s.requireAuth(s.handleM365Disconnect))
+	mux.HandleFunc("POST /v1/m365/app", s.requireAdmin(s.handleSaveM365App))
 	// OAuth-callback kommer fra Microsofts redirect — ingen sesjon, state-vernet.
 	mux.HandleFunc("GET /v1/m365/callback", s.handleM365Callback)
 	mux.HandleFunc("GET /v1/export/links", s.requireAuth(s.handleListExportLinks))
@@ -180,12 +181,22 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 	patched, full, pickedModel := withRoutingDefaults(body)
 
-	// Shadow-ruting: logg motorens valg for vanlige meldinger — endrer intet.
+	// Intent-motoren: shadow logger bare; on styrer flyten.
 	if _, widgetMode := full["nordavind_widget"]; !widgetMode {
 		if _, connMode := full["nordavind_connector"]; !connMode {
 			if setup, _ := full["nordavind_agent_setup"].(bool); !setup {
 				if user, ok := r.Context().Value(userKey).(store.User); ok {
-					s.shadowIntent(user, lastUserText(full))
+					switch s.cfg.IntentMode {
+					case "shadow":
+						s.shadowIntent(user, lastUserText(full))
+					case "on":
+						if block := s.applyIntent(user, full); block != "" {
+							s.respondSSEBlock(w, block)
+							s.log.Info("chat/completions", "mode", "intent-deterministic",
+								"dur", time.Since(start).Round(time.Millisecond))
+							return
+						}
+					}
 				}
 			}
 		}
@@ -274,8 +285,8 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 			system := map[string]any{
 				"role": "system",
 				"content": "I dag er " + time.Now().Format("2006-01-02") + ". " +
-					"Svar KORTEST MULIG: kun det brukeren ber om, ingenting mer. Et faktaspørsmål besvares med " +
-					"selve svaret — «Hvor mange cm er det i en meter?» → «100 cm.» Ferdig. Ingen innramming, " +
+					"Svar KORTEST MULIG, men alltid i hele, naturlige setninger — aldri telegramstil eller " +
+					"ettordssvar: «Hvor mange cm er det i en meter?» → «En meter er 100 cm.» Ferdig. Ingen innramming, " +
 					"kontekst, forbehold eller oppfølgingstilbud med mindre brukeren ber om det. Trengs substans: " +
 					"legg det viktigste i FØRSTE setning, si hvert poeng bare ÉN gang, og STOPP straks verdien er " +
 					"levert — ikke fyll opp mot noe tak. Null fyll og tomme forbehold. " +
@@ -296,6 +307,11 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 					"ved å kjøre query_database — aldri web_search, aldri hukommelse, og aldri påstå manglende " +
 					"tilgang uten å ha prøvd verktøyet. Ber brukeren om en tabell eller liste over rader: vis " +
 					"resultatet med show_table, ikke beskriv radene i prosa. " +
+					"HANDLINGSREGEL: har du et verktøy som kan utføre eller sjekke det brukeren spør om, KJØR det " +
+					"med en gang — spør ALDRI «vil du at jeg skal …» eller om lov/tillatelse for søk og lesing. " +
+					"Brukeren har allerede gitt tillatelsen ved å spørre; handlingen er svaret. " +
+					"Får du et bekreftelsesspørsmål («sikker?», «stemmer det?»): bekreft eller korriger med en NY " +
+					"formulering og nevn gjerne grunnlaget — ALDRI gjenta forrige svar ordrett. " +
 					"Ved råd: land én tydelig anbefaling. Kun hvis forespørselen er for " +
 					"vag: still ett oppklarende spørsmål. Tone: avslappet og lun som en trygg kollega, " +
 					"uformell men aldri på bekostning av korthet eller presisjon. Bruk kun naturlige " +
@@ -304,15 +320,22 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 			}
 			// Few-shot: faste eksempel-utvekslinger som VISER svarstilen —
 			// langt mer robust enn instrukser alene for akkurat stil.
+			// Bildemeldinger er i praksis sin egen flyt: vision-modellen skal
+			// BESKRIVE, og korthets-eksemplene gjør den ordknapp til det
+			// meningsløse («T.») — de utelates derfor for bilder.
 			fewshot := []any{
 				map[string]any{"role": "user", "content": "Hvor mange cm er det i en meter?"},
-				map[string]any{"role": "assistant", "content": "100 cm."},
+				map[string]any{"role": "assistant", "content": "En meter er 100 cm."},
 				map[string]any{"role": "user", "content": "Opprett en ny kobling"},
 				map[string]any{"role": "assistant", "content": "Hva skal vi koble til?"},
 				map[string]any{"role": "user", "content": "hva er mva-satsen i Norge?"},
-				map[string]any{"role": "assistant", "content": "25 % (15 % på mat, 12 % på persontransport m.m.)."},
+				map[string]any{"role": "assistant", "content": "Standardsatsen er 25 %, med 15 % på mat og 12 % på persontransport."},
 			}
-			full["messages"] = append(append([]any{system}, fewshot...), raw...)
+			if router.LastUserHasImage(payload.Messages) {
+				full["messages"] = append([]any{system}, raw...)
+			} else {
+				full["messages"] = append(append([]any{system}, fewshot...), raw...)
+			}
 		}
 	}
 
