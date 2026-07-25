@@ -70,3 +70,5 @@
 {"text": "hvordan ligger vi an mot bransjesnittet vi la inn i fjor?", "want": "data_question"}
 {"text": "lag en graf over oljeprisen siste år", "want": "create_widget"}
 {"text": "hva synes du om prisstrategien vår?", "want": ""}
+{"text": "hvor mange filer har jeg?", "want": "m365_files"}
+{"text": "kan du se filene mine?", "want": "m365_files"}

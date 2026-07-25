@@ -156,6 +156,14 @@ var Flows = map[string]Flow{
 		Fallback: FreeChatKey,
 	},
 
+	"m365_files": {
+		Tools:    []string{ToolM365Search, ToolM365Read},
+		Model:    "mid",
+		MaxChars: 300,
+		Fallback: FreeChatKey,
+		Sticky:   true, // fildialog: «åpne den», «hva står det?»
+	},
+
 	"web_fact": {
 		Tools:    []string{ToolWebSearch, ToolFetchURL},
 		Model:    "mid",

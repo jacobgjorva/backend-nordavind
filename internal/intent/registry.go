@@ -138,7 +138,7 @@ var Registry = []Intent{
 	},
 	{
 		Key:         "usage_stats",
-		Description: "Se plattformens eget AI-forbruk: tokens brukt, hva AI-en koster oss, kvoter per bruker",
+		Description: "Se plattformens eget AI-forbruk: tokens brukt, hva AI-en koster oss, kvoter per bruker — IKKE brukerens filer, dokumenter eller bedriftsdata",
 		Examples: []string{
 			"hvor mye tokens har vi brukt denne måneden?",
 			"hva koster AI-bruken oss?",
@@ -243,6 +243,18 @@ var Registry = []Intent{
 			"fjern en sluttet ansatt",
 		},
 		AdminOnly: true,
+	},
+	{
+		Key:         "m365_files",
+		Description: "Spørsmål om brukerens egne filer og dokumenter i OneDrive, SharePoint eller Microsoft 365: finne, telle, åpne eller lese dem",
+		Examples: []string{
+			"hvor mange filer har jeg?",
+			"kan du se filene mine?",
+			"finn presentasjonen fra forrige uke",
+			"hva ligger i OneDrive-mappen min?",
+			"åpne budsjett-regnearket mitt",
+			"søk i dokumentene mine etter avtalen",
+		},
 	},
 	{
 		Key:         "web_fact",
