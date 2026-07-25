@@ -45,6 +45,25 @@ følge dette. UTKAST til gjennomgang med Jacob.
   av nabo-connectors), gjennomgått av Jacob, kjørt grønt; bommene inn i
   eval.jsonl. Hoved-eval skal fortsatt være grønn.
 
+## 3b. Oppskrifter (onboarding-guide per connector)
+
+Hver connector registrerer en deklarativ oppskrift som agenten leser og
+guider fra — aldri fri prosa-improvisasjon, aldri ny agentlogikk per kilde.
+En oppskrift består av nummererte steg, og hvert steg er én av tre typer:
+
+- `info`: hva brukeren skal gjøre/hente og nøyaktig hvor (à la Azure-guiden:
+  «portal.azure.com → App registrations → …»), med venting på bekreftelse.
+- `panel`: hvilket inline-panel som spawnes (credential-skjema, nøkkelfelt,
+  OAuth-vindu) og hvilke felter agenten kan forhåndsfylle. Alt sensitivt
+  skjer HER — aldri i chat.
+- `verify`: hvilket verktøy som bekrefter steget (à la check_m365).
+  Agenten påstår aldri suksess uten et grønt verify-steg.
+
+Oppskriften eier rekkefølge og formuleringssteder; agenten eier bare tonen
+og feilhjelpen. Ny connector = ny oppskrift + evt. nytt panel + verify-
+verktøy. Format (Go-struktur eller JSON i koden) besluttes ved første
+connector etter M365; M365-guiden migreres til formatet samtidig.
+
 ## 4. Kvalitet og drift
 
 - Introspeksjon skal tåle store skjemaer: paginering/kostnadsindikator i UI,
