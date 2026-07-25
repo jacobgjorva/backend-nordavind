@@ -130,6 +130,8 @@ var Registry = []Intent{
 			"når på dagen selger vi mest?",
 			"hva tar vi i pris for frakt?",
 			"hvor mye har vi solgt av et produkt denne måneden?",
+			"har jeg tilgang til dataene våre?",
+			"hvilke data har jeg tilgang til?",
 		},
 	},
 	{
