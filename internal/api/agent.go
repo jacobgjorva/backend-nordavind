@@ -243,44 +243,23 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			// utleder selv fullført-kriterier, og starter løkka med det samme.
 			full["tools"] = missionStartTools()
 		} else if flowKey != "" && flowKey != intent.FreeChatKey {
-			// Intent-modus: flyten bestemmer verktøysettet — modellen ser
-			// KUN det den trenger, og kan ikke velge feil verktøy.
-			var tools []any
-			switch flowKey {
-			case "data_question", "show_table":
-				if dbCtx != nil {
-					tools = append(tools, dbCtx.tool, showTableTool)
+			// Intent-modus: flyt-tabellen bestemmer verktøysettet (flowtools.go).
+			// Kan flyten ikke innfris (mangler db/M365): fritt sett, fail-open.
+			if tools, ok := s.flowTools(ctx, flowKey, dbCtx); ok {
+				if len(tools) > 0 {
+					full["tools"] = tools
 				} else {
-					// Ingen database: oppfør deg som fri chat (fail-open).
-					tools = append(tools, webSearchTool, fetchURLTool)
+					delete(full, "tools")
 				}
-			case "web_fact":
-				tools = append(tools, webSearchTool, fetchURLTool)
-			case "m365_files":
-				if _, ok := s.m365Connected(ctx); ok {
-					tools = append(tools, m365SearchTool, m365ReadTool)
-				} else {
-					// Ikke koblet: oppfør deg som fri chat (fail-open).
-					tools = append(tools, webSearchTool, fetchURLTool)
-				}
-			case "smalltalk":
-				// Ingen verktøy — rent samtalesvar.
-			case "connect_database", "connect_m365":
-				tools = append(tools, connectorAgentTools()...)
-			default:
-				// Ukjent/uvirket flyt: fullt sett som fri chat.
-				tools = append(tools, webSearchTool, fetchURLTool)
-				if dbCtx != nil {
-					tools = append(tools, dbCtx.tool, showTableTool)
-				}
-				if _, ok := s.m365Connected(ctx); ok {
-					tools = append(tools, m365SearchTool, m365ReadTool)
-				}
-			}
-			if len(tools) > 0 {
-				full["tools"] = tools
 			} else {
-				delete(full, "tools")
+				tools := []any{webSearchTool, fetchURLTool}
+				if dbCtx != nil {
+					tools = append(tools, dbCtx.tool, showTableTool)
+				}
+				if _, ok := s.m365Connected(ctx); ok {
+					tools = append(tools, m365SearchTool, m365ReadTool)
+				}
+				full["tools"] = tools
 			}
 		} else {
 			tools := []any{webSearchTool, fetchURLTool}

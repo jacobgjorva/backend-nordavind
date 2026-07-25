@@ -48,6 +48,7 @@ type simResult struct {
 	Correctness int    `json:"correctness"`
 	Value       int    `json:"value"`
 	MissingTool string `json:"missing_tool,omitempty"`
+	Hesitation  bool   `json:"hesitation,omitempty"`
 	Comment     string `json:"comment,omitempty"`
 }
 
@@ -57,7 +58,8 @@ const judgeRubric = `Du er en streng produktdommer for en norsk bedrifts-AI. Vur
 - correctness (1-5): 5 = svarer presist på det som ble spurt, riktig form (tabell når bedt om, tall når bedt om); 1 = svarer på noe annet, gjetter, eller nekter uten grunn.
 - value (1-5): 5 = brukeren er ferdig hjulpet; 1 = brukeren må gjøre jobben selv.
 - missing_tool: hvis svaret viser at assistenten MANGLER en evne (kan ikke sende e-post, ikke lese innboks, ikke søke filer e.l.), navngi evnen kort på engelsk (f.eks. "send_email"), ellers tom streng.
-Svar KUN med JSON: {"brevity":n,"correctness":n,"value":n,"missing_tool":"...","comment":"én kort setning"}`
+- hesitation (bool): true hvis assistenten SPØR OM LOV eller tilbyr å gjøre noe i stedet for å gjøre det («vil du at jeg skal …?», «gi meg tillatelse», «skal jeg prøve?») — å utføre og så svare er alltid riktig; vegring er en alvorlig feil og skal også trekke value ned til maks 2.
+Svar KUN med JSON: {"brevity":n,"correctness":n,"value":n,"missing_tool":"...","hesitation":false,"comment":"én kort setning"}`
 
 const builderSystem = `Du designer flyt-rader for en intent-motor. En flyt-rad har feltene:
 tools (liste fra verktøykatalogen UNDER — aldri dikt opp nye), model ("mid"|"heavy"|"top"), max_chars (mykt svartak), deterministic (bool), fallback ("free_chat"), sticky (bool).
@@ -106,6 +108,9 @@ func main() {
 		fmt.Printf("%-20s brev=%d korr=%d verdi=%d %4dms  %s\n",
 			results[i].Case.Shelf, results[i].Brevity, results[i].Correctness,
 			results[i].Value, results[i].TotalMS, results[i].MissingTool)
+		if results[i].Hesitation {
+			fmt.Printf("  VEGRING: %s\n", results[i].Comment)
+		}
 	}
 	save(runDir, "results.json", results)
 
