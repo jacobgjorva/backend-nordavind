@@ -66,11 +66,10 @@ var Flows = map[string]Flow{
 	},
 
 	"connect_database": {
-		Tools:    []string{ToolConnectDB},
-		Model:    "mid",
-		MaxChars: 400,
-		Fallback: FreeChatKey,
-		Sticky:   true, // host/port/passord samles over flere meldinger
+		// Deterministisk oppskrift-steg: koden spawner credential-skjemaet
+		// direkte (se credentialBlock) — modellen ber aldri om passord.
+		Deterministic: true,
+		Fallback:      FreeChatKey,
 	},
 	"connect_m365": {
 		Tools:    []string{ToolConnectM365, ToolCheckM365, ToolSaveM365App},

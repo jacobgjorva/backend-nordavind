@@ -159,6 +159,9 @@ func (s *Server) applyIntent(user store.User, full map[string]any) (block string
 		if panel, ok := deterministicPanels[key]; ok {
 			return "```admin\n" + panel + "\n```"
 		}
+		if key == "connect_database" {
+			return credentialBlock(msg)
+		}
 		// Deterministisk uten server-løype: fri chat (fallback).
 		return ""
 	}
