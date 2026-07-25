@@ -343,6 +343,13 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		}
 	}
 
+	// Momentan kvittering: verktøyflyter kvitterer i KODE før modellen i det
+	// hele tatt har startet («Ja, sjekker nå») — null ekstra tid, følelsen av
+	// umiddelbar respons. Selve svaret streames rett etterpå.
+	if ack := flowAcks[flowKey]; ack != "" {
+		emit(contentSSE(ack + "\n\n"))
+	}
+
 	start := time.Now()
 	var promptTokens, completionTokens, searches int
 	usedTool := false // om noen verktøy (søk/lese/db) er kjørt — styrer tom-svar-vernet
@@ -519,7 +526,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			case "query_database":
 				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Spør databasen"})
 				emit("data: " + string(meta))
+				stopWait := emitAfter(emit, 4*time.Second, "Venter på svar fra databasen")
 				result = s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL)
+				stopWait()
 				dbAttempted = true
 				if strings.HasPrefix(strings.TrimSpace(result), "{") {
 					dbSucceeded = true
@@ -647,7 +656,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				}
 				searches++
 				var sources []sourceRef
+				stopWait := emitAfter(emit, 4*time.Second, "Søker dypere")
 				result, sources = s.runWebSearch(ctx, args.Query, deepSearch)
+				stopWait()
 				if len(sources) > 0 {
 					// Kildene sendes som metadata til frontend — de skal ikke stå i svaret.
 					meta, _ := json.Marshal(map[string]any{"nordavind_sources": sources})
@@ -897,4 +908,30 @@ func dedupeStutter(s string) string {
 		}
 	}
 	return s
+}
+
+// flowAcks: momentane kvitteringer per verktøyflyt — sendes av koden før
+// modellen starter, så selv trege spørringer FØLES umiddelbare.
+var flowAcks = map[string]string{
+	"data_question":  "Sjekker tallene nå.",
+	"show_table":     "Henter radene.",
+	"web_fact":       "Søker det opp.",
+	"m365_files":     "Ser i filene dine.",
+	"create_routine": "Setter opp rutinen.",
+	"edit_routine":   "Justerer rutinen.",
+}
+
+// emitAfter sender en steg-status hvis operasjonen fortsatt pågår etter d.
+// Returnert funksjon stanser varselet (kalles når operasjonen er ferdig).
+func emitAfter(emit func(string), d time.Duration, status string) func() {
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-done:
+		case <-time.After(d):
+			meta, _ := json.Marshal(map[string]any{"nordavind_step": status})
+			emit("data: " + string(meta))
+		}
+	}()
+	return func() { close(done) }
 }
