@@ -316,6 +316,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		injectSystem(full, "VIKTIG: Brukeren HAR datatilgang akkurat nå (query_database er tilgjengelig "+
 			"med skjemaet i verktøyet). Eventuelle påstander tidligere i samtalen om manglende tilgang "+
 			"eller databasefeil er UTDATERTE — ignorer dem, kjør spørringen og svar med ferske tall.")
+		scrubStaleRefusals(full)
 	}
 
 	// Grundig modus: vanlig chat (ikke oppsett/widget/agent-redigering) der
@@ -780,4 +781,31 @@ func flowNeedsDB(flowKey string) bool {
 		}
 	}
 	return false
+}
+
+// scrubStaleRefusals fjerner utdaterte avslags-svar («du har ikke tilgang»,
+// «midlertidig feil») fra payloaden som sendes modellen når datatilgang
+// faktisk finnes — historikk-ankring fikk modellen til å gjenta avslag uten
+// å kalle verktøyet. Lagret chat røres ikke; kun modellens arbeidskontekst.
+func scrubStaleRefusals(full map[string]any) {
+	msgs, _ := full["messages"].([]any)
+	if len(msgs) == 0 {
+		return
+	}
+	kept := make([]any, 0, len(msgs))
+	for _, m := range msgs {
+		mm, ok := m.(map[string]any)
+		if ok && mm["role"] == "assistant" {
+			if c, ok := mm["content"].(string); ok && len([]rune(c)) <= 160 {
+				lc := strings.ToLower(c)
+				if (strings.Contains(lc, "ikke tilgang til") && strings.Contains(lc, "data")) ||
+					strings.Contains(lc, "midlertidig feil") ||
+					strings.Contains(lc, "tillater ikke lesing") {
+					continue
+				}
+			}
+		}
+		kept = append(kept, m)
+	}
+	full["messages"] = kept
 }
