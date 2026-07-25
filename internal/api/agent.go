@@ -343,11 +343,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		}
 	}
 
-	// Momentan kvittering: verktøyflyter kvitterer i KODE før modellen i det
-	// hele tatt har startet («Ja, sjekker nå») — null ekstra tid, følelsen av
-	// umiddelbar respons. Selve svaret streames rett etterpå.
+	// Momentan kvittering: verktøyflyter melder fra i KODE før modellen har
+	// startet — vises der «Tenker»-teksten står, ikke i selve svaret.
 	if ack := flowAcks[flowKey]; ack != "" {
-		emit(contentSSE(ack + "\n\n"))
+		meta, _ := json.Marshal(map[string]any{"nordavind_step": ack})
+		emit("data: " + string(meta))
 	}
 
 	start := time.Now()
