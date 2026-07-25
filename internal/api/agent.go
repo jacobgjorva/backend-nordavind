@@ -260,15 +260,6 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				} else {
 					delete(full, "tools")
 				}
-				// Tilstand slår historikk: har brukeren datatilgang NÅ, skal
-				// gamle avslag i samtalen aldri gjentas — tilgang kan ha blitt
-				// delt midt i samtalen («kan du sjekke nå?»).
-				if dbCtx != nil && flowNeedsDB(flowKey) {
-					injectSystem(full, "VIKTIG: Brukeren HAR datatilgang akkurat nå (query_database er "+
-						"tilgjengelig med skjemaet i verktøyet). Eventuelle påstander tidligere i samtalen om "+
-						"manglende tilgang eller databasefeil er UTDATERTE — ignorer dem, kjør spørringen og "+
-						"svar med ferske tall.")
-				}
 			} else if dbCtx == nil && flowNeedsDB(flowKey) {
 				// Dataflyt uten datatilgang: svar ærlig i kode — modellen skal
 				// aldri dikte «databasen tillater ikke lesing».
@@ -318,6 +309,15 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			full["tools"] = tools
 		}
 	}
+	// Tilstand slår historikk: har brukeren datatilgang NÅ (uansett flyt),
+	// skal gamle avslag i samtalen aldri gjentas — tilgang deles gjerne midt
+	// i samtalen («kan du sjekke nå?»).
+	if !setup && widgetSlug == "" && !connectorMode && !planning && dbCtx != nil {
+		injectSystem(full, "VIKTIG: Brukeren HAR datatilgang akkurat nå (query_database er tilgjengelig "+
+			"med skjemaet i verktøyet). Eventuelle påstander tidligere i samtalen om manglende tilgang "+
+			"eller databasefeil er UTDATERTE — ignorer dem, kjør spørringen og svar med ferske tall.")
+	}
+
 	// Grundig modus: vanlig chat (ikke oppsett/widget/agent-redigering) der
 	// brukeren ber om grundig/uforstyrret dybdearbeid → ekspert-prompt og mange
 	// runder før den konkluderer i chatten.
