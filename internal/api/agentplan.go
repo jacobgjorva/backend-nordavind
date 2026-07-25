@@ -353,7 +353,7 @@ func (s *Server) buildAgentPlan(ctx context.Context, agentID string) {
 			case "fetch_url":
 				result = s.runFetchURL(ctx, args.URL)
 			default:
-				result, _ = s.runWebSearch(ctx, args.Query)
+				result, _ = s.runWebSearch(ctx, args.Query, true)
 			}
 			if lbl := toolStepLabel(c.name, c.args); lbl != "" {
 				steps = append(steps, lbl)
@@ -693,7 +693,7 @@ func (s *Server) runPlanSteps(ctx context.Context, a store.Agent, plan agentPlan
 				res = "(ingen innhold)"
 			}
 		case "web":
-			res, _ = s.runWebSearch(ctx, st.Query)
+			res, _ = s.runWebSearch(ctx, st.Query, true)
 		default:
 			continue
 		}
