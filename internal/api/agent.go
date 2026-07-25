@@ -260,6 +260,19 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				} else {
 					delete(full, "tools")
 				}
+			} else if dbCtx == nil && flowNeedsDB(flowKey) {
+				// Dataflyt uten datatilgang: svar ærlig i kode — modellen skal
+				// aldri dikte «databasen tillater ikke lesing».
+				emit0 := func(line string) {
+					w.Write([]byte(line + "\n"))
+					if flusher, ok := w.(http.Flusher); ok {
+						flusher.Flush()
+					}
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				emit0(contentSSE("Du har ikke fått tilgang til bedriftsdataene ennå — be administratoren dele de aktuelle tabellene med deg, så svarer jeg på dette med en gang etterpå."))
+				emit0("data: [DONE]")
+				return
 			} else {
 				tools := []any{webSearchTool, fetchURLTool}
 				if dbCtx != nil {
@@ -744,4 +757,18 @@ func (s *Server) runWebSearch(ctx context.Context, query string) (string, []sour
 		refs = append(refs, sourceRef{Title: r.Title, URL: r.URL})
 	}
 	return search.FormatContext(query, results, pages), refs
+}
+
+// flowNeedsDB: flyten lover databaseverktøy i flyt-tabellen.
+func flowNeedsDB(flowKey string) bool {
+	f, ok := intent.Flows[flowKey]
+	if !ok {
+		return false
+	}
+	for _, t := range f.Tools {
+		if t == intent.ToolQueryDatabase || t == intent.ToolShowTable {
+			return true
+		}
+	}
+	return false
 }
