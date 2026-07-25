@@ -91,9 +91,9 @@ func TestJudgeOnTie(t *testing.T) {
 	if d.Method != MethodJudge || d.Key != "smalltalk" {
 		t.Fatalf("ville ha judge smalltalk, fikk %+v", d)
 	}
-	// Dommeren skal få hele det rollefiltrerte registeret + fri chat-valget.
-	if len(j.seen) != len(Registry)+1 || j.seen[len(j.seen)-1] != FreeChatKey {
-		t.Fatalf("dommeren skal få hele registeret + %s, fikk %v", FreeChatKey, j.seen)
+	// Dommeren skal få hele det rollefiltrerte registeret + fri chat + usikker.
+	if len(j.seen) != len(Registry)+1 || j.seen[len(j.seen)-1] != AskKey {
+		t.Fatalf("dommeren skal få hele registeret + %s + %s, fikk %v", FreeChatKey, AskKey, j.seen)
 	}
 }
 
@@ -238,5 +238,13 @@ func TestFlowForFallsBackToFreeChat(t *testing.T) {
 	}
 	if k, _ := FlowFor(Decision{Key: "data_question", Method: MethodDirect}); k != "data_question" {
 		t.Fatalf("ville ha data_question, fikk %s", k)
+	}
+}
+
+func TestAskLabelsCoverRegistry(t *testing.T) {
+	for _, in := range Registry {
+		if AskLabels[in.Key] == "" {
+			t.Errorf("intent %s mangler AskLabel", in.Key)
+		}
 	}
 }

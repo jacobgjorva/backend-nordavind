@@ -81,6 +81,8 @@ func (s *ScalewayJudge) Pick(ctx context.Context, message string, keys []string)
 		switch {
 		case k == FreeChatKey:
 			fmt.Fprintf(&b, "- %s: ingen av disse — vanlig samtale, tekstarbeid på innhold brukeren gir, eller sammensatte ønsker\n", k)
+		case k == AskKey:
+			fmt.Fprintf(&b, "- %s: du er REELT i tvil mellom to flyter og en feilgjetning ville vært irriterende — brukeren får da ett kort oppklaringsspørsmål. Bruk sjelden.\n", k)
 		default:
 			if in, ok := byKey[k]; ok {
 				fmt.Fprintf(&b, "- %s: %s\n", k, in.Description)

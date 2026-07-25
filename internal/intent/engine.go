@@ -20,7 +20,12 @@ const (
 	MethodNone   = "none"   // ingen flyt — fri chat (også ved feil: fail-open)
 	MethodMulti  = "multi"  // sammensatt ønske — to flyter nesten likt → fri chat
 	MethodSticky = "sticky" // kort oppfølging arvet forrige sticky-flyt
+	MethodAsk    = "ask"    // dommeren er reelt i tvil → still oppklaringsspørsmål
 )
+
+// AskKey er dommerens «reelt i tvil»-svar — ikke en flyt, men et signal om at
+// brukeren skal få ett kort oppklaringsspørsmål i stedet for en gjetning.
+const AskKey = "usikker"
 
 // Terskler. Kalibrert mot eval-settet (cmd/intent-eval skriver ut forslag);
 // endres KUN sammen med en grønn eval-kjøring — aldri på magefølelse.
@@ -220,7 +225,11 @@ func (e *Engine) Resolve(ctx context.Context, message string, isAdmin bool) Deci
 		}
 		keys = append(keys, in.Key)
 	}
-	keys = append(keys, FreeChatKey)
+	// free_chat er allerede en register-rad; usikker-valget legges alltid sist.
+	if !contains(keys, FreeChatKey) {
+		keys = append(keys, FreeChatKey)
+	}
+	keys = append(keys, AskKey)
 	jctx, jcancel := context.WithTimeout(ctx, judgeTimeout)
 	defer jcancel()
 	pick, err := e.judge.Pick(jctx, msg, keys)
@@ -237,6 +246,9 @@ func (e *Engine) Resolve(ctx context.Context, message string, isAdmin bool) Deci
 	}
 	if pick == FreeChatKey {
 		return Decision{Method: MethodJudge, Candidates: cands, Elapsed: time.Since(start)}
+	}
+	if pick == AskKey {
+		return Decision{Method: MethodAsk, Candidates: cands, Elapsed: time.Since(start)}
 	}
 	return Decision{Key: pick, Method: MethodJudge, Candidates: cands, Elapsed: time.Since(start)}
 }

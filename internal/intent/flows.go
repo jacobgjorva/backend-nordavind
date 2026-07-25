@@ -187,3 +187,30 @@ func FlowFor(d Decision) (string, Flow) {
 	}
 	return FreeChatKey, Flows[FreeChatKey]
 }
+
+// AskLabels er korte menneskelige merkelapper per flyt — brukes KUN i
+// oppklaringsspørsmålet når dommeren er reelt i tvil («vil du X eller Y?»).
+var AskLabels = map[string]string{
+	"connect_database":    "koble til en database",
+	"connect_m365":        "sette opp Microsoft 365",
+	"manage_connections":  "administrere tilkoblingene",
+	"create_widget":       "lage en graf",
+	"edit_widget":         "endre en widget",
+	"create_presentation": "lage en presentasjon",
+	"export_excel":        "eksportere til Excel",
+	"data_question":       "få svar fra bedriftens egne tall",
+	"show_table":          "se en tabell med rader",
+	"usage_stats":         "se AI-forbruket",
+	"manage_users":        "administrere brukere",
+	"impersonate_user":    "se appen som en annen bruker",
+	"knowledge_admin":     "se på bedriftskunnskapen",
+	"upload_document":     "lagre et dokument som kunnskap",
+	"contract_review":     "få en kontrakt gjennomgått",
+	"create_routine":      "sette opp en fast rutine",
+	"edit_routine":        "endre en rutine",
+	"employees_admin":     "jobbe med ansattregisteret",
+	"m365_files":          "finne noe i filene dine",
+	"web_fact":            "få et faktasvar fra nettet",
+	"smalltalk":           "bare prate",
+	FreeChatKey:           "ha et råd eller en vurdering",
+}

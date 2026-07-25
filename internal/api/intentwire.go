@@ -172,6 +172,16 @@ func (s *Server) applyIntent(user store.User, full map[string]any) (block string
 			s.log.Warn("intent: kunne ikke logge avgjørelse", "err", err)
 		}
 	}()
+	// Dommeren er reelt i tvil: still ett kort oppklaringsspørsmål bygget av
+	// toppkandidatenes merkelapper — ren tekst, ingen gjetning.
+	if d.Method == intent.MethodAsk && len(d.Candidates) >= 2 {
+		a := intent.AskLabels[d.Candidates[0].Key]
+		b := intent.AskLabels[d.Candidates[1].Key]
+		if a != "" && b != "" && a != b {
+			return "Bare så jeg treffer riktig: vil du " + a + ", eller " + b + "?"
+		}
+	}
+
 	key, flow := intent.FlowFor(d)
 	s.log.Info("intent", "key", key, "method", d.Method, "ms", d.Elapsed.Milliseconds())
 
