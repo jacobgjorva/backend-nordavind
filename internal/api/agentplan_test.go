@@ -81,6 +81,65 @@ func TestSnapshotTextTalerUgyldigJSON(t *testing.T) {
 	}
 }
 
+// Rapporten skal vise nøkkeltall som kort, med delta, og tabellen skal rendres
+// fra stegets rådata — ikke fra noe modellen skriver av.
+func TestComposeReportByggerKortOgTabell(t *testing.T) {
+	steps := []stepResult{
+		{label: "Avvik", kind: "sql", raw: `{"columns":["dato","beløp"],"rows":[["01.07","1200"]]}`},
+	}
+	got := composeReport("Ett nytt avvik.", []reportStat{
+		{Label: "Omsetning", Value: "1 200", Unit: "kr", Delta: "+12 %"},
+	}, 1, steps)
+
+	for _, want := range []string{"```stat", `"delta":"+12 %"`, "Ett nytt avvik.", "```table", `"dato"`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("mangler %q i:\n%s", want, got)
+		}
+	}
+}
+
+// Uten stats og uten tabellsteg skal rapporten være ren tekst.
+func TestComposeReportUtenPynt(t *testing.T) {
+	got := composeReport("Ingenting å melde.", nil, 0, nil)
+	if got != "Ingenting å melde." {
+		t.Errorf("ventet ren tekst, fikk %q", got)
+	}
+}
+
+// Et tabellsteg utenfor rekkevidde skal ignoreres, ikke krasje kjøringen.
+func TestComposeReportIgnorererUgyldigTabellsteg(t *testing.T) {
+	steps := []stepResult{{label: "A", kind: "sql", raw: `{"columns":["x"],"rows":[["1"]]}`}}
+	for _, step := range []int{-1, 0, 2, 99} {
+		got := composeReport("Tekst.", nil, step, steps)
+		if strings.Contains(got, "```table") {
+			t.Errorf("steg %d ga tabell den ikke skulle: %s", step, got)
+		}
+	}
+}
+
+// Maks fire kort, ellers drukner meldingen i nøkkeltall.
+func TestComposeReportBegrenserAntallKort(t *testing.T) {
+	stats := make([]reportStat, 7)
+	for i := range stats {
+		stats[i] = reportStat{Label: "K", Value: "1"}
+	}
+	if n := strings.Count(composeReport("Tekst.", stats, 0, nil), "```stat"); n != 4 {
+		t.Errorf("ventet 4 kort, fikk %d", n)
+	}
+}
+
+// Et web-steg har ingen rader å rendre — da skal det ikke bli tabell.
+func TestTableFromStepKunSQL(t *testing.T) {
+	web := stepResult{label: "Søk", kind: "web", raw: `{"columns":["a"],"rows":[["1"]]}`}
+	if tableFromStep(web) != "" {
+		t.Error("web-steg ga tabell")
+	}
+	tom := stepResult{label: "Tom", kind: "sql", raw: `{"columns":["a"],"rows":[]}`}
+	if tableFromStep(tom) != "" {
+		t.Error("tomt resultat ga tabell")
+	}
+}
+
 // runDBQuery svarer med tekst ved feil og JSON ved suksess — plan-validering
 // og -kjøring skiller på nettopp det.
 func TestPlanQueryFailed(t *testing.T) {

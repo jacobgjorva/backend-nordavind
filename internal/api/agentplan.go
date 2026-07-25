@@ -462,31 +462,68 @@ var reportTool = map[string]any{
 					"type":        "boolean",
 					"description": "true KUN hvis regelen for når brukeren skal varsles er oppfylt",
 				},
+				"stats": map[string]any{
+					"type": "array",
+					"description": "de viktigste nøkkeltallene, maks 4. Ta med delta når du har " +
+						"forrige kjørings tall å sammenligne med.",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"label": map[string]any{"type": "string", "description": "hva tallet er"},
+							"value": map[string]any{"type": "string", "description": "selve tallet"},
+							"unit":  map[string]any{"type": "string", "description": "enhet, f.eks. kr eller %"},
+							"delta": map[string]any{"type": "string", "description": "endring siden forrige kjøring, f.eks. «+12 %» eller «-4»"},
+						},
+						"required": []string{"label", "value"},
+					},
+				},
+				"table_step": map[string]any{
+					"type": "integer",
+					"description": "steg-nummeret hvis radene derfra bør vises som tabell (1 = første steg). " +
+						"0 eller utelatt = ingen tabell. Gjengi ALDRI rader i teksten din — oppgi steget her.",
+				},
 			},
 			"required": []string{"summary", "alert"},
 		},
 	},
 }
 
-// runPlanSteps utfører stegene deterministisk og returnerer både teksten
-// modellen skal tolke og et snapshot til sammenligning neste gang.
-func (s *Server) runPlanSteps(ctx context.Context, a store.Agent, plan agentPlan) (data, snapshot string, failed int) {
+// stepResult er ett utført steg med rådataene sine, så tabeller kan rendres
+// deterministisk fra kilden i stedet for å skrives av modellen.
+type stepResult struct {
+	label string
+	kind  string
+	raw   string
+}
+
+// planData er alt én plan-kjøring produserte.
+type planData struct {
+	steps    []stepResult
+	text     string // formatert for modellen
+	snapshot string // til sammenligning neste kjøring
+	failed   int
+}
+
+// runPlanSteps utfører stegene deterministisk.
+func (s *Server) runPlanSteps(ctx context.Context, a store.Agent, plan agentPlan) planData {
 	dbCtx := s.buildDBTool(a.TenantID, a.UserID, "")
+	var out planData
 	var b strings.Builder
 	snap := make([]map[string]string, 0, len(plan.Steps))
 
 	for i, st := range plan.Steps {
 		var res string
-		switch strings.ToLower(strings.TrimSpace(st.Kind)) {
+		kind := strings.ToLower(strings.TrimSpace(st.Kind))
+		switch kind {
 		case "sql":
 			res = s.runDBQuery(ctx, dbCtx, st.ConnectionID, st.SQL)
 			if planQueryFailed(res) {
-				failed++
+				out.failed++
 			}
 		case "fetch":
 			res = s.runFetchURL(ctx, st.URL)
 			if strings.TrimSpace(res) == "" {
-				failed++
+				out.failed++
 				res = "(ingen innhold)"
 			}
 		case "web":
@@ -497,9 +534,45 @@ func (s *Server) runPlanSteps(ctx context.Context, a store.Agent, plan agentPlan
 		res = truncate(res, planStepChars)
 		fmt.Fprintf(&b, "### Steg %d: %s\n%s\n\n", i+1, st.Label, res)
 		snap = append(snap, map[string]string{"label": st.Label, "data": res})
+		out.steps = append(out.steps, stepResult{label: st.Label, kind: kind, raw: res})
 	}
 	raw, _ := json.Marshal(snap)
-	return b.String(), string(raw), failed
+	out.text = b.String()
+	out.snapshot = string(raw)
+	return out
+}
+
+// statBlock bygger ```stat-kortet frontend rendrer. delta er endringen siden
+// forrige kjøring, f.eks. «+12 %».
+func statBlock(label, value, unit, delta string) string {
+	spec := map[string]any{"label": label, "value": value}
+	if unit != "" {
+		spec["unit"] = unit
+	}
+	if delta != "" {
+		spec["delta"] = delta
+	}
+	raw, _ := json.Marshal(spec)
+	return "```stat\n" + string(raw) + "\n```\n\n"
+}
+
+// tableFromStep rendrer et sql-stegs rådata som tabell. Dataene kommer fra
+// spørringen, aldri fra modellen, så tabellen kan ikke bli feilskrevet.
+func tableFromStep(st stepResult) string {
+	if st.kind != "sql" {
+		return ""
+	}
+	var res struct {
+		Columns []string   `json:"columns"`
+		Rows    [][]string `json:"rows"`
+	}
+	if err := json.Unmarshal([]byte(st.raw), &res); err != nil {
+		return ""
+	}
+	if len(res.Columns) == 0 || len(res.Rows) == 0 {
+		return ""
+	}
+	return tableBlock(res.Columns, res.Rows)
 }
 
 // executeAgentPlan kjører en ferdig plan: stegene utføres deterministisk uten
@@ -518,11 +591,11 @@ func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (planRun, 
 	ctx, cancel := context.WithTimeout(ctx, agentHTTPTimeoutSeconds*time.Second)
 	defer cancel()
 
-	data, snapshot, failed := s.runPlanSteps(ctx, a, plan)
+	pd := s.runPlanSteps(ctx, a, plan)
 
 	// Hele planen feilet — kilden eller skjemaet har trolig endret seg.
 	// Marker planen som ødelagt og bygg den på nytt.
-	if failed == len(plan.Steps) {
+	if pd.failed == len(plan.Steps) {
 		s.store.SetPlanStatus(a.ID, "broken", "alle steg feilet ved kjøring")
 		s.startPlanBuild(a.ID)
 		return run, fmt.Errorf("planen virker ikke lenger — bygger den på nytt")
@@ -530,7 +603,7 @@ func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (planRun, 
 
 	// Identiske rådata: ingenting har skjedd. Ingen tolkning, ingen melding,
 	// ingen tokens — agenten tier heller enn å gjenta seg selv.
-	if a.LastSnapshot != "" && snapshot == a.LastSnapshot {
+	if a.LastSnapshot != "" && pd.snapshot == a.LastSnapshot {
 		run.unchanged = true
 		return run, nil
 	}
@@ -538,7 +611,9 @@ func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (planRun, 
 	system := "Du tolker resultatet av en agent-kjøring for brukeren. Dataene er allerede hentet — du " +
 		"skal ikke hente noe mer, og aldri be om tilgang. Har du forrige kjørings data, er jobben din å " +
 		"si hva som er ENDRET: nevn tallene før og nå, ikke gjenta det som står stille. Kort og konkret " +
-		"på norsk, ingen innledning, ingen spørsmål tilbake. Avslutt med report."
+		"på norsk, ingen innledning, ingen spørsmål tilbake. Avslutt med report: legg de viktigste " +
+		"tallene i stats (med delta når du har forrige kjørings tall), og pek på et steg med table_step " +
+		"hvis radene derfra bør vises — tabellen rendres fra kilden, så du skal aldri skrive av rader."
 	userMsg := "Oppgave: " + a.Task +
 		"\n\nDette skal vurderes: " + plan.Watch +
 		"\nBrukeren skal varsles når: " + plan.AlertRule
@@ -547,7 +622,7 @@ func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (planRun, 
 	} else {
 		userMsg += "\n\n(Første kjøring — ingen tidligere data å sammenligne med.)"
 	}
-	userMsg += "\n\nFerske data:\n" + truncate(data, planReportChar)
+	userMsg += "\n\nFerske data:\n" + truncate(pd.text, planReportChar)
 
 	msg, err := s.chatOnce(ctx, router.MidModel, []any{
 		map[string]any{"role": "system", "content": system},
@@ -564,21 +639,52 @@ func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (planRun, 
 			continue
 		}
 		var rep struct {
-			Summary string `json:"summary"`
-			Changed bool   `json:"changed"`
-			Alert   bool   `json:"alert"`
+			Summary   string       `json:"summary"`
+			Changed   bool         `json:"changed"`
+			Alert     bool         `json:"alert"`
+			Stats     []reportStat `json:"stats"`
+			TableStep int          `json:"table_step"`
 		}
 		if err := json.Unmarshal([]byte(c.args), &rep); err == nil {
-			if strings.TrimSpace(rep.Summary) != "" {
-				run.output = strings.TrimSpace(rep.Summary)
-			}
 			run.alert = rep.Alert
+			run.output = composeReport(rep.Summary, rep.Stats, rep.TableStep, pd.steps)
 		}
 		break
 	}
 
-	s.store.SetAgentSnapshot(a.ID, snapshot)
+	s.store.SetAgentSnapshot(a.ID, pd.snapshot)
 	return run, nil
+}
+
+// reportStat er ett nøkkeltall modellen løftet frem.
+type reportStat struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+	Unit  string `json:"unit"`
+	Delta string `json:"delta"`
+}
+
+// composeReport setter sammen meldingen brukeren ser: nøkkeltall øverst, så
+// teksten, så en tabell rendret fra rådataene. Maks fire kort, så kjøringen
+// leses på ett blikk.
+func composeReport(summary string, stats []reportStat, tableStep int, steps []stepResult) string {
+	var b strings.Builder
+	for i, s := range stats {
+		if i == 4 {
+			break
+		}
+		if strings.TrimSpace(s.Label) == "" || strings.TrimSpace(s.Value) == "" {
+			continue
+		}
+		b.WriteString(statBlock(s.Label, s.Value, s.Unit, s.Delta))
+	}
+	b.WriteString(strings.TrimSpace(summary))
+	if tableStep >= 1 && tableStep <= len(steps) {
+		if tbl := tableFromStep(steps[tableStep-1]); tbl != "" {
+			b.WriteString("\n\n" + tbl)
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // snapshotText gjør et lagret snapshot lesbart igjen for sammenligning.
