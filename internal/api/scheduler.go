@@ -419,7 +419,7 @@ func (s *Server) executeAgent(ctx context.Context, a store.Agent) (string, int, 
 			if c.name == "query_database" {
 				result = s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL)
 			} else {
-				result, _ = s.runWebSearch(ctx, args.Query, true)
+				result, _ = s.runWebSearch(ctx, args.Query)
 			}
 			toolMsgs = append(toolMsgs, map[string]any{
 				"role": "tool", "tool_call_id": c.id, "content": result,
@@ -716,7 +716,7 @@ func (s *Server) executeMission(ctx context.Context, a store.Agent) (string, int
 					result = "Sendt til " + args.ToEmail
 				}
 			default:
-				result, _ = s.runWebSearch(ctx, args.Query, true)
+				result, _ = s.runWebSearch(ctx, args.Query)
 			}
 			toolMsgs = append(toolMsgs, map[string]any{
 				"role": "tool", "tool_call_id": c.id, "content": result,

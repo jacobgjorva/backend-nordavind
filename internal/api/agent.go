@@ -321,8 +321,6 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// Grundig modus: vanlig chat (ikke oppsett/widget/agent-redigering) der
 	// brukeren ber om grundig/uforstyrret dybdearbeid → ekspert-prompt og mange
 	// runder før den konkluderer i chatten.
-	// Viktighet styrer søkedybden: deterministisk markørsjekk på meldingen.
-	deepSearch := importantSearchRe.MatchString(lastUserText(full))
 	roundCap := maxToolRounds
 	if !setup && widgetSlug == "" && editID == "" && !hasImageMessage(full) && deepIntent(full) {
 		injectSystem(full, deepResearchSystem)
@@ -669,7 +667,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				searches++
 				var sources []sourceRef
 				stopWait := emitAfter(emit, 4*time.Second, "Søker dypere")
-				result, sources = s.runWebSearch(ctx, args.Query, deepSearch)
+				result, sources = s.runWebSearch(ctx, args.Query)
 				stopWait()
 				if len(sources) > 0 {
 					// Kildene sendes som metadata til frontend — de skal ikke stå i svaret.
@@ -824,12 +822,7 @@ func (s *Server) runFetchURL(ctx context.Context, url string) string {
 }
 
 // runWebSearch utfører søk + sidehenting og formaterer kildekontekst.
-// importantSearchRe: viktighetssignaler som gir DYP websøk (full sidehenting)
-// fra første treff — ren tekstsjekk, null ekstra latens. Trivielle spørsmål
-// får snippet-søket.
-var importantSearchRe = regexp.MustCompile(`(?i)analyser|sammenlign|verifiser|dobbeltsjekk|grundig|research|undersøk|utred|dokumentasjon|kilde|kontrakt|avtale|tilbud|beslutning|anbefal|vurder|viktig`)
-
-func (s *Server) runWebSearch(ctx context.Context, query string, deep bool) (string, []sourceRef) {
+func (s *Server) runWebSearch(ctx context.Context, query string) (string, []sourceRef) {
 	if strings.TrimSpace(query) == "" {
 		return "Tomt søk.", nil
 	}
@@ -841,13 +834,10 @@ func (s *Server) runWebSearch(ctx context.Context, query string, deep bool) (str
 	if len(results) > 3 {
 		results = results[:3]
 	}
-	// FART: trivielle spørsmål får kun treff-sammendragene (1-2 s); viktighet
-	// (importantSearchRe) eller eksplisitt dybde gir full sidehenting.
-	var pages []string
-	if deep {
-		pages = s.search.FetchPages(ctx, results, 2800)
-	}
-	s.log.Info("websøk", "query", query, "treff", len(results), "dyp", deep)
+	// Alltid full sidehenting: snippet-søket ga feilkoblinger (24AI-saken) —
+	// korrekthet vinner over fart, Jacobs beslutning 2026-07-26.
+	pages := s.search.FetchPages(ctx, results, 2800)
+	s.log.Info("websøk", "query", query, "treff", len(results))
 
 	refs := make([]sourceRef, 0, len(results))
 	for _, r := range results {
