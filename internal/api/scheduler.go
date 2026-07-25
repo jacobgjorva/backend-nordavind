@@ -183,8 +183,27 @@ func (s *Server) runAgentOnce(ctx context.Context, a store.Agent, now time.Time)
 		}
 	}
 
-	// Oppdrag håndteres av den kontinuerlige løkka (startMissionRunner), ikke her.
-	output, tokens, err := s.executeAgent(ctx, a)
+	// Har agenten en ferdig kompilert plan, kjøres den deterministisk — billig
+	// og med samme tall hver gang. Uten plan (eller hvis den nettopp brakk)
+	// faller vi tilbake til fri kjøring, så agenten alltid gjør nytte.
+	var (
+		output string
+		tokens int
+		err    error
+	)
+	if a.PlanStatus == "ready" && strings.TrimSpace(a.Plan) != "" {
+		output, tokens, err = s.executeAgentPlan(ctx, a)
+		if err != nil {
+			s.log.Warn("plan-kjøring feilet, faller tilbake til fri kjøring", "id", a.ID, "err", err)
+			output, tokens, err = s.executeAgent(ctx, a)
+		}
+	} else {
+		output, tokens, err = s.executeAgent(ctx, a)
+		// Ingen plan ennå: bygg den i bakgrunnen, så neste kjøring blir bedre.
+		if a.PlanStatus == "" {
+			s.startPlanBuild(a.ID)
+		}
+	}
 	if err != nil {
 		s.log.Warn("agent-kjøring feilet", "id", a.ID, "err", err)
 		s.store.RecordRun(a.ID, store.AgentRun{Status: "error", TokensUsed: tokens, Error: err.Error()})

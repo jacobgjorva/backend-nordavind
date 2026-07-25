@@ -150,8 +150,10 @@ func (s *Server) runUpdateAgent(ctx context.Context, a agentToolArgs) string {
 	if strings.TrimSpace(a.Name) != "" {
 		cur.Name = strings.TrimSpace(a.Name)
 	}
-	if strings.TrimSpace(a.Task) != "" {
-		cur.Task = strings.TrimSpace(a.Task)
+	taskChanged := false
+	if t := strings.TrimSpace(a.Task); t != "" && t != strings.TrimSpace(cur.Task) {
+		cur.Task = t
+		taskChanged = true
 	}
 	if strings.TrimSpace(a.ScheduleLabel) != "" {
 		cur.ScheduleLabel = strings.TrimSpace(a.ScheduleLabel)
@@ -170,6 +172,11 @@ func (s *Server) runUpdateAgent(ctx context.Context, a agentToolArgs) string {
 	}
 	if err := s.store.UpdateAgentConfig(a.AgentID, user.ID, cur); err != nil {
 		return "Kunne ikke oppdatere agenten."
+	}
+	// Ny oppgave = den gamle planen gjelder ikke lenger.
+	if taskChanged {
+		s.store.ClearAgentPlan(a.AgentID)
+		s.startPlanBuild(a.AgentID)
 	}
 	return "Agent oppdatert."
 }
@@ -235,6 +242,9 @@ func (s *Server) runSetupRoutine(ctx context.Context, agentID, rawArgs string) s
 	if err := s.store.SetAgentEnabled(agentID, user.ID, true); err != nil {
 		return "Kunne ikke aktivere rutinen."
 	}
+	// Spinup i bakgrunnen: finn beste fremgangsmåte før første kjøring.
+	s.store.ClearAgentPlan(agentID)
+	s.startPlanBuild(agentID)
 	return "rutine opprettet"
 }
 

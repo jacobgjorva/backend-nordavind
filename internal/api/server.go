@@ -35,6 +35,11 @@ type Server struct {
 	missionMu      sync.Mutex
 	missionRunning map[string]bool
 
+	// Spinup-jobber som pågår (agent-id → bygger), så samme plan aldri
+	// kompileres to ganger samtidig.
+	planMu       sync.Mutex
+	planBuilding map[string]bool
+
 	// Intent-motoren (INTENT_ENGINE=shadow) — nil til den er bygget.
 	intent intentState
 }
@@ -56,6 +61,7 @@ func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 		credsKey: key,
 
 		missionRunning: map[string]bool{},
+		planBuilding:   map[string]bool{},
 	}
 	s.startScheduler(context.Background())
 	s.initIntentEngine()

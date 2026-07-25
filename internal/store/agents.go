@@ -35,6 +35,14 @@ type Agent struct {
 	MissionBudget    int    `json:"mission_budget"`    // totalt token-tak for hele oppdraget (0 = ubegrenset)
 	MissionActivity  string `json:"mission_activity"`  // live «hva jeg gjør/tenker» (JSON: thought + steps)
 
+	// Kompilert plan: spinup finner én gang ut HVORDAN oppgaven løses best, og
+	// lagrer stegene her. Hver kjøring utfører planen deterministisk i stedet
+	// for å lete på nytt.
+	Plan        string     `json:"plan"`         // JSON: steps + watch + alert_rule
+	PlanStatus  string     `json:"plan_status"`  // "" | building | ready | broken
+	PlanError   string     `json:"plan_error"`   // hvorfor planen ikke ble bygget/er ødelagt
+	PlanBuiltAt *time.Time `json:"plan_built_at,omitempty"`
+
 	CreatedAt time.Time `json:"created_at"`
 	ChatID          string     `json:"chat_id"`
 	NextRunAt       *time.Time `json:"next_run_at,omitempty"`
@@ -105,6 +113,10 @@ func (s *Store) migrateAgents() error {
 		`ALTER TABLE agents ADD COLUMN criteria_approved INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE agents ADD COLUMN mission_budget INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE agents ADD COLUMN mission_activity TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN plan TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN plan_status TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN plan_error TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN plan_built_at TIMESTAMP`,
 	} {
 		if _, err := s.db.Exec(col); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column") {
@@ -183,7 +195,7 @@ func (s *Store) ListAgents(userID string) ([]Agent, error) {
 	rows, err := s.db.Query(
 		`SELECT id, name, task, connection_id, schedule_label, interval_seconds,
 		        run_time, daily_token_limit, write_access, enabled, created_at,
-		        next_run_at, last_run_at, chat_id, mission, send_mail, mission_status
+		        next_run_at, last_run_at, chat_id, mission, send_mail, mission_status, plan_status
 		 FROM agents WHERE user_id = ? ORDER BY created_at DESC`,
 		userID,
 	)
@@ -199,7 +211,7 @@ func (s *Store) ListAgents(userID string) ([]Agent, error) {
 		if err := rows.Scan(&a.ID, &a.Name, &a.Task, &a.ConnectionID, &a.ScheduleLabel,
 			&a.IntervalSeconds, &a.RunTime, &a.DailyTokenLimit, &write, &enabled,
 			&a.CreatedAt, &a.NextRunAt, &a.LastRunAt, &a.ChatID,
-			&mission, &sendMail, &a.MissionStatus); err != nil {
+			&mission, &sendMail, &a.MissionStatus, &a.PlanStatus); err != nil {
 			return nil, err
 		}
 		a.WriteAccess = write != 0
@@ -216,7 +228,7 @@ func (s *Store) DueAgents(now time.Time) ([]Agent, error) {
 	rows, err := s.db.Query(
 		`SELECT id, tenant_id, user_id, name, task, connection_id, schedule_label,
 		        interval_seconds, run_time, daily_token_limit, write_access, next_run_at, chat_id, push_enabled,
-		        mission, send_mail, mission_state, mission_status
+		        mission, send_mail, mission_state, mission_status, plan, plan_status
 		 FROM agents
 		 WHERE enabled = 1 AND mission = 0 AND next_run_at IS NOT NULL AND next_run_at <= ?
 		 ORDER BY next_run_at`,
@@ -234,7 +246,8 @@ func (s *Store) DueAgents(now time.Time) ([]Agent, error) {
 		if err := rows.Scan(&a.ID, &a.TenantID, &a.UserID, &a.Name, &a.Task,
 			&a.ConnectionID, &a.ScheduleLabel, &a.IntervalSeconds, &a.RunTime,
 			&a.DailyTokenLimit, &write, &a.NextRunAt, &a.ChatID, &push,
-			&mission, &sendMail, &a.MissionState, &a.MissionStatus); err != nil {
+			&mission, &sendMail, &a.MissionState, &a.MissionStatus,
+			&a.Plan, &a.PlanStatus); err != nil {
 			return nil, err
 		}
 		a.WriteAccess = write != 0
@@ -245,6 +258,47 @@ func (s *Store) DueAgents(now time.Time) ([]Agent, error) {
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+// SetPlanStatus setter plan-tilstanden (building/ready/broken) og en evt. årsak.
+// Tømmer ikke selve planen — en «broken» plan beholdes til den er bygget på nytt.
+func (s *Store) SetPlanStatus(agentID, status, reason string) error {
+	_, err := s.db.Exec(
+		`UPDATE agents SET plan_status = ?, plan_error = ? WHERE id = ?`,
+		status, reason, agentID,
+	)
+	return err
+}
+
+// SetAgentPlan lagrer en ferdig kompilert plan og markerer den som klar.
+func (s *Store) SetAgentPlan(agentID, plan string) error {
+	_, err := s.db.Exec(
+		`UPDATE agents SET plan = ?, plan_status = 'ready', plan_error = '', plan_built_at = ?
+		 WHERE id = ?`,
+		plan, time.Now(), agentID,
+	)
+	return err
+}
+
+// ClearAgentPlan fjerner planen helt (brukes når oppgaven endres, så den gamle
+// planen aldri kjøres mot en ny oppgave).
+func (s *Store) ClearAgentPlan(agentID string) error {
+	_, err := s.db.Exec(
+		`UPDATE agents SET plan = '', plan_status = '', plan_error = '', plan_built_at = NULL
+		 WHERE id = ?`, agentID,
+	)
+	return err
+}
+
+// AgentPlanStatus leser plan-feltene for én agent.
+func (s *Store) AgentPlanStatus(agentID string) (plan, status, planErr string, err error) {
+	err = s.db.QueryRow(
+		`SELECT plan, plan_status, plan_error FROM agents WHERE id = ?`, agentID,
+	).Scan(&plan, &status, &planErr)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", "", ErrNotFound
+	}
+	return plan, status, planErr, err
 }
 
 // SetMissionState lagrer agentens komprimerte oppdrags-tilstand mellom kjøringer.
@@ -313,7 +367,7 @@ func (s *Store) MissionTokensSpent(agentID string) (int, error) {
 }
 
 // missionScanCols er felt-lista for å lese en agent med alle oppdrags-felt.
-const missionScanCols = `id, tenant_id, user_id, name, task, connection_id, chat_id,
+const missionScanCols = `id, tenant_id, user_id, name, task, connection_id, chat_id, schedule_label,
 	daily_token_limit, enabled, push_enabled,
 	mission, send_mail, mission_state, mission_status, mission_criteria, criteria_approved, mission_budget,
 	mission_activity`
@@ -322,7 +376,7 @@ func scanMission(sc interface{ Scan(...any) error }) (Agent, error) {
 	var a Agent
 	var enabled, push, mission, sendMail, approved int
 	err := sc.Scan(&a.ID, &a.TenantID, &a.UserID, &a.Name, &a.Task, &a.ConnectionID, &a.ChatID,
-		&a.DailyTokenLimit, &enabled, &push,
+		&a.ScheduleLabel, &a.DailyTokenLimit, &enabled, &push,
 		&mission, &sendMail, &a.MissionState, &a.MissionStatus, &a.MissionCriteria, &approved, &a.MissionBudget,
 		&a.MissionActivity)
 	a.Enabled = enabled != 0
@@ -479,13 +533,15 @@ func (s *Store) GetAgent(id, userID string) (Agent, error) {
 	err := s.db.QueryRow(
 		`SELECT id, name, task, connection_id, schedule_label, interval_seconds,
 		        run_time, daily_token_limit, write_access, enabled, created_at, chat_id,
-		        mission, mission_status, mission_criteria, criteria_approved, mission_budget
+		        mission, mission_status, mission_criteria, criteria_approved, mission_budget,
+		        plan, plan_status, plan_error
 		 FROM agents WHERE id = ? AND user_id = ?`,
 		id, userID,
 	).Scan(&a.ID, &a.Name, &a.Task, &a.ConnectionID, &a.ScheduleLabel,
 		&a.IntervalSeconds, &a.RunTime, &a.DailyTokenLimit, &write, &enabled,
 		&a.CreatedAt, &a.ChatID,
-		&mission, &a.MissionStatus, &a.MissionCriteria, &approved, &a.MissionBudget)
+		&mission, &a.MissionStatus, &a.MissionCriteria, &approved, &a.MissionBudget,
+		&a.Plan, &a.PlanStatus, &a.PlanError)
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, ErrNotFound
 	}
@@ -505,14 +561,14 @@ func (s *Store) AgentByChat(chatID, userID string) (Agent, error) {
 		        run_time, daily_token_limit, write_access, enabled, created_at,
 		        next_run_at, last_run_at, chat_id, push_enabled,
 		        mission, send_mail, mission_status, mission_criteria, criteria_approved, mission_budget,
-		        mission_activity
+		        mission_activity, plan, plan_status, plan_error, plan_built_at
 		 FROM agents WHERE chat_id = ? AND user_id = ?`,
 		chatID, userID,
 	).Scan(&a.ID, &a.Name, &a.Task, &a.ConnectionID, &a.ScheduleLabel,
 		&a.IntervalSeconds, &a.RunTime, &a.DailyTokenLimit, &write, &enabled,
 		&a.CreatedAt, &a.NextRunAt, &a.LastRunAt, &a.ChatID, &push,
 		&mission, &sendMail, &a.MissionStatus, &a.MissionCriteria, &approved, &a.MissionBudget,
-		&a.MissionActivity)
+		&a.MissionActivity, &a.Plan, &a.PlanStatus, &a.PlanError, &a.PlanBuiltAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, ErrNotFound
 	}

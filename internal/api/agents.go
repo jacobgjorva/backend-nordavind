@@ -85,6 +85,8 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("agent opprettet", "id", agent.ID, "navn", agent.Name)
+	// Spinup: finn beste fremgangsmåte én gang, i bakgrunnen, før første kjøring.
+	s.startPlanBuild(agent.ID)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(agent)
 }
@@ -324,7 +326,13 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 	} else if req.IntervalSeconds < 900 {
 		req.IntervalSeconds = 900 // minimum 15 min
 	}
-	err := s.store.UpdateAgentConfig(r.PathValue("id"), user.ID, store.Agent{
+	// Endres oppgaven, er den gamle planen ikke lenger gyldig — den ble
+	// kompilert for noe annet. Bygg en ny.
+	id := r.PathValue("id")
+	prev, _ := s.store.GetAgent(id, user.ID)
+	taskChanged := strings.TrimSpace(prev.Task) != req.Task
+
+	err := s.store.UpdateAgentConfig(id, user.ID, store.Agent{
 		Name:            req.Name,
 		Task:            req.Task,
 		ConnectionID:    req.ConnectionID,
@@ -341,6 +349,10 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "intern feil", http.StatusInternalServerError)
 		return
+	}
+	if taskChanged {
+		s.store.ClearAgentPlan(id)
+		s.startPlanBuild(id)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
