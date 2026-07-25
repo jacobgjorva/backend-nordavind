@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,8 +18,8 @@ import (
 //   on     — motorens valg styrer flyten: deterministiske flyter besvares i
 //            kode, rutede flyter får kun sitt verktøysett/modell, og MaxChars
 //            håndheves via den eksisterende komprimerings-nødbremsen.
-// Sticky (flyt over flere meldinger) er IKKE med i v1 — hver melding rutes
-// på nytt; loggen viser om det trengs.
+// Sticky: korte oppfølginger uten klart eget intent-treff arver forrige
+// brukermeldings flyt når den er merket Sticky (se applyIntent).
 
 // intentState holder motoren når den er bygget. Bygging skjer i bakgrunnen
 // ved oppstart (embedding av registeret) — frem til da er motoren nil og alt
@@ -142,6 +143,21 @@ func (s *Server) applyIntent(user store.User, full map[string]any) (block string
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 	d := eng.Resolve(ctx, msg, user.Role == "admin")
+
+	// Sticky v1: en KORT oppfølging uten klar egen intent (ikke direct) arver
+	// forrige brukermeldings flyt hvis den er Sticky («sikker?» etter et
+	// dataspørsmål skal beholde db-verktøyene). Stateless: forrige melding
+	// ligger i payloaden og re-rutes — koster ett ekstra motor-kall kun for
+	// korte, usikre oppfølginger.
+	if d.Method != intent.MethodDirect && len([]rune(strings.TrimSpace(msg))) <= 60 {
+		if prev := prevUserText(full); prev != "" {
+			pd := eng.Resolve(ctx, prev, user.Role == "admin")
+			if pk, pf := intent.FlowFor(pd); pf.Sticky && pd.Key != "" {
+				d = intent.Decision{Key: pk, Method: intent.MethodSticky,
+					Candidates: d.Candidates, Elapsed: d.Elapsed + pd.Elapsed}
+			}
+		}
+	}
 	go func() {
 		if err := s.store.InsertIntentDecision(store.IntentDecision{
 			TenantID: user.TenantID, UserID: user.ID, Message: msg,
@@ -172,6 +188,27 @@ func (s *Server) applyIntent(user store.User, full map[string]any) (block string
 		full[flowMaxField] = flow.MaxChars
 	}
 	full["model"] = flowModel(flow.Model)
+	return ""
+}
+
+// prevUserText gir nest siste brukermelding i payloaden ("" om ingen).
+func prevUserText(full map[string]any) string {
+	msgs, _ := full["messages"].([]any)
+	seen := 0
+	for i := len(msgs) - 1; i >= 0; i-- {
+		m, ok := msgs[i].(map[string]any)
+		if !ok || m["role"] != "user" {
+			continue
+		}
+		seen++
+		if seen < 2 {
+			continue
+		}
+		if c, ok := m["content"].(string); ok {
+			return c
+		}
+		return ""
+	}
 	return ""
 }
 

@@ -116,12 +116,14 @@ var Flows = map[string]Flow{
 		Model:    "mid",
 		MaxChars: 300, // tette tallsvar
 		Fallback: FreeChatKey,
+		Sticky:   true, // oppfølgingsspørsmål («sikker?») skal beholde db-verktøyene
 	},
 	"show_table": {
 		Tools:    []string{ToolQueryDatabase, ToolShowTable},
 		Model:    "mid",
 		MaxChars: 150, // tabellen er svaret; maks én ledsagende setning
 		Fallback: FreeChatKey,
+		Sticky:   true,
 	},
 
 	"usage_stats":      {Deterministic: true, Fallback: FreeChatKey}, // /forbruk-panelet

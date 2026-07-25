@@ -19,6 +19,7 @@ const (
 	MethodJudge  = "judge"  // enum-begrenset dommer-kall blant kandidatene
 	MethodNone   = "none"   // ingen flyt — fri chat (også ved feil: fail-open)
 	MethodMulti  = "multi"  // sammensatt ønske — to flyter nesten likt → fri chat
+	MethodSticky = "sticky" // kort oppfølging arvet forrige sticky-flyt
 )
 
 // Terskler. Kalibrert mot eval-settet (cmd/intent-eval skriver ut forslag);
