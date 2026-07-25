@@ -168,6 +168,16 @@ func (s *Server) runDueAgents(ctx context.Context) {
 // runAgentOnce utfører én agent, poster resultatet i agentens chat, logger
 // kjøringen og planlegger neste.
 func (s *Server) runAgentOnce(ctx context.Context, a store.Agent, now time.Time) {
+	// Marker kjøringen for live-tilstanden (trollet «skriver» i farmen).
+	s.runMu.Lock()
+	s.runActive[a.ID] = true
+	s.runMu.Unlock()
+	defer func() {
+		s.runMu.Lock()
+		delete(s.runActive, a.ID)
+		s.runMu.Unlock()
+	}()
+
 	// Reschedule først, så en feilende agent ikke kjøres i loop.
 	if err := s.store.RescheduleAgent(a, now); err != nil {
 		s.log.Error("kunne ikke omplanlegge agent", "id", a.ID, "err", err)

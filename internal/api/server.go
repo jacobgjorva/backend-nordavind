@@ -40,6 +40,11 @@ type Server struct {
 	planMu       sync.Mutex
 	planBuilding map[string]bool
 
+	// Rutinekjøringer som pågår akkurat nå (agent-id → kjører) — kun for
+	// live-tilstanden i farmen, ingen styring.
+	runMu     sync.Mutex
+	runActive map[string]bool
+
 	// Intent-motoren (INTENT_ENGINE=shadow) — nil til den er bygget.
 	intent intentState
 }
@@ -62,6 +67,7 @@ func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 
 		missionRunning: map[string]bool{},
 		planBuilding:   map[string]bool{},
+		runActive:      map[string]bool{},
 	}
 	s.startScheduler(context.Background())
 	s.initIntentEngine()
@@ -138,6 +144,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /v1/knowledge/{id}", s.requireAdmin(s.handleUpdateNode))
 	mux.HandleFunc("DELETE /v1/knowledge/{id}", s.requireAdmin(s.handleDeleteNode))
 	mux.HandleFunc("GET /v1/agents", s.requireAuth(s.handleListAgents))
+	mux.HandleFunc("PATCH /v1/agents/{id}/persona", s.requireAuth(s.handleSetAgentPersona))
 	mux.HandleFunc("GET /v1/agent-connections", s.requireAuth(s.handleAgentConnections))
 	mux.HandleFunc("GET /v1/mail/account", s.requireAuth(s.handleGetMailAccount))
 	mux.HandleFunc("POST /v1/mail/send", s.requireAuth(s.handleMailSend))

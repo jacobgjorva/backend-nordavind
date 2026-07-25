@@ -198,7 +198,38 @@ func (s *Server) handleAgentConnections(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(map[string]any{"connections": out})
 }
 
-// handleListAgents returnerer brukerens agenter.
+// agentState avleder live-tilstanden trollet viser i farmen. Prioritet:
+// pågående arbeid slår plan-status, plan-status slår hvile.
+func (s *Server) agentState(a store.Agent) string {
+	s.runMu.Lock()
+	running := s.runActive[a.ID]
+	s.runMu.Unlock()
+	if running {
+		return "working"
+	}
+	s.planMu.Lock()
+	building := s.planBuilding[a.ID]
+	s.planMu.Unlock()
+	if building {
+		return "thinking"
+	}
+	switch {
+	case a.PlanStatus == "broken":
+		return "broken"
+	case !a.Enabled:
+		return "paused"
+	default:
+		return "sleeping"
+	}
+}
+
+// agentWithState er en agent + live-tilstand, til farmen og agent-widgetene.
+type agentWithState struct {
+	store.Agent
+	State string `json:"state"`
+}
+
+// handleListAgents returnerer brukerens agenter med live-tilstand.
 func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.user(w, r)
 	if !ok {
@@ -209,11 +240,42 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "intern feil", http.StatusInternalServerError)
 		return
 	}
-	if agents == nil {
-		agents = []store.Agent{}
+	out := make([]agentWithState, 0, len(agents))
+	for _, a := range agents {
+		out = append(out, agentWithState{Agent: a, State: s.agentState(a)})
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"agents": agents})
+	json.NewEncoder(w).Encode(map[string]any{"agents": out})
+}
+
+// handleSetAgentPersona setter navn og/eller personlighet fra farmen.
+func (s *Server) handleSetAgentPersona(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Name        string  `json:"name"`
+		Personality *string `json:"personality"` // nil = ikke endre; tom streng = fjern
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "ugyldig request", http.StatusBadRequest)
+		return
+	}
+	personality := ""
+	if req.Personality != nil {
+		personality = *req.Personality
+	}
+	err := s.store.SetAgentPersona(r.PathValue("id"), user.ID, req.Name, personality, req.Personality != nil)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleAgentByChat returnerer agenten som eier en chat (for pause-knappen).
