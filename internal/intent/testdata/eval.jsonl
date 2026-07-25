@@ -72,3 +72,8 @@
 {"text": "hva synes du om prisstrategien vår?", "want": ""}
 {"text": "hvor mange filer har jeg?", "want": "m365_files"}
 {"text": "kan du se filene mine?", "want": "m365_files"}
+{"text": "er det trygt å gi dere databasetilgang?", "want": ""}
+{"text": "hvilke datakilder BURDE vi koble til?", "want": ""}
+{"text": "hva skjer med dataene våre hvis vi sier opp?", "want": ""}
+{"text": "excel-filene på onedrive skal være live", "want": "export_excel"}
+{"text": "hvem har tilgang til kundedatabasen?", "want": "manage_users"}

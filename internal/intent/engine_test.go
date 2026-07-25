@@ -208,6 +208,9 @@ func TestFlowTableCoversRegistry(t *testing.T) {
 		if !ok {
 			t.Fatalf("intent %s mangler flyt-rad", in.Key)
 		}
+		if in.Key == FreeChatKey {
+			continue // fri chat er selv bunnen — egen fallback-regel
+		}
 		if !f.Deterministic {
 			if f.Model == "" {
 				t.Fatalf("%s: modellflyt uten Model", in.Key)

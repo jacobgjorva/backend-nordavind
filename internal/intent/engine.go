@@ -35,6 +35,10 @@ const (
 	directMargin = 0.08
 	// candN: hvor mange kandidater dommeren får velge blant.
 	candN = 3
+	// freeChatMargin: er free_chat nærmere toppkandidaten enn dette, avgjør
+	// dommeren i stedet for direct — romsligere enn directMargin fordi
+	// rådgivningsformuleringer scorer systematisk lavere på tekstlikhet.
+	freeChatMargin = 0.16
 	// multiMargin: scorer to flyter BEGGE over directScore med mindre avstand
 	// enn dette, tolkes meldingen som sammensatt («lag graf OG eksporter») og
 	// går til fri chat som har alle verktøy. Logges som MethodMulti.
@@ -197,9 +201,12 @@ func (e *Engine) Resolve(ctx context.Context, message string, isAdmin bool) Deci
 
 	// Klar vinner: matten bestemmer alene. Nesten-like kandidater (tidligere
 	// MethodMulti → rett til fri chat) går nå til dommeren, som selv velger
-	// fri chat ved ekte sammensatte ønsker.
+	// fri chat ved ekte sammensatte ønsker. Samme regel gjelder fri chat:
+	// ligger free_chat innenfor direct-marginen av toppen, avgjør dommeren —
+	// rådgivningsspørsmål skal aldri tape på ren tekstlikhet.
 	if cands[0].Score >= directScore &&
-		(len(cands) == 1 || cands[0].Score-cands[1].Score >= directMargin) {
+		(len(cands) == 1 || cands[0].Score-cands[1].Score >= directMargin) &&
+		!(cands[0].Key != FreeChatKey && cands[0].Score-best[FreeChatKey] < freeChatMargin) {
 		return Decision{Key: cands[0].Key, Method: MethodDirect, Candidates: cands, Elapsed: time.Since(start)}
 	}
 

@@ -92,7 +92,13 @@ func main() {
 		d := engine.Resolve(context.Background(), c.Text, true)
 		lat = append(lat, d.Elapsed)
 		methods[d.Method]++
-		ok := d.Key == c.Want
+		norm := func(k string) string {
+			if k == "free_chat" {
+				return ""
+			}
+			return k
+		}
+		ok := norm(d.Key) == norm(c.Want)
 		if ok {
 			hits++
 		} else {

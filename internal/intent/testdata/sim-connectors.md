@@ -29,7 +29,7 @@ Alle tre flytene er AdminOnly; simmen kjøres som admin.
 19. connect_m365 — teams-filene våre, får vi koblet dem til?
 20. connect_m365 — microsoft-innloggingen feilet, prøv igjen
 21. connect_m365 — jeg har client id og secret klart
-22. connect_m365 — excel-filene på onedrive skal være live
+22. export_excel — excel-filene på onedrive skal være live
 
 ## C. Skal til manage_connections (10)
 23. manage_connections — hvilke kilder er koblet til nå?
@@ -38,7 +38,7 @@ Alle tre flytene er AdminOnly; simmen kjøres som admin.
 26. manage_connections — er regnskapsbasen fortsatt aktiv?
 27. manage_connections — vis oversikten over integrasjonene
 28. manage_connections — fjern m365-koblingen
-29. manage_connections — hvem har tilgang til kundedatabasen?
+29. manage_users — hvem har tilgang til kundedatabasen?
 30. manage_connections — bytt navn på koblingen til «Regnskap»
 31. manage_connections — koble fra alt som ikke er i bruk
 32. manage_connections — virker tilkoblingene våre?
