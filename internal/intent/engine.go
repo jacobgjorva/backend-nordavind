@@ -48,9 +48,11 @@ const (
 	// enn dette, tolkes meldingen som sammensatt («lag graf OG eksporter») og
 	// går til fri chat som har alle verktøy. Logges som MethodMulti.
 	multiMargin = 0.03
-	// embedTimeout/judgeTimeout: motoren skal aldri henge — fail-open.
-	embedTimeout = 6 * time.Second
-	judgeTimeout = 5 * time.Second
+	// embedTimeout/judgeTimeout: motoren skal aldri henge — fail-open. Stramme
+	// frister: p50 er ~100-250 ms, og en Scaleway-utstikker skal koste maks
+	// ~2 s ekstra før chatten går videre som fri chat, aldri 10+.
+	embedTimeout = 1500 * time.Millisecond
+	judgeTimeout = 2500 * time.Millisecond
 )
 
 // Embedder gjør tekster om til vektorer. Injiseres (Scaleway i produksjon,

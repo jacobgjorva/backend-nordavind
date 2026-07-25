@@ -27,6 +27,49 @@ import (
 type intentState struct {
 	mu     sync.RWMutex
 	engine *intent.Engine
+
+	// Avgjørelses-cache: melding → ferdig ruting. Gjør sticky-oppslaget av
+	// forrige melding gratis (den ble rutet i forrige tur) og stopper
+	// dobbeltarbeid på identiske meldinger. Liten og selvtømmende.
+	cacheMu sync.Mutex
+	cache   map[string]cachedDecision
+}
+
+type cachedDecision struct {
+	d  intent.Decision
+	at time.Time
+}
+
+const (
+	decisionCacheTTL = 10 * time.Minute
+	decisionCacheMax = 1000
+)
+
+// resolveCached ruter via cache: treff gir lagret avgjørelse med null latens.
+func (st *intentState) resolveCached(ctx context.Context, eng *intent.Engine, msg string, isAdmin bool) intent.Decision {
+	key := msg
+	if isAdmin {
+		key = "a\x00" + msg
+	}
+	st.cacheMu.Lock()
+	if c, ok := st.cache[key]; ok && time.Since(c.at) < decisionCacheTTL {
+		st.cacheMu.Unlock()
+		return c.d
+	}
+	st.cacheMu.Unlock()
+	d := eng.Resolve(ctx, msg, isAdmin)
+	// Feil-avgjørelser (fail-open none uten kandidater) caches ikke — de skal
+	// prøves på nytt neste gang.
+	if d.Method == intent.MethodNone && len(d.Candidates) == 0 {
+		return d
+	}
+	st.cacheMu.Lock()
+	if st.cache == nil || len(st.cache) > decisionCacheMax {
+		st.cache = map[string]cachedDecision{}
+	}
+	st.cache[key] = cachedDecision{d: d, at: time.Now()}
+	st.cacheMu.Unlock()
+	return d
 }
 
 func (st *intentState) get() *intent.Engine {
@@ -142,7 +185,7 @@ func (s *Server) applyIntent(user store.User, full map[string]any) (block string
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
-	d := eng.Resolve(ctx, msg, user.Role == "admin")
+	d := s.intent.resolveCached(ctx, eng, msg, user.Role == "admin")
 
 	// Sticky v1: en KORT oppfølging uten klar egen intent (ikke direct) arver
 	// forrige brukermeldings flyt hvis den er Sticky («sikker?» etter et
@@ -155,9 +198,19 @@ func (s *Server) applyIntent(user store.User, full map[string]any) (block string
 	weak := d.Method != intent.MethodDirect || d.Key == "" || d.Key == "smalltalk"
 	if weak && len([]rune(strings.TrimSpace(msg))) <= 60 {
 		if prev := prevUserText(full); prev != "" {
-			pd := eng.Resolve(ctx, prev, user.Role == "admin")
+			pd := s.intent.resolveCached(ctx, eng, prev, user.Role == "admin")
 			if pk, pf := intent.FlowFor(pd); pf.Sticky && pd.Key != "" {
 				d = intent.Decision{Key: pk, Method: intent.MethodSticky,
+					Candidates: d.Candidates, Elapsed: d.Elapsed + pd.Elapsed}
+			} else if d.Method == intent.MethodAsk || d.Method == intent.MethodNone ||
+				d.Method == intent.MethodMulti || d.Key == "smalltalk" {
+				// Midt i en vanlig samtale: en RETNINGSLØS kort oppfølging
+				// (ask/none/multi/smalltalk) skal FORTSETTE samtalen (fri
+				// chat, alle verktøy) — aldri kapres av panel eller
+				// oppklaringsspørsmål («restartet, men fungerer ikke» fikk
+				// «vil du sette opp M365 …?»). Et tydelig dommer-valg av
+				// konkret flyt beholdes.
+				d = intent.Decision{Method: intent.MethodSticky,
 					Candidates: d.Candidates, Elapsed: d.Elapsed + pd.Elapsed}
 			}
 		}
