@@ -420,7 +420,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				emit("data: " + string(step))
 				emit(contentSSE(s.compressAnswer(ctx, trimmed)))
 			default:
-				emit(contentSSE(content))
+				emit(contentSSE(dedupeStutter(content)))
 			}
 			// Bulletproof: ny widget skal ALLTID rendres, selv om modellen
 			// glemmer blokka i svaret sitt.
@@ -824,4 +824,18 @@ func scrubStaleRefusals(full map[string]any) {
 		kept = append(kept, m)
 	}
 	full["messages"] = kept
+}
+
+// dedupeStutter fjerner umiddelbar gjentakelse av samme setning — MidModel
+// stammer av og til («Den nyligste … kunde Den nyligste … kunde 22894.»).
+func dedupeStutter(s string) string {
+	half := len(s) / 2
+	for w := half; w >= 40; w-- {
+		seg := s[:w]
+		rest := strings.TrimSpace(s[w:])
+		if strings.HasPrefix(rest, strings.TrimSpace(seg)) {
+			return seg + strings.TrimSpace(rest[len(strings.TrimSpace(seg)):])
+		}
+	}
+	return s
 }

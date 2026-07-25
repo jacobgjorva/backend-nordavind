@@ -89,6 +89,10 @@ func (s *Server) msAuthURL(user store.User) (string, error) {
 	q.Set("response_mode", "query")
 	q.Set("scope", msScopes)
 	q.Set("state", state)
+	// Alltid kontovelger: nettleseren husker flere Microsoft-kontoer, og uten
+	// denne kunne feil konto kobles i stillhet (family-bruker fikk moestue-
+	// kontoens OneDrive).
+	q.Set("prompt", "select_account")
 	return msAuthBaseFor(aadTenant) + "/authorize?" + q.Encode(), nil
 }
 
