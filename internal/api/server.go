@@ -97,6 +97,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/m365/status", s.requireAuth(s.handleM365Status))
 	mux.HandleFunc("GET /v1/m365/connect", s.requireAuth(s.handleM365Connect))
 	mux.HandleFunc("DELETE /v1/m365", s.requireAuth(s.handleM365Disconnect))
+	mux.HandleFunc("POST /v1/m365/app", s.requireAdmin(s.handleSaveM365App))
 	// OAuth-callback kommer fra Microsofts redirect — ingen sesjon, state-vernet.
 	mux.HandleFunc("GET /v1/m365/callback", s.handleM365Callback)
 	mux.HandleFunc("GET /v1/export/links", s.requireAuth(s.handleListExportLinks))

@@ -192,6 +192,9 @@ func (s *Server) applyIntent(user store.User, full map[string]any) (block string
 		if key == "connect_database" {
 			return credentialBlock(msg)
 		}
+		if key == "connect_m365" {
+			return s.m365SetupBlock(user)
+		}
 		// Deterministisk uten server-løype: fri chat (fallback).
 		return ""
 	}
@@ -203,6 +206,24 @@ func (s *Server) applyIntent(user store.User, full map[string]any) (block string
 	}
 	full["model"] = flowModel(flow.Model)
 	return ""
+}
+
+// m365SetupBlock er det deterministiske oppskrift-steget for connect_m365:
+// koden velger riktig steg ut fra faktisk tilstand — modellen improviserer
+// aldri oppsettet. Panelene (m365auth/m365app) eier alt sensitivt.
+func (s *Server) m365SetupBlock(user store.User) string {
+	if acc, err := s.store.M365Account(user.ID); err == nil {
+		return "Microsoft 365 er allerede koblet til som " + acc.Email + "."
+	}
+	if _, _, _, ok := s.msAppCreds(user.TenantID); ok {
+		return "La oss koble deg til Microsoft 365 — logg inn her:\n```m365auth\n```"
+	}
+	return "Først må bedriftens Azure-app registreres (engangsjobb, ca. 5 minutter):\n\n" +
+		"1. Gå til portal.azure.com, velg App registrations og New registration. Navn: «Nordavind».\n" +
+		"2. Under Redirect URI: velg Web og lim inn " + s.msRedirectURL() + "\n" +
+		"3. API permissions, Add, Microsoft Graph, Delegated: User.Read, Files.ReadWrite, offline_access.\n" +
+		"4. Certificates & secrets, New client secret — kopier verdien med en gang.\n\n" +
+		"Legg verdiene inn her, så starter innloggingen automatisk etterpå:\n```m365app\n```"
 }
 
 // prevUserText gir nest siste brukermelding i payloaden ("" om ingen).

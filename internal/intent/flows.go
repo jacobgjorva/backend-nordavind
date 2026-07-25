@@ -72,11 +72,10 @@ var Flows = map[string]Flow{
 		Fallback:      FreeChatKey,
 	},
 	"connect_m365": {
-		Tools:    []string{ToolConnectM365, ToolCheckM365, ToolSaveM365App},
-		Model:    "mid",
-		MaxChars: 400,
-		Fallback: FreeChatKey,
-		Sticky:   true, // Azure-oppsett er en dialog
+		// Deterministisk oppskrift-steg: koden velger riktig steg (koblet/
+		// innlogging/app-registrering) — se m365SetupBlock.
+		Deterministic: true,
+		Fallback:      FreeChatKey,
 	},
 	"manage_connections": {
 		Deterministic: true, // rendrer /tilkoblinger-panelet
