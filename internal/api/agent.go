@@ -353,6 +353,10 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// overstyres svaret i kode — modellen diktet en «nyligste salgsrad» etter
 	// tre timeouts.
 	dbAttempted, dbSucceeded := false, false
+	// Kildekontroll: alt verktøyene returnerer denne turen, ordrett — prosaen
+	// måles mot dette før den vises (grounding.go).
+	var toolResults []string
+	lastDBResult := ""
 	// Handlings-verktøy (endrer tilstand: rutine, widget, agent, m365 …) gir
 	// korte kvitteringer med vilje — de skal ALDRI utløse backstop-syntesen.
 	actionTool := false
@@ -392,7 +396,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		// det skrives. Kun spesialtilfeller bufres: widget-flyter (blokk-
 		// garantien) og turer der databasen har feilet (datavernet må kunne
 		// overstyre HELE svaret).
-		streamThis := !(dbAttempted && !dbSucceeded) &&
+		streamThis := !usedTool && !(dbAttempted && !dbSucceeded) &&
 			flowKey != "create_widget" && flowKey != "edit_widget" &&
 			flowKey != "create_presentation" && widgetSlug == ""
 		calls, usage, content := s.relayRound(resp, emit, streamThis)
@@ -442,7 +446,25 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				emit("data: " + string(step))
 				emit(contentSSE(s.compressAnswer(ctx, trimmed)))
 			default:
-				emit(contentSSE(dedupeStutter(content)))
+				final := dedupeStutter(content)
+				if off := groundingOffenders(final, toolResults); len(off) > 0 {
+					s.log.Warn("kildekontroll: avvik i svar", "avvik", strings.Join(off, ", "))
+					step, _ := json.Marshal(map[string]any{"nordavind_step": "Dobbeltsjekker mot kildene"})
+					emit("data: " + string(step))
+					final = s.regroundAnswer(ctx, full, final, off, toolResults, &promptTokens, &completionTokens)
+					if final == "" {
+						// Omforsøket holdt heller ikke: vis kilden i stedet for
+						// utrygg prosa — tabellen for data, kildehenvisning ellers.
+						if lastDBResult != "" {
+							emit(contentSSE("Her er de faktiske dataene:\n```table\n" + lastDBResult + "\n```"))
+						} else {
+							emit(contentSSE("Jeg fikk ikke formulert dette kildefast — se kildene over for detaljene."))
+						}
+						emit("data: [DONE]")
+						return
+					}
+				}
+				emit(contentSSE(final))
 			}
 			// Bulletproof: ny widget skal ALLTID rendres, selv om modellen
 			// glemmer blokka i svaret sitt.
@@ -501,6 +523,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				dbAttempted = true
 				if strings.HasPrefix(strings.TrimSpace(result), "{") {
 					dbSucceeded = true
+					lastDBResult = result
 				}
 				// Send spørringen som metadata så tabellen i svaret kan tilby
 				// live Excel-kobling (frontend fester den til meldingen).
@@ -630,6 +653,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					meta, _ := json.Marshal(map[string]any{"nordavind_sources": sources})
 					emit("data: " + string(meta))
 				}
+			}
+			if readTools[c.Name] {
+				toolResults = append(toolResults, result)
 			}
 			assistantCalls = append(assistantCalls, map[string]any{
 				"id":   c.ID,
