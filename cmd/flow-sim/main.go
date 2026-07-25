@@ -58,6 +58,7 @@ const judgeRubric = `Du er en streng produktdommer for en norsk bedrifts-AI. Vur
 - correctness (1-5): 5 = svarer presist på det som ble spurt, riktig form (tabell når bedt om, tall når bedt om); 1 = svarer på noe annet, gjetter, eller nekter uten grunn.
 - value (1-5): 5 = brukeren er ferdig hjulpet; 1 = brukeren må gjøre jobben selv.
 - missing_tool: hvis svaret viser at assistenten MANGLER en evne (kan ikke sende e-post, ikke lese innboks, ikke søke filer e.l.), navngi evnen kort på engelsk (f.eks. "send_email"), ellers tom streng.
+- MERK: svar som består av en \u0060\u0060\u0060admin-, \u0060\u0060\u0060credential- eller \u0060\u0060\u0060table-kodeblokk er et PANEL/SKJEMA/TABELL som rendres hos brukeren — det ER leveransen og skal scores som fullverdig svar, ikke som intern kommando.
 - hesitation (bool): true hvis assistenten SPØR OM LOV eller tilbyr å gjøre noe i stedet for å gjøre det («vil du at jeg skal …?», «gi meg tillatelse», «skal jeg prøve?») — å utføre og så svare er alltid riktig; vegring er en alvorlig feil og skal også trekke value ned til maks 2.
 Svar KUN med JSON: {"brevity":n,"correctness":n,"value":n,"missing_tool":"...","hesitation":false,"comment":"én kort setning"}`
 
@@ -194,7 +195,7 @@ func askBackend(client *http.Client, base, token, text string) (answer, steps st
 
 func scoreOne(client *http.Client, cfg config.Config, r *simResult) {
 	user := fmt.Sprintf("BRUKERENS MELDING:\n%s\n\nSVARET:\n%s\n\n(prosess-steg: %s)", r.Case.Text, r.Answer, r.Steps)
-	raw, err := llmJSON(client, cfg, router.TopModel, judgeRubric, user, 300)
+	raw, err := llmJSON(client, cfg, router.TopModel, judgeRubric, user, 600)
 	if err != nil {
 		r.Comment = "dommer feilet: " + err.Error()
 		return
