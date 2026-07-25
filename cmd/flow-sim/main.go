@@ -37,12 +37,12 @@ type simCase struct {
 }
 
 type simResult struct {
-	Case      simCase `json:"case"`
-	Answer    string  `json:"answer"`
-	Steps     string  `json:"steps"`
-	TTFTMS    int64   `json:"ttft_ms"`
-	TotalMS   int64   `json:"total_ms"`
-	Err       string  `json:"err,omitempty"`
+	Case    simCase `json:"case"`
+	Answer  string  `json:"answer"`
+	Steps   string  `json:"steps"`
+	TTFTMS  int64   `json:"ttft_ms"`
+	TotalMS int64   `json:"total_ms"`
+	Err     string  `json:"err,omitempty"`
 	// Dommer-felter (fylles i score-fasen).
 	Brevity     int    `json:"brevity"`
 	Correctness int    `json:"correctness"`
@@ -195,7 +195,7 @@ func askBackend(client *http.Client, base, token, text string) (answer, steps st
 
 func scoreOne(client *http.Client, cfg config.Config, r *simResult) {
 	user := fmt.Sprintf("BRUKERENS MELDING:\n%s\n\nSVARET:\n%s\n\n(prosess-steg: %s)", r.Case.Text, r.Answer, r.Steps)
-	raw, err := llmJSON(client, cfg, router.TopModel, judgeRubric, user, 600)
+	raw, err := llmJSON(client, cfg, router.TopModel, judgeRubric, user, 800)
 	if err != nil {
 		r.Comment = "dommer feilet: " + err.Error()
 		return
@@ -205,14 +205,15 @@ func scoreOne(client *http.Client, cfg config.Config, r *simResult) {
 		Correctness int    `json:"correctness"`
 		Value       int    `json:"value"`
 		MissingTool string `json:"missing_tool"`
+		Hesitation  bool   `json:"hesitation"`
 		Comment     string `json:"comment"`
 	}
-	if err := json.Unmarshal([]byte(raw), &v); err != nil {
+	if err := json.Unmarshal([]byte(extractJSON(raw)), &v); err != nil {
 		r.Comment = "uparsbar dom: " + truncate(raw, 120)
 		return
 	}
 	r.Brevity, r.Correctness, r.Value = v.Brevity, v.Correctness, v.Value
-	r.MissingTool, r.Comment = v.MissingTool, v.Comment
+	r.MissingTool, r.Hesitation, r.Comment = v.MissingTool, v.Hesitation, v.Comment
 }
 
 func summarize(runDir string, client *http.Client, cfg config.Config, results []simResult) {
@@ -263,6 +264,28 @@ func summarize(runDir string, client *http.Client, cfg config.Config, results []
 	}
 	save(runDir, "proposals.json", proposals)
 	fmt.Printf("\nAlt lagret i %s — gjennomgå proposals.json før noe endres.\n", runDir)
+}
+
+// extractJSON henter første balanserte {...} fra en modellrespons — dommere
+// pakker av og til JSON-en inn i tekst eller kodegjerder.
+func extractJSON(s string) string {
+	start := strings.Index(s, "{")
+	if start < 0 {
+		return s
+	}
+	depth := 0
+	for i := start; i < len(s); i++ {
+		switch s[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return s[start : i+1]
+			}
+		}
+	}
+	return s[start:]
 }
 
 func llmJSON(client *http.Client, cfg config.Config, model, system, user string, maxTokens int) (string, error) {

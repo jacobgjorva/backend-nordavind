@@ -163,7 +163,7 @@ func (s *Server) buildDBTool(tenantID, userID, onlyConnID string) *dbToolCtx {
 				"type": "object",
 				"properties": map[string]any{
 					"connection_id": map[string]any{"type": "string", "description": "id for databasen"},
-					"sql":           map[string]any{"type": "string", "description": "SELECT-spørringen"},
+					"sql":           map[string]any{"type": "string", "description": "SELECT-spørringen. Ved ORDER BY: legg ALLTID til en entydig andresortering (f.eks. dokumentnr eller id) så «nyligste/største» aldri er vilkårlig blant like verdier."},
 				},
 				"required": []string{"connection_id", "sql"},
 			},

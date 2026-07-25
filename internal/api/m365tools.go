@@ -94,11 +94,11 @@ func (s *Server) runM365Search(ctx context.Context, userID, query string) string
 	}
 	var out struct {
 		Value []struct {
-			ID       string `json:"id"`
-			Name     string `json:"name"`
-			Size     int64  `json:"size"`
-			WebURL   string `json:"webUrl"`
-			Modified string `json:"lastModifiedDateTime"`
+			ID       string    `json:"id"`
+			Name     string    `json:"name"`
+			Size     int64     `json:"size"`
+			WebURL   string    `json:"webUrl"`
+			Modified string    `json:"lastModifiedDateTime"`
 			Folder   *struct{} `json:"folder"`
 		} `json:"value"`
 	}

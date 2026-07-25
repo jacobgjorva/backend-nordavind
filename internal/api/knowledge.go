@@ -20,11 +20,11 @@ const (
 	embeddingModel = "qwen3-embedding-8b"
 	// qwen3-embedding scorer urelatert tekst ~0.21 og klart relevant ~0.31–0.53.
 	// 0.28 er vektor-gulvet som skiller signal fra støy.
-	vecFloor    = 0.28
-	candDepth   = 30   // hvor mange kandidater fra hver kilde (vektor / nøkkelord)
-	rrfK        = 60.0 // RRF-konstant (standard); demper topprangeringens dominans
-	noteMaxN    = 25   // maks antall lapper (budsjettet er den reelle grensen)
-	noteBudget  = 4000 // hardt tak på injisert tekst (tegn)
+	vecFloor   = 0.28
+	candDepth  = 30   // hvor mange kandidater fra hver kilde (vektor / nøkkelord)
+	rrfK       = 60.0 // RRF-konstant (standard); demper topprangeringens dominans
+	noteMaxN   = 25   // maks antall lapper (budsjettet er den reelle grensen)
+	noteBudget = 4000 // hardt tak på injisert tekst (tegn)
 )
 
 // knowledgeFor henter kunnskapskonteksten for siste brukermelding i en

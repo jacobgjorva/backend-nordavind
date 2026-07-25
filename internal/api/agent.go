@@ -316,7 +316,6 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		injectSystem(full, "VIKTIG: Brukeren HAR datatilgang akkurat nå (query_database er tilgjengelig "+
 			"med skjemaet i verktøyet). Eventuelle påstander tidligere i samtalen om manglende tilgang "+
 			"eller databasefeil er UTDATERTE — ignorer dem, kjør spørringen og svar med ferske tall.")
-		scrubStaleRefusals(full)
 	}
 
 	// Grundig modus: vanlig chat (ikke oppsett/widget/agent-redigering) der
@@ -446,16 +445,21 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				s.streamBackstop(ctx, full, emit, &promptTokens, &completionTokens)
 			case trimmed == "" && !actionTool:
 				emit(contentSSE(backstopGraceful))
-			case len([]rune(trimmed)) > answerLimit:
-				// Over flytens (eller standard) grense: aldri kutt — skriv om
-				// til hele setninger. Statusen er bevisst selvironisk.
-				step, _ := json.Marshal(map[string]any{"nordavind_step": "Sorry, dette blir for mye greier, la meg omformulere meg"})
-				emit("data: " + string(step))
-				emit(contentSSE(s.compressAnswer(ctx, trimmed)))
 			default:
-				final := dedupeStutter(content)
+				final := content
 				if off := groundingOffenders(final, toolResults); len(off) > 0 {
 					s.log.Warn("kildekontroll: avvik i svar", "avvik", strings.Join(off, ", "))
+					// Rene tallavvik er som regel LOVLIGE beregninger (differanser,
+					// prosent) — de slipper gjennom med kildetabellen vedlagt som
+					// kvittering. Diktede NAVN blokkeres fortsatt hardt.
+					if !hasNameOffender(off) {
+						emit(contentSSE(final))
+						if lastDBResult != "" {
+							emit(contentSSE("\n\n```table\n" + lastDBResult + "\n```"))
+						}
+						emit("data: [DONE]")
+						return
+					}
 					step, _ := json.Marshal(map[string]any{"nordavind_step": "Dobbeltsjekker mot kildene"})
 					emit("data: " + string(step))
 					final = s.regroundAnswer(ctx, full, final, off, toolResults, &promptTokens, &completionTokens)
@@ -755,16 +759,6 @@ const compressSystem = "Komprimer teksten under til MAKS 3 korte, HELE setninger
 	"konklusjon først, deretter bare det aller viktigste. Behold nøkkeltall og navn. ALDRI liste, " +
 	"overskrifter eller punkt-for-punkt. Behold samme mening, bare tettere. Svar kun med den komprimerte teksten."
 
-// compressAnswer strammer et for langt svar til noen få hele setninger. Feiler
-// kallet, returneres originalen (heller en vegg enn blankt — men svært sjelden).
-func (s *Server) compressAnswer(ctx context.Context, text string) string {
-	out, err := s.llmComplete(ctx, compressSystem, text, 260)
-	if err != nil || strings.TrimSpace(out) == "" {
-		return text
-	}
-	return strings.TrimSpace(out)
-}
-
 // backstopNudge ber modellen konkludere fra det den alt har hentet, aldri tomt.
 const backstopNudge = "Verktøyene er ikke lenger tilgjengelige. Svar NÅ i MAKS 2-3 korte setninger med KUN det " +
 	"viktigste fra det du har funnet — anbefaling/konklusjon først. ALDRI en liste eller punkt-for-punkt-" +
@@ -867,47 +861,6 @@ func flowNeedsDB(flowKey string) bool {
 		}
 	}
 	return false
-}
-
-// scrubStaleRefusals fjerner utdaterte avslags-svar («du har ikke tilgang»,
-// «midlertidig feil») fra payloaden som sendes modellen når datatilgang
-// faktisk finnes — historikk-ankring fikk modellen til å gjenta avslag uten
-// å kalle verktøyet. Lagret chat røres ikke; kun modellens arbeidskontekst.
-func scrubStaleRefusals(full map[string]any) {
-	msgs, _ := full["messages"].([]any)
-	if len(msgs) == 0 {
-		return
-	}
-	kept := make([]any, 0, len(msgs))
-	for _, m := range msgs {
-		mm, ok := m.(map[string]any)
-		if ok && mm["role"] == "assistant" {
-			if c, ok := mm["content"].(string); ok && len([]rune(c)) <= 160 {
-				lc := strings.ToLower(c)
-				if (strings.Contains(lc, "ikke tilgang til") && strings.Contains(lc, "data")) ||
-					strings.Contains(lc, "midlertidig feil") ||
-					strings.Contains(lc, "tillater ikke lesing") {
-					continue
-				}
-			}
-		}
-		kept = append(kept, m)
-	}
-	full["messages"] = kept
-}
-
-// dedupeStutter fjerner umiddelbar gjentakelse av samme setning — MidModel
-// stammer av og til («Den nyligste … kunde Den nyligste … kunde 22894.»).
-func dedupeStutter(s string) string {
-	half := len(s) / 2
-	for w := half; w >= 40; w-- {
-		seg := s[:w]
-		rest := strings.TrimSpace(s[w:])
-		if strings.HasPrefix(rest, strings.TrimSpace(seg)) {
-			return seg + strings.TrimSpace(rest[len(strings.TrimSpace(seg)):])
-		}
-	}
-	return s
 }
 
 // flowAcks: momentane kvitteringer per verktøyflyt — sendes av koden før

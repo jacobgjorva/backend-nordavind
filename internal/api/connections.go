@@ -204,4 +204,3 @@ func (s *Server) handleSaveConnectionConfig(w http.ResponseWriter, r *http.Reque
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
-

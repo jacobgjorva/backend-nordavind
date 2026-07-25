@@ -113,9 +113,21 @@ func (s *Server) regroundAnswer(ctx context.Context, full map[string]any, draft 
 	_, usage, content := s.relayRound(resp, func(string) {}, false)
 	*promptTokens += usage.PromptTokens
 	*completionTokens += usage.CompletionTokens
-	content = strings.TrimSpace(dedupeStutter(content))
+	content = strings.TrimSpace(content)
 	if content == "" || len(groundingOffenders(content, toolResults)) > 0 {
 		return ""
 	}
 	return content
+}
+
+// hasNameOffender: minst ett avvik er et egennavn (ikke bare tall).
+func hasNameOffender(offenders []string) bool {
+	for _, o := range offenders {
+		if normDigits(o) == "" || len(normDigits(o)) < len(strings.ReplaceAll(o, " ", ""))/2 {
+			if regexp.MustCompile(`[A-ZÆØÅa-zæøå]{2,}`).MatchString(o) {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -32,14 +32,14 @@ func (s *Server) connectorAgentSystem() string {
 		"  2) Under Redirect URI: velg Web og lim inn " + s.msRedirectURL() + "\n" +
 		"  3) API permissions → Add → Microsoft Graph → Delegated: User.Read, Files.ReadWrite, offline_access.\n" +
 		"  4) Certificates & secrets → New client secret → kopier verdien med en gang.\n" +
-		"  Be så om Application (client) ID, Directory (tenant) ID (samme oversiktsside) og secret-verdien, kall "+
+		"  Be så om Application (client) ID, Directory (tenant) ID (samme oversiktsside) og secret-verdien, kall " +
 		"save_m365_app med alle tre, og kall deretter " +
 		"connect_m365 — innloggingen åpnes automatisk hos brukeren.\n" +
 		"ALT ANNET (CSV, Excel-filer, Databricks, API-er osv.): si ærlig at det ikke er støttet ennå, og nevn " +
 		"gjerne hva som ER støttet. Ikke lov noe, ikke simuler.\n" +
 		"Ikke gjengi passord, secrets eller nøkler i svarene dine. Etter et vellykket verktøykall: bekreft kort " +
 		"hva som ble koblet til.\n" +
-		"Du lager ALDRI lenker eller URL-er selv — innloggingsvinduet åpnes automatisk av connect_m365; vil "+
+		"Du lager ALDRI lenker eller URL-er selv — innloggingsvinduet åpnes automatisk av connect_m365; vil " +
 		"brukeren prøve igjen, kall connect_m365 på nytt. ABSOLUTT REGEL: du påstår ALDRI at noe er tilkoblet uten at et verktøy (connect_database/check_m365) " +
 		"har bekreftet det i denne samtalen. Sier brukeren «gjort» etter en Microsoft-innlogging: kall " +
 		"check_m365 FØR du svarer, og gjengi kun det verktøyet sier."

@@ -2,12 +2,11 @@ package api
 
 import (
 	"archive/zip"
-	"regexp"
-	_ "embed"
 	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -15,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
