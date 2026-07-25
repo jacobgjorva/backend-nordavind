@@ -347,6 +347,10 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// Slug for widget opprettet i denne turen (create_widget-flyten) — blokka
 	// appendes i KODE hvis modellen glemmer den; widgeten skal alltid vises.
 	createdWidget := ""
+	// Datavern mot fabrikkerte tall: feiler ALLE databasespørringene i turen,
+	// overstyres svaret i kode — modellen diktet en «nyligste salgsrad» etter
+	// tre timeouts.
+	dbAttempted, dbSucceeded := false, false
 	// Handlings-verktøy (endrer tilstand: rutine, widget, agent, m365 …) gir
 	// korte kvitteringer med vilje — de skal ALDRI utløse backstop-syntesen.
 	actionTool := false
@@ -391,6 +395,14 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		completionTokens += usage.CompletionTokens
 		if len(calls) == 0 {
 			trimmed := strings.TrimSpace(content)
+			// Datavern: databasen ble forsøkt men ga aldri ett eneste svar —
+			// da finnes det ingen tall å gjengi. Ærlig feilmelding i kode i
+			// stedet for modellens tekst (som kan være fabrikkert).
+			if dbAttempted && !dbSucceeded {
+				emit(contentSSE("Databasen svarte ikke i tide på dette, så jeg har ingen tall å gi deg akkurat nå — prøv igjen om et lite øyeblikk."))
+				emit("data: [DONE]")
+				return
+			}
 			switch {
 			case len([]rune(trimmed)) < 3 && usedTool && !actionTool:
 				// Reelt tomt (eller bare tegnsetting) etter verktøybruk —
@@ -464,6 +476,10 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Spør databasen"})
 				emit("data: " + string(meta))
 				result = s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL)
+				dbAttempted = true
+				if strings.HasPrefix(strings.TrimSpace(result), "{") {
+					dbSucceeded = true
+				}
 				// Send spørringen som metadata så tabellen i svaret kan tilby
 				// live Excel-kobling (frontend fester den til meldingen).
 				if strings.TrimSpace(args.SQL) != "" {

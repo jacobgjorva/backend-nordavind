@@ -47,7 +47,9 @@ type Link struct {
 	ToColumn   string `json:"to_column"`
 }
 
-const queryTimeout = 10 * time.Second
+// queryTimeout: reelle kunde-spørringer (sortering over views uten indeks)
+// trenger romsligere frist enn 10 s — modellen viser status underveis.
+const queryTimeout = 30 * time.Second
 
 // Open åpner en tilkobling og verifiserer den med ping.
 func Open(ctx context.Context, c Creds) (*sql.DB, error) {
