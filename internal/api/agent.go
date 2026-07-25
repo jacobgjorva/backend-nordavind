@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,6 +15,9 @@ import (
 )
 
 // Modellen bestemmer selv når den trenger nettet — ingen forhåndsdommer.
+// widgetSlugRe plukker slugen ut av runWidgetOp-kvitteringen.
+var widgetSlugRe = regexp.MustCompile(`slug=([a-z0-9-]+)`)
+
 var webSearchTool = map[string]any{
 	"type": "function",
 	"function": map[string]any{
@@ -190,6 +194,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	if widgetSlug != "" {
 		injectSystem(full, s.widgetSystem(ctx))
 	}
+	// Widget-flytene fra intent-ruting trenger samme feltskjema-instruks som
+	// widget-editoren — uten den famler modellen blindt med set_widget.
+	if widgetSlug == "" && (flowKey == "create_widget" || flowKey == "edit_widget" || flowKey == "create_presentation") {
+		injectSystem(full, s.widgetSystem(ctx))
+	}
 
 	// Connector-agent: hjelper brukeren koble til eksterne kilder via verktøy.
 	connectorMode, _ := full["nordavind_connector"].(bool)
@@ -312,6 +321,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	start := time.Now()
 	var promptTokens, completionTokens, searches int
 	usedTool := false // om noen verktøy (søk/lese/db) er kjørt — styrer tom-svar-vernet
+	// Slug for widget opprettet i denne turen (create_widget-flyten) — blokka
+	// appendes i KODE hvis modellen glemmer den; widgeten skal alltid vises.
+	createdWidget := ""
 	// Handlings-verktøy (endrer tilstand: rutine, widget, agent, m365 …) gir
 	// korte kvitteringer med vilje — de skal ALDRI utløse backstop-syntesen.
 	actionTool := false
@@ -374,6 +386,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				emit(contentSSE(s.compressAnswer(ctx, trimmed)))
 			default:
 				emit(contentSSE(content))
+			}
+			// Bulletproof: ny widget skal ALLTID rendres, selv om modellen
+			// glemmer blokka i svaret sitt.
+			if createdWidget != "" && !strings.Contains(content, "```widget") {
+				emit(contentSSE("\n\n```widget\n" + createdWidget + "\n```"))
 			}
 			emit("data: [DONE]")
 			return
@@ -532,6 +549,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Bygger widget"})
 				emit("data: " + string(meta))
 				result = s.runWidgetOp(ctx, widgetSlug, c.Args.String())
+				if widgetSlug == "" {
+					if m := widgetSlugRe.FindStringSubmatch(result); m != nil {
+						createdWidget = m[1]
+					}
+				}
 				emit(`data: {"nordavind_widget_updated":true}`)
 			default:
 				if q := strings.TrimSpace(args.Query); q != "" {
