@@ -113,10 +113,7 @@ func (s *Server) handleMailSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	acc, rec, err := s.mailAccount(user)
-	if err != nil {
-		http.Error(w, "ingen konto", http.StatusNotFound)
-		return
-	}
+	hasSMTP := err == nil
 	var req struct {
 		To         []mail.Person `json:"to"`
 		Cc         []mail.Person `json:"cc"`
@@ -128,6 +125,16 @@ func (s *Server) handleMailSend(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "ugyldig request", http.StatusBadRequest)
+		return
+	}
+	if !hasSMTP {
+		// Ingen SMTP-konto: send via Microsoft Graph når M365 er koblet —
+		// samme kobling som filer/e-postlesing, null ekstra oppsett.
+		if err := s.sendViaGraph(r.Context(), user.ID, req.To, req.Cc, req.Bcc, req.Subject, req.Body); err != nil {
+			http.Error(w, "sending feilet: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	body := req.Body
@@ -144,4 +151,49 @@ func (s *Server) handleMailSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// sendViaGraph sender e-posten med brukerens Microsoft 365-konto.
+func (s *Server) sendViaGraph(ctx context.Context, userID string, to, cc, bcc []mail.Person, subject, body string) error {
+	token, err := s.msAccessToken(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("Microsoft 365 er ikke koblet til")
+	}
+	rcpt := func(ps []mail.Person) []map[string]any {
+		out := make([]map[string]any, 0, len(ps))
+		for _, p := range ps {
+			out = append(out, map[string]any{"emailAddress": map[string]any{"address": p.Address, "name": p.Name}})
+		}
+		return out
+	}
+	payload := map[string]any{
+		"message": map[string]any{
+			"subject":       subject,
+			"body":          map[string]any{"contentType": "Text", "content": body},
+			"toRecipients":  rcpt(to),
+			"ccRecipients":  rcpt(cc),
+			"bccRecipients": rcpt(bcc),
+		},
+		"saveToSentItems": true,
+	}
+	b, _ := json.Marshal(payload)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://graph.microsoft.com/v1.0/me/sendMail", bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("e-posttilgang mangler — koble til Microsoft 365 på nytt")
+	}
+	if resp.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("Graph svarte %d", resp.StatusCode)
+	}
+	return nil
 }

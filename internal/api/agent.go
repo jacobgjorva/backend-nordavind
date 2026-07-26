@@ -294,9 +294,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			if user, ok := ctx.Value(userKey).(store.User); ok && user.Role == "admin" {
 				tools = append(tools, connectorAgentTools()...)
 			}
-			// M365-filverktøy kun når brukeren har koblet Microsoft 365.
+			// M365-verktøy (filer + e-post) kun når brukeren har koblet til.
 			if _, ok := s.m365Connected(ctx); ok {
-				tools = append(tools, m365SearchTool, m365ReadTool)
+				tools = append(tools, m365SearchTool, m365ReadTool, mailSearchTool, mailReadTool)
 			}
 			// Eskalerings-verktøy (registeret ligger i verktøy-beskrivelsen).
 			if user, ok := ctx.Value(userKey).(store.User); ok {
@@ -370,7 +370,8 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	actionTool := false
 	readTools := map[string]bool{
 		"web_search": true, "fetch_url": true, "query_database": true,
-		"m365_search": true, "m365_read": true, "list_agents": true, "show_table": true,
+		"m365_search": true, "m365_read": true, "mail_search": true, "mail_read": true,
+		"list_agents": true, "show_table": true,
 	}
 	// Tabell-garanti: show_table-verktøyet rendrer siste databasesvar
 	// deterministisk, og ba brukeren om tabell rendrer vi uansett fra første
@@ -639,6 +640,26 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					result = s.runDeleteAgent(ctx, aa)
 				default:
 					result = s.runListAgents(ctx)
+				}
+			case "mail_search":
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Søker i e-posten"})
+				emit("data: " + string(meta))
+				if uid, ok := s.m365Connected(ctx); ok {
+					result = s.runMailSearch(ctx, uid, args.Query)
+				} else {
+					result = "Microsoft 365 er ikke koblet til."
+				}
+			case "mail_read":
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Leser e-posten"})
+				emit("data: " + string(meta))
+				var ma struct {
+					MailID string `json:"mail_id"`
+				}
+				json.Unmarshal([]byte(c.Args.String()), &ma)
+				if uid, ok := s.m365Connected(ctx); ok {
+					result = s.runMailRead(ctx, uid, ma.MailID)
+				} else {
+					result = "Microsoft 365 er ikke koblet til."
 				}
 			case "m365_search":
 				var ma struct {

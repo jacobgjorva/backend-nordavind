@@ -12,17 +12,17 @@ import (
 // oppgave mot en tilkobling på en fast frekvens.
 // Standard er kun lesetilgang; skrivetilgang må settes eksplisitt.
 type Agent struct {
-	ID              string     `json:"id"`
-	Name            string     `json:"name"`
-	Task            string     `json:"task"`
-	ConnectionID    string     `json:"connection_id"`
-	ScheduleLabel   string     `json:"schedule_label"`   // menneskelig, f.eks. "hver dag kl 08:00"
-	IntervalSeconds int        `json:"interval_seconds"` // hvor ofte den kjøres
-	RunTime         string     `json:"run_time"`         // HH:MM for dag/uke-intervaller
-	DailyTokenLimit int        `json:"daily_token_limit"`
-	WriteAccess     bool       `json:"write_access"`
-	Enabled         bool       `json:"enabled"`
-	PushEnabled     bool       `json:"push_enabled"`
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Task            string `json:"task"`
+	ConnectionID    string `json:"connection_id"`
+	ScheduleLabel   string `json:"schedule_label"`   // menneskelig, f.eks. "hver dag kl 08:00"
+	IntervalSeconds int    `json:"interval_seconds"` // hvor ofte den kjøres
+	RunTime         string `json:"run_time"`         // HH:MM for dag/uke-intervaller
+	DailyTokenLimit int    `json:"daily_token_limit"`
+	WriteAccess     bool   `json:"write_access"`
+	Enabled         bool   `json:"enabled"`
+	PushEnabled     bool   `json:"push_enabled"`
 
 	// Oppdrags-modus: agenten jobber mot et mål over flere kjøringer og gir seg
 	// først når det er nådd.
@@ -38,9 +38,9 @@ type Agent struct {
 	// Kompilert plan: spinup finner én gang ut HVORDAN oppgaven løses best, og
 	// lagrer stegene her. Hver kjøring utfører planen deterministisk i stedet
 	// for å lete på nytt.
-	Plan        string     `json:"plan"`         // JSON: steps + watch + alert_rule
-	PlanStatus  string     `json:"plan_status"`  // "" | building | ready | broken
-	PlanError   string     `json:"plan_error"`   // hvorfor planen ikke ble bygget/er ødelagt
+	Plan        string     `json:"plan"`        // JSON: steps + watch + alert_rule
+	PlanStatus  string     `json:"plan_status"` // "" | building | ready | broken
+	PlanError   string     `json:"plan_error"`  // hvorfor planen ikke ble bygget/er ødelagt
 	PlanBuiltAt *time.Time `json:"plan_built_at,omitempty"`
 
 	// Minne mellom kjøringer: rådataene forrige kjøring hentet. Er de identiske
@@ -48,10 +48,10 @@ type Agent struct {
 	// varsel. Snapshotet eksponeres ikke til klienten (kan være stort).
 	LastSnapshot string `json:"-"`
 
-	CreatedAt time.Time `json:"created_at"`
-	ChatID          string     `json:"chat_id"`
-	NextRunAt       *time.Time `json:"next_run_at,omitempty"`
-	LastRunAt       *time.Time `json:"last_run_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	ChatID    string     `json:"chat_id"`
+	NextRunAt *time.Time `json:"next_run_at,omitempty"`
+	LastRunAt *time.Time `json:"last_run_at,omitempty"`
 
 	// Internt for scheduleren (ikke eksponert i JSON til klient).
 	TenantID string `json:"-"`

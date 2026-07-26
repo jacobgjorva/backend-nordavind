@@ -256,3 +256,133 @@ func extractXLSX(raw []byte, maxChars int) string {
 	}
 	return b.String()
 }
+
+var mailSearchTool = map[string]any{
+	"type": "function",
+	"function": map[string]any{
+		"name": "mail_search",
+		"description": "Søk i brukerens e-post (Outlook via Microsoft 365). Bruk for spørsmål om mottatt " +
+			"eller sendt e-post («har jeg fått svar fra …», «hva skrev …»). Returnerer avsender, emne, dato, " +
+			"utdrag og id. Ingen treff: utvid søket SELV (avsendernavn alene, færre ord) før du melder tomt.",
+		"parameters": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"query": map[string]any{"type": "string", "description": "søkeord: avsender, emne eller tema"},
+			},
+			"required": []string{"query"},
+		},
+	},
+}
+
+var mailReadTool = map[string]any{
+	"type": "function",
+	"function": map[string]any{
+		"name":        "mail_read",
+		"description": "Les én e-post i sin helhet (id fra mail_search).",
+		"parameters": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"mail_id": map[string]any{"type": "string", "description": "e-postens id fra mail_search"},
+			},
+			"required": []string{"mail_id"},
+		},
+	},
+}
+
+// runMailSearch søker i brukerens postboks via Graph.
+func (s *Server) runMailSearch(ctx context.Context, userID, query string) string {
+	token, err := s.msAccessToken(ctx, userID)
+	if err != nil {
+		return "Microsoft 365 er ikke koblet til."
+	}
+	u := "https://graph.microsoft.com/v1.0/me/messages?$search=%22" + url.QueryEscape(strings.TrimSpace(query)) +
+		"%22&$top=8&$select=id,subject,from,receivedDateTime,bodyPreview"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return "Intern feil."
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return "Kunne ikke nå Microsoft Graph."
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode == http.StatusForbidden {
+		return "E-posttilgang mangler: brukeren må koble til Microsoft 365 på nytt for å godkjenne e-post-tilgangen."
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Sprintf("Graph-feil (%d).", resp.StatusCode)
+	}
+	var out struct {
+		Value []struct {
+			ID       string `json:"id"`
+			Subject  string `json:"subject"`
+			Received string `json:"receivedDateTime"`
+			Preview  string `json:"bodyPreview"`
+			From     struct {
+				EmailAddress struct {
+					Name    string `json:"name"`
+					Address string `json:"address"`
+				} `json:"emailAddress"`
+			} `json:"from"`
+		} `json:"value"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "Uleselig svar fra Graph."
+	}
+	if len(out.Value) == 0 {
+		return "Ingen e-poster matchet søket."
+	}
+	var b strings.Builder
+	for _, m := range out.Value {
+		fmt.Fprintf(&b, "- id=%s | %s | fra %s <%s> | %s\n  %s\n",
+			m.ID, m.Received, m.From.EmailAddress.Name, m.From.EmailAddress.Address, m.Subject, m.Preview)
+	}
+	return b.String()
+}
+
+// runMailRead henter én e-post i fulltekst.
+func (s *Server) runMailRead(ctx context.Context, userID, mailID string) string {
+	token, err := s.msAccessToken(ctx, userID)
+	if err != nil {
+		return "Microsoft 365 er ikke koblet til."
+	}
+	u := "https://graph.microsoft.com/v1.0/me/messages/" + url.PathEscape(mailID) + "?$select=subject,from,receivedDateTime,body"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return "Intern feil."
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return "Kunne ikke nå Microsoft Graph."
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Sprintf("Graph-feil (%d).", resp.StatusCode)
+	}
+	var m struct {
+		Subject  string `json:"subject"`
+		Received string `json:"receivedDateTime"`
+		Body     struct {
+			Content string `json:"content"`
+		} `json:"body"`
+		From struct {
+			EmailAddress struct {
+				Name    string `json:"name"`
+				Address string `json:"address"`
+			} `json:"emailAddress"`
+		} `json:"from"`
+	}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return "Uleselig svar fra Graph."
+	}
+	text := search.StripHTML(m.Body.Content)
+	if len([]rune(text)) > 6000 {
+		text = string([]rune(text)[:6000]) + " …"
+	}
+	return fmt.Sprintf("Fra: %s <%s>\nDato: %s\nEmne: %s\n\n%s",
+		m.From.EmailAddress.Name, m.From.EmailAddress.Address, m.Received, m.Subject, text)
+}

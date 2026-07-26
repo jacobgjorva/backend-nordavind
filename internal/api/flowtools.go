@@ -49,14 +49,19 @@ func (s *Server) flowTools(ctx context.Context, flowKey string, dbCtx *dbToolCtx
 				return nil, false
 			}
 			tools = append(tools, showTableTool)
-		case intent.ToolM365Search, intent.ToolM365Read:
+		case intent.ToolM365Search, intent.ToolM365Read, intent.ToolMailSearch, intent.ToolMailRead:
 			if _, ok := s.m365Connected(ctx); !ok {
 				return nil, false
 			}
-			if name == intent.ToolM365Search {
+			switch name {
+			case intent.ToolM365Search:
 				tools = append(tools, m365SearchTool)
-			} else {
+			case intent.ToolM365Read:
 				tools = append(tools, m365ReadTool)
+			case intent.ToolMailSearch:
+				tools = append(tools, mailSearchTool)
+			case intent.ToolMailRead:
+				tools = append(tools, mailReadTool)
 			}
 		case intent.ToolConnectDB, intent.ToolConnectM365, intent.ToolCheckM365, intent.ToolSaveM365App:
 			if t := toolByName(connectorAgentTools(), name); t != nil {

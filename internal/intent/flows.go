@@ -38,6 +38,8 @@ const (
 	ToolShowTable     = "show_table"
 	ToolM365Search    = "m365_search"
 	ToolM365Read      = "m365_read"
+	ToolMailSearch    = "mail_search"
+	ToolMailRead      = "mail_read"
 	ToolContactPerson = "contact_person"
 	ToolSetWidget     = "set_widget"
 	ToolConnectDB     = "connect_database"
@@ -166,6 +168,14 @@ var Flows = map[string]Flow{
 		Sticky:   true, // fildialog: «åpne den», «hva står det?»
 	},
 
+	"email": {
+		Tools:    []string{ToolMailSearch, ToolMailRead},
+		Model:    "mid",
+		MaxChars: 300,
+		Fallback: FreeChatKey,
+		Sticky:   true, // e-postdialog: «les den», «hva svarte hun?»
+	},
+
 	"web_fact": {
 		Tools:    []string{ToolWebSearch, ToolFetchURL},
 		Model:    "mid",
@@ -212,6 +222,7 @@ var AskLabels = map[string]string{
 	"edit_routine":        "endre en rutine",
 	"employees_admin":     "jobbe med ansattregisteret",
 	"m365_files":          "finne noe i filene dine",
+	"email":               "sjekke e-posten din",
 	"web_fact":            "få et faktasvar fra nettet",
 	"smalltalk":           "bare prate",
 	FreeChatKey:           "ha et råd eller en vurdering",

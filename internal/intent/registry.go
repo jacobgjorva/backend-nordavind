@@ -294,6 +294,17 @@ var Registry = []Intent{
 		},
 	},
 	{
+		Key:         "email",
+		Description: "Spørsmål om brukerens egen e-post i Outlook: har jeg fått svar, hva skrev noen, finn en e-post, les innboksen",
+		Examples: []string{
+			"har jeg fått svar fra Kari?",
+			"hva skrev regnskapsføreren i forrige uke?",
+			"finn e-posten om tilbudet",
+			"noen nye viktige e-poster i dag?",
+			"les den siste e-posten fra banken",
+		},
+	},
+	{
 		// free_chat som egen rad: rådgivning og åpne spørsmål skal kunne VINNE
 		// rutingen — uten denne kan de aldri slå flyt-nøklene på embedding.
 		Key:         FreeChatKey,

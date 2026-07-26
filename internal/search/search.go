@@ -82,6 +82,9 @@ func resolveDDG(href string) string {
 	return href
 }
 
+// StripHTML fjerner tagger og entiteter — brukes også av e-postlesing.
+func StripHTML(s string) string { return clean(s) }
+
 func clean(s string) string {
 	return strings.TrimSpace(html.UnescapeString(reTags.ReplaceAllString(s, "")))
 }

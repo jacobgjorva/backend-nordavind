@@ -20,7 +20,7 @@ import (
 // kan utvides med mail/Teams senere (incremental consent). Refresh-tokenet
 // lagres kryptert per bruker; access-tokens hentes ferskt og lagres aldri.
 
-const msScopes = "offline_access User.Read Files.ReadWrite"
+const msScopes = "offline_access User.Read Files.ReadWrite Mail.Read Mail.Send"
 
 // msAuthBaseFor gir riktig innloggings-endepunkt: single-tenant Azure-apper
 // krever sin egen directory-id (/common gir AADSTS50194).

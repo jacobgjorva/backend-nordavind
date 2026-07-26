@@ -80,3 +80,6 @@
 {"text": "se om scaleway har et api som gir oss kostnad per token bruk", "want": "web_fact"}
 {"text": "Har jeg tilgang til intern data?", "want": "data_question"}
 {"text": "hvilke data kan jeg se?", "want": "data_question"}
+{"text": "har jeg fått svar fra Kari?", "want": "email"}
+{"text": "finn e-posten om tilbudet fra ACKES", "want": "email"}
+{"text": "noen viktige e-poster i dag?", "want": "email"}
