@@ -200,14 +200,17 @@ var Flows = map[string]Flow{
 	},
 
 	"web_fact": {
+		// "light": svaret bygges av søkeresultater og voktes av kilde-
+		// kontrollen — småmodellen valgte søk like riktig som medium i test,
+		// til en tidel av prisen. Krever LIGHT_TIER=on, ellers mid.
 		Tools:    []string{ToolWebSearch, ToolFetchURL},
-		Model:    "mid",
+		Model:    "light",
 		MaxChars: 300,
 		Fallback: FreeChatKey,
 	},
 	"smalltalk": {
 		Tools:    nil, // rent samtalesvar — ingen verktøy å misbruke
-		Model:    "mid",
+		Model:    "light",
 		MaxChars: 150,
 		Fallback: FreeChatKey,
 	},

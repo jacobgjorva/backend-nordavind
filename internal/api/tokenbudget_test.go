@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/jacobgjorva/backend-nordavind/internal/config"
+	"github.com/jacobgjorva/backend-nordavind/internal/router"
 )
 
 // Verktøykatalogen sendes på HVER runde i HVER tur. Vokteren fanger opp at et
@@ -152,5 +155,20 @@ func TestTrimToolHistory(t *testing.T) {
 	trimToolHistory(full2, 20000)
 	if small["content"] != "42 rader" {
 		t.Fatalf("lite resultat under budsjett ble endret")
+	}
+}
+
+// LIGHT_TIER-bryteren: av → lette flyter kjører mid som før; på → LightModel.
+func TestFlowModelLightTier(t *testing.T) {
+	off := &Server{cfg: config.Config{LightTier: false}}
+	on := &Server{cfg: config.Config{LightTier: true}}
+	if got := off.flowModel("light"); got != router.MidModel {
+		t.Errorf("LIGHT_TIER=off: light ga %q, skal være MidModel", got)
+	}
+	if got := on.flowModel("light"); got != router.LightModel {
+		t.Errorf("LIGHT_TIER=on: light ga %q, skal være LightModel", got)
+	}
+	if got := on.flowModel("mid"); got != router.MidModel {
+		t.Errorf("mid skal aldri påvirkes av bryteren, ga %q", got)
 	}
 }
