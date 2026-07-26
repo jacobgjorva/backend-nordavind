@@ -26,6 +26,7 @@ type Config struct {
 	DBPath          string   // SQLite-fil for tenants/brukere/sesjoner
 	AuthRequired    bool     // krev innlogging på chat/extract (default på; sett AUTH_REQUIRED=false kun i dev)
 	IntentMode      string   // intent-motoren: "off" (default) | "shadow" (rut + logg, endrer ingenting)
+	LightTier       bool     // LIGHT_TIER=on: lette flyter (smalltalk, web_fact) kjører LightModel — pilot, av som default
 
 	// MIDLERTIDIG: hardkodet e-postkonto til /mail (env). Flyttes til
 	// Connector-siden på produksjonsnivå senere.
@@ -59,6 +60,7 @@ func Load() (Config, error) {
 		DBPath:          getenv("DB_PATH", "data/nordavind.db"),
 		AuthRequired:    getenv("AUTH_REQUIRED", "true") != "false",
 		IntentMode:      getenv("INTENT_ENGINE", "off"),
+		LightTier:       getenv("LIGHT_TIER", "off") == "on",
 		Mail: MailConfig{
 			Email:     os.Getenv("MAIL_EMAIL"),
 			IMAPHost:  os.Getenv("MAIL_IMAP_HOST"),

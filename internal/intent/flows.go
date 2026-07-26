@@ -94,9 +94,12 @@ var Flows = map[string]Flow{
 	},
 
 	"create_widget": {
+		// "light": verktøydisiplinen var feilfri i e2e-test (riktig SQL med
+		// DATE_TRUNC, filter og charttype) — widgeten rendres av koden, og
+		// datavernet stopper diktede tall. 10× billigere enn mid.
 		Knowledge: true,
 		Tools:     []string{ToolSetWidget},
-		Model:     "mid",
+		Model:     "light",
 		MaxChars:  120, // widgeten ER svaret; teksten er kun kvittering
 		Fallback:  FreeChatKey,
 		Sticky:    true, // videre meldinger redigerer samme widget
@@ -104,7 +107,7 @@ var Flows = map[string]Flow{
 	"edit_widget": {
 		Knowledge: true,
 		Tools:     []string{ToolSetWidget},
-		Model:     "mid",
+		Model:     "light",
 		MaxChars:  120,
 		Fallback:  FreeChatKey,
 		Sticky:    true,
@@ -116,8 +119,8 @@ var Flows = map[string]Flow{
 		Tools:    []string{ToolSetSlide, ToolSetDeck},
 		Model:    "mid",
 		MaxChars: 120, // canvaset er svaret
-		Fallback:  FreeChatKey,
-		Sticky:    true,
+		Fallback: FreeChatKey,
+		Sticky:   true,
 	},
 
 	"export_excel": {
@@ -125,15 +128,17 @@ var Flows = map[string]Flow{
 		// Modellen henter dataene; eksportkortet appendes GARANTERT i kode
 		// (aldri «vil du at jeg skal eksportere?»).
 		Tools:    []string{ToolQueryDatabase, ToolShowTable},
-		Model:    "mid",
+		Model:    "light",
 		MaxChars: 150,
 		Fallback: FreeChatKey,
 	},
 
 	"data_question": {
+		// "light": svaret ER tall fra query_database, voktet av datavernet og
+		// kildekontrollen — modellens eneste jobb er å skrive SQL og gjengi.
 		Knowledge: true,
 		Tools:     []string{ToolQueryDatabase, ToolShowTable},
-		Model:     "mid",
+		Model:     "light",
 		MaxChars:  300, // tette tallsvar
 		Fallback:  FreeChatKey,
 		Sticky:    true, // oppfølgingsspørsmål («sikker?») skal beholde db-verktøyene
@@ -141,7 +146,7 @@ var Flows = map[string]Flow{
 	"show_table": {
 		Knowledge: true,
 		Tools:     []string{ToolQueryDatabase, ToolShowTable},
-		Model:     "mid",
+		Model:     "light",
 		MaxChars:  150, // tabellen er svaret; maks én ledsagende setning
 		Fallback:  FreeChatKey,
 		Sticky:    true,
@@ -200,14 +205,17 @@ var Flows = map[string]Flow{
 	},
 
 	"web_fact": {
+		// "light": svaret bygges av søkeresultater og voktes av kilde-
+		// kontrollen — småmodellen valgte søk like riktig som medium i test,
+		// til en tidel av prisen. Krever LIGHT_TIER=on, ellers mid.
 		Tools:    []string{ToolWebSearch, ToolFetchURL},
-		Model:    "mid",
+		Model:    "light",
 		MaxChars: 300,
 		Fallback: FreeChatKey,
 	},
 	"smalltalk": {
 		Tools:    nil, // rent samtalesvar — ingen verktøy å misbruke
-		Model:    "mid",
+		Model:    "light",
 		MaxChars: 150,
 		Fallback: FreeChatKey,
 	},

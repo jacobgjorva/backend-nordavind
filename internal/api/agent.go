@@ -103,6 +103,68 @@ func tableIntent(text string) bool {
 	return false
 }
 
+// connectIntent er sann når meldingen handler om å koble til en datakilde.
+// Styrer om connector-verktøyene (~1,8k tegn) legges ved i vanlig chat.
+// Bevisst romslig: å bomme koster et verktøy modellen skulle hatt, og det
+// veier tyngre enn tokenene — derfor treffer den også bekreftelser («ja, gjør
+// det») rett etter at assistenten selv har brakt tilkobling på bane.
+var connectIntent = matchAny(
+	"koble", "kobling", "tilkobl", "connect", "database", "databasen", "sql server",
+	"postgres", "mysql", "mssql", "datakilde", "integrasjon", "sharepoint",
+	"onedrive", "microsoft", "m365", "office 365", "azure", "app-registrering",
+	"client secret", "tilgang til data",
+)
+
+// composeIntent er sann når brukeren vil SENDE noe — mail_compose er det
+// største enkeltverktøyet og trengs ikke for å lese eller søke i e-post.
+var composeIntent = matchAny(
+	"send", "sende", "sender", "svar på", "svare på", "videresend", "vidersend",
+	"skriv til", "skriv en mail", "skriv en e-post", "mail til", "e-post til",
+	"epost til", "kontakt", "gi beskjed", "varsle", "purre", "purring",
+	"utkast", "compose", "cc", "vedlegg",
+)
+
+// matchAny bygger et enkelt nøkkelord-filter (samme mønster som tableIntent).
+func matchAny(words ...string) func(string) bool {
+	return func(text string) bool {
+		lower := strings.ToLower(text)
+		for _, w := range words {
+			if strings.Contains(lower, w) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// recentTurn er siste brukermelding pluss forrige assistentsvar. Verktøy som
+// legges ved etter nøkkelord må se begge: brakte assistenten tilkobling eller
+// utsending på bane, holder det at brukeren svarer «ja, gjør det».
+func recentTurn(full map[string]any) string {
+	msgs, _ := full["messages"].([]any)
+	var b strings.Builder
+	seenUser := false
+	for i := len(msgs) - 1; i >= 0 && b.Len() < 4000; i-- {
+		m, ok := msgs[i].(map[string]any)
+		if !ok {
+			continue
+		}
+		role, _ := m["role"].(string)
+		if role != "user" && role != "assistant" {
+			continue
+		}
+		if role == "user" && seenUser {
+			break // lenger tilbake enn forrige tur er ikke relevant
+		}
+		if c, ok := m["content"].(string); ok {
+			b.WriteString(c)
+			b.WriteString(" ")
+		}
+		seenUser = seenUser || role == "user"
+	}
+	return b.String()
+}
+
 // deepIntent er sann når siste brukermelding ber om grundig/uforstyrret arbeid.
 func deepIntent(full map[string]any) bool {
 	lower := strings.ToLower(lastUserText(full))
@@ -317,12 +379,22 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			}
 			// Admin kan opprette tilkoblinger rett fra vanlig chat — ingen egen
 			// connector-chat. Verktøybeskrivelsene bærer veiledningen.
-			if user, ok := ctx.Value(userKey).(store.User); ok && user.Role == "admin" {
+			// TOKEN: settet er ~1,8k tegn og dekker en sjelden engangshandling
+			// — det legges kun ved når meldingen faktisk peker dit, ikke på
+			// hver eneste melding en admin skriver.
+			if user, ok := ctx.Value(userKey).(store.User); ok && user.Role == "admin" &&
+				connectIntent(recentTurn(full)) {
 				tools = append(tools, connectorAgentTools()...)
 			}
 			// M365-verktøy (filer + e-post) kun når brukeren har koblet til.
 			if _, ok := s.m365Connected(ctx); ok {
-				tools = append(tools, m365SearchTool, m365ReadTool, mailSearchTool, mailReadTool, mailComposeTool)
+				tools = append(tools, m365SearchTool, m365ReadTool, mailSearchTool, mailReadTool)
+				// TOKEN: mail_compose er det største enkeltverktøyet (~1,2k
+				// tegn) og trengs kun når noe skal SENDES. Søk og lesing av
+				// e-post ligger fortsatt alltid inne.
+				if composeIntent(recentTurn(full)) {
+					tools = append(tools, mailComposeTool)
+				}
 			}
 			// Eskalerings-verktøy (registeret ligger i verktøy-beskrivelsen).
 			if user, ok := ctx.Value(userKey).(store.User); ok {
@@ -932,6 +1004,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		})
 		msgs = append(msgs, toolMsgs...)
 		full["messages"] = msgs
+		// TOKEN: uten dette vokser turen kvadratisk — hver runde re-sender
+		// ALLE tidligere verktøyresultater ubeskåret (grundig-modus endte på
+		// 30-50k prompt-tokens per svar). Eldste resultater klippes først;
+		// kildekontrollen mister ingenting, den måler mot toolResults-lista.
+		trimToolHistory(full, toolHistoryBudget)
 
 		// Tvungen verktøybruk gjelder KUN første runde (presentasjonsflyten):
 		// minst én endring skal skje, men modellen skal kunne stoppe etterpå.
@@ -945,6 +1022,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			// modellen tydelig om å svare NÅ fra det den har funnet — ikke tomt.
 			full["tool_choice"] = "none"
 			injectSystem(full, backstopNudge)
+			// TOKEN: med tool_choice=none kan katalogen aldri brukes — da skal
+			// den heller ikke betales for. Verktøysettet er ~3k tokens på hver
+			// eneste runde, og siste runde er ren syntese fra det som alt er
+			// hentet (samme grep som streamBackstop og regroundAnswer gjør).
+			delete(full, "tools")
 		}
 	}
 	// Løkka gikk tom for runder uten et rent svar (modellen ville søke videre).
@@ -953,6 +1035,62 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	emit("data: " + string(step))
 	s.streamBackstop(ctx, full, emit, &promptTokens, &completionTokens)
 	emit("data: [DONE]")
+}
+
+// toolHistoryBudget: samlet tak (tegn) på verktøyresultater som bæres videre
+// mellom rundene i én tur. Ferske resultater beholdes alltid uklippet —
+// modellen bruker dem i runden rett etter kallet. Eldre resultater er som
+// regel alt konsumert; de klippes til et hode når budsjettet sprenges.
+const toolHistoryBudget = 20000
+
+// toolTrimHead: hvor mye av et klippet verktøyresultat som beholdes.
+const toolTrimHead = 500
+
+// trimToolHistory holder summen av tool-meldinger i samtalen under budsjettet
+// ved å klippe de ELDSTE først. Vanlige turer (1-3 verktøykall) rører den
+// aldri; den finnes for grundig-modus og søketunge turer der historikken
+// ellers vokser kvadratisk med rundetallet.
+func trimToolHistory(full map[string]any, budget int) {
+	msgs, _ := full["messages"].([]any)
+	type toolRef struct {
+		m    map[string]any
+		size int
+	}
+	// Halen (rundens ferske resultater) er fredet: modellen har ikke lest dem
+	// ennå — de skal alltid frem uklippet i neste kall.
+	tail := len(msgs)
+	for tail > 0 {
+		mm, ok := msgs[tail-1].(map[string]any)
+		if !ok || mm["role"] != "tool" {
+			break
+		}
+		tail--
+	}
+	var refs []toolRef
+	total := 0
+	for _, m := range msgs[:tail] {
+		mm, ok := m.(map[string]any)
+		if !ok || mm["role"] != "tool" {
+			continue
+		}
+		c, _ := mm["content"].(string)
+		refs = append(refs, toolRef{mm, len(c)})
+		total += len(c)
+	}
+	for _, r := range refs {
+		if total <= budget {
+			return
+		}
+		if r.size <= toolTrimHead {
+			continue
+		}
+		c, _ := r.m["content"].(string)
+		if ru := []rune(c); len(ru) > toolTrimHead {
+			r.m["content"] = string(ru[:toolTrimHead]) +
+				"\n…[forkortet for plass — innholdet er alt lest og brukt tidligere i turen]"
+		}
+		total -= r.size - len(r.m["content"].(string))
+	}
 }
 
 // recordUsage lagrer forbruket for forespørselen. Uinnlogget (dev) logges
