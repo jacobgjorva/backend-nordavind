@@ -235,7 +235,10 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 						if rd.apply != nil {
 							rd.apply()
 						}
-						if kb != "" {
+						// G3 (docs/KNOWLEDGE.md): kun flyter med Knowledge i
+						// flyt-tabellen får intern kunnskap injisert — web_fact
+						// og smalltalk skal aldri bære interne lapper.
+						if kb != "" && flowWantsKnowledge(full) {
 							injectSystem(full, kb)
 						}
 						if b, err := json.Marshal(full); err == nil {

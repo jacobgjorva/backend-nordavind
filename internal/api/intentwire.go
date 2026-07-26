@@ -150,6 +150,18 @@ const (
 	flowMaxField = "nordavind_flow_max"
 )
 
+// flowWantsKnowledge leser den rutede flyten fra payloaden og svarer om den
+// skal ha intern kunnskap injisert (Flow.Knowledge). Ingen ruting satt
+// (fail-open, widget/connector-moduser) = ja — dagens oppførsel.
+func flowWantsKnowledge(full map[string]any) bool {
+	key, _ := full[flowKeyField].(string)
+	if key == "" {
+		return true
+	}
+	f, ok := intent.Flows[key]
+	return !ok || f.Knowledge
+}
+
 // deterministicPanels: flyter som besvares HELT i kode med et admin-panel.
 // Øvrige deterministiske flyter (eksport, kontrakt, opplasting) eies av
 // frontend-løyper og faller til fri chat her.
