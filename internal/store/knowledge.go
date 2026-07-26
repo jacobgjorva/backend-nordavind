@@ -100,8 +100,8 @@ func (s *Store) EnsureDocNode(tenantID, docID, title, summary string, embedding 
 // AddEdge lagrer en relasjon mellom to noder (idempotent).
 func (s *Store) AddEdge(tenantID string, e KnowledgeEdge) error {
 	_, err := s.db.Exec(
-		`INSERT OR IGNORE INTO knowledge_edges (tenant_id, from_id, to_id, relation)
-		 VALUES (?, ?, ?, ?)`,
+		`INSERT INTO knowledge_edges (tenant_id, from_id, to_id, relation)
+		 VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`,
 		tenantID, e.FromID, e.ToID, e.Relation,
 	)
 	return err

@@ -49,6 +49,7 @@ const tenant = "eval-tenant"
 func main() {
 	verbose := flag.Bool("verbose", false, "vis hver spørring")
 	min := flag.Float64("min", 0, "rød (exit 1) under denne treffraten, 0 = kun rapport")
+	dbURL := flag.String("db", "", "kjør mot denne databasen (postgres://…) i stedet for temp-SQLite")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -64,6 +65,9 @@ func main() {
 	}
 	defer os.RemoveAll(dir)
 	cfg.DBPath = filepath.Join(dir, "eval.db")
+	if *dbURL != "" {
+		cfg.DBPath = *dbURL
+	}
 	st, err := store.Open(cfg.DBPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "store:", err)

@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -117,30 +118,51 @@ func (s *Store) AcceptedNotes(tenantID string) ([]KnowledgeNote, error) {
 	var out []KnowledgeNote
 	for rows.Next() {
 		var n KnowledgeNote
-		var emb string
+		var emb sql.NullString
 		if err := rows.Scan(&n.ID, &n.SourceType, &n.SourceID, &n.Title, &n.Text, &n.Context, &emb, &n.CreatedAt); err != nil {
 			return nil, err
 		}
-		json.Unmarshal([]byte(emb), &n.Embedding)
+		if emb.Valid {
+			json.Unmarshal([]byte(emb.String), &n.Embedding)
+		}
 		out = append(out, n)
 	}
 	return out, rows.Err()
 }
 
-// SearchNotesFTS gjør nøkkelord-søk (BM25) og returnerer note-IDer i
-// rangert rekkefølge (best først), kun aksepterte lapper for tenanten.
-func (s *Store) SearchNotesFTS(tenantID, match string, limit int) ([]string, error) {
-	if match == "" {
+// SearchNotesFTS gjør nøkkelord-søk og returnerer note-IDer i rangert
+// rekkefølge (best først), kun aksepterte lapper for tenanten. Tar rene
+// innholdsord (allerede stoppord-filtrert) — dialekten bygger spørringen:
+// SQLite FTS5/BM25, Postgres tsquery/ts_rank.
+func (s *Store) SearchNotesFTS(tenantID string, tokens []string, limit int) ([]string, error) {
+	if len(tokens) == 0 {
 		return nil, nil
 	}
-	rows, err := s.db.Query(
-		`SELECT n.id
-		 FROM knowledge_notes_fts f
-		 JOIN knowledge_notes n ON n.id = f.note_id
-		 WHERE f.knowledge_notes_fts MATCH ? AND n.tenant_id = ? AND n.status = 'accepted'
-		 ORDER BY bm25(f.knowledge_notes_fts) LIMIT ?`,
-		match, tenantID, limit,
-	)
+	var rows *sql.Rows
+	var err error
+	if s.db.pg {
+		// to_tsquery med OR — tokens er ord-tegn (regex-plukket), trygge.
+		rows, err = s.db.Query(
+			`SELECT id FROM knowledge_notes
+			 WHERE tenant_id = ? AND status = 'accepted'
+			   AND fts @@ to_tsquery('norwegian', ?)
+			 ORDER BY ts_rank(fts, to_tsquery('norwegian', ?)) DESC LIMIT ?`,
+			tenantID, strings.Join(tokens, " | "), strings.Join(tokens, " | "), limit,
+		)
+	} else {
+		quoted := make([]string, len(tokens))
+		for i, t := range tokens {
+			quoted[i] = `"` + t + `"`
+		}
+		rows, err = s.db.Query(
+			`SELECT n.id
+			 FROM knowledge_notes_fts f
+			 JOIN knowledge_notes n ON n.id = f.note_id
+			 WHERE f.knowledge_notes_fts MATCH ? AND n.tenant_id = ? AND n.status = 'accepted'
+			 ORDER BY bm25(f.knowledge_notes_fts) LIMIT ?`,
+			strings.Join(quoted, " OR "), tenantID, limit,
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -156,8 +178,87 @@ func (s *Store) SearchNotesFTS(tenantID, match string, limit int) ([]string, err
 	return ids, rows.Err()
 }
 
-// insertNote skriver en lapp og speiler den til FTS, i samme transaksjon.
-func insertNote(tx *sql.Tx, tenantID string, note KnowledgeNote) error {
+// TopNotesByEmbedding er pgvector-hentingen: topp-k aksepterte lapper etter
+// cosinelikhet, med likheten returnert. Kun Postgres — SQLite-stien laster
+// alle lapper og regner i Go (AcceptedNotes).
+func (s *Store) TopNotesByEmbedding(tenantID string, vec []float32, k int) ([]KnowledgeNote, []float64, error) {
+	q, _ := json.Marshal(vec)
+	rows, err := s.db.Query(
+		`SELECT id, source_type, source_id, title, text, context, created_at,
+		        1 - (embedding <=> ?::vector) AS sim
+		 FROM knowledge_notes
+		 WHERE tenant_id = ? AND status = 'accepted' AND embedding IS NOT NULL
+		 ORDER BY embedding <=> ?::vector LIMIT ?`,
+		string(q), tenantID, string(q), k,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	var notes []KnowledgeNote
+	var sims []float64
+	for rows.Next() {
+		var n KnowledgeNote
+		var sim float64
+		if err := rows.Scan(&n.ID, &n.SourceType, &n.SourceID, &n.Title, &n.Text, &n.Context, &n.CreatedAt, &sim); err != nil {
+			return nil, nil, err
+		}
+		notes = append(notes, n)
+		sims = append(sims, sim)
+	}
+	return notes, sims, rows.Err()
+}
+
+// NotesByIDs henter aksepterte lapper på id (til FTS-treff og kant-naboer i
+// Postgres-stien). Rekkefølgen er ikke garantert.
+func (s *Store) NotesByIDs(tenantID string, ids []string) ([]KnowledgeNote, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	ph := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, tenantID)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	rows, err := s.db.Query(
+		`SELECT id, source_type, source_id, title, text, context, created_at
+		 FROM knowledge_notes
+		 WHERE tenant_id = ? AND status = 'accepted' AND id IN (`+ph+`)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []KnowledgeNote
+	for rows.Next() {
+		var n KnowledgeNote
+		if err := rows.Scan(&n.ID, &n.SourceType, &n.SourceID, &n.Title, &n.Text, &n.Context, &n.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// insertNote skriver en lapp og holder søkeindeksen i synk, i samme
+// transaksjon: SQLite speiler til FTS5-tabellen, Postgres setter tsvector- og
+// vector-kolonnene direkte.
+func insertNote(tx *Tx, tenantID string, note KnowledgeNote) error {
+	if tx.pg {
+		var emb any
+		if len(note.Embedding) > 0 {
+			b, _ := json.Marshal(note.Embedding)
+			emb = string(b)
+		}
+		_, err := tx.Exec(
+			`INSERT INTO knowledge_notes
+				(id, tenant_id, source_type, source_id, title, text, context, status, chat_id, user_id, embedding, fts, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::vector, to_tsvector('norwegian', ? || ' ' || ?), ?)`,
+			note.ID, tenantID, note.SourceType, note.SourceID, note.Title, note.Text, note.Context,
+			note.Status, note.ChatID, note.UserID, emb, note.Text, note.Context, note.CreatedAt,
+		)
+		return err
+	}
 	emb, _ := json.Marshal(note.Embedding)
 	if _, err := tx.Exec(
 		`INSERT INTO knowledge_notes
@@ -290,9 +391,11 @@ func (s *Store) RemoveNote(id string) error {
 }
 
 // removeNote sletter en lapp og FTS-raden i en transaksjon.
-func removeNote(tx *sql.Tx, id string) error {
-	if _, err := tx.Exec(`DELETE FROM knowledge_notes_fts WHERE note_id = ?`, id); err != nil {
-		return err
+func removeNote(tx *Tx, id string) error {
+	if !tx.pg {
+		if _, err := tx.Exec(`DELETE FROM knowledge_notes_fts WHERE note_id = ?`, id); err != nil {
+			return err
+		}
 	}
 	_, err := tx.Exec(`DELETE FROM knowledge_notes WHERE id = ?`, id)
 	return err
@@ -300,13 +403,15 @@ func removeNote(tx *sql.Tx, id string) error {
 
 // deleteNotesBySource fjerner alle lapper fra en kilde (f.eks. et dokument som
 // lastes opp på nytt) og rydder FTS. Kalles i en transaksjon.
-func deleteNotesBySource(tx *sql.Tx, tenantID, sourceID string) error {
-	if _, err := tx.Exec(
-		`DELETE FROM knowledge_notes_fts WHERE note_id IN
-			(SELECT id FROM knowledge_notes WHERE tenant_id = ? AND source_id = ?)`,
-		tenantID, sourceID,
-	); err != nil {
-		return err
+func deleteNotesBySource(tx *Tx, tenantID, sourceID string) error {
+	if !tx.pg {
+		if _, err := tx.Exec(
+			`DELETE FROM knowledge_notes_fts WHERE note_id IN
+				(SELECT id FROM knowledge_notes WHERE tenant_id = ? AND source_id = ?)`,
+			tenantID, sourceID,
+		); err != nil {
+			return err
+		}
 	}
 	_, err := tx.Exec(
 		`DELETE FROM knowledge_notes WHERE tenant_id = ? AND source_id = ?`,

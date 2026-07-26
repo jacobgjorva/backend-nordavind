@@ -410,7 +410,7 @@ func (s *Server) startPlanBuild(agentID string) {
 // buildAgentPlan er spinup: agenten utforsker oppgaven grundig én gang og
 // lagrer en prøvekjørt plan som hver kjøring så følger.
 func (s *Server) buildAgentPlan(ctx context.Context, agentID string) {
-	a, err := s.store.MissionAgent(agentID)
+	a, err := s.store.AgentByID(agentID)
 	if err != nil {
 		s.log.Warn("spinup: fant ikke agenten", "id", agentID, "err", err)
 		return

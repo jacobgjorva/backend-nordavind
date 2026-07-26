@@ -117,13 +117,26 @@ func (k Kit) Layout(key string) (Layout, bool) {
 	return Layout{}, false
 }
 
+// ImageNames gir bildene uten filendelse. Modellen skal aldri kjenne til om
+// et motiv er .png eller .jpg — bytter man ut filen skal decket stå.
+func (k Kit) ImageNames() []string {
+	out := make([]string, 0, len(k.Images))
+	for _, f := range k.Images {
+		if i := strings.LastIndex(f, "."); i > 0 {
+			f = f[:i]
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
 // Catalog er kit-katalogen slik modellen ser den: én linje per layout med
 // feltene den kan fylle. Genereres fra JSON-en, så nye slides dukker opp i
 // prompten uten kodeendring.
 func (k Kit) Catalog() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Tema «%s»: %s\nBilder i temaet: %s\nSlide-typene du kan velge:\n",
-		k.Name, k.Description, strings.Join(k.Images, ", "))
+		k.Name, k.Description, strings.Join(k.ImageNames(), ", "))
 	for _, l := range k.Layouts {
 		fmt.Fprintf(&b, "- %s (%s). %s\n", l.Key, l.Label, l.Use)
 		for _, f := range l.Fields {
