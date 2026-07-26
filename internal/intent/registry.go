@@ -224,6 +224,7 @@ var Registry = []Intent{
 			"overvåk konkurrentens priser daglig",
 			"lag en agent som følger med på ordreinngangen",
 			"varsle meg hver uke om nye kunder",
+			"send meg en oppsummering på e-post hver morgen",
 			"si fra når aksjen går over 15 kr",
 			"følg med på kursen og varsle meg ved endring",
 		},
@@ -305,6 +306,10 @@ var Registry = []Intent{
 			"send en e-post til Kari om møtet",
 			"skriv en e-post til kunden og spør om leveransen",
 			"kan du hjelpe meg å sende en e-post?",
+			"lag et utkast til e-post om prisendringen",
+			"svar leverandøren at vi godtar tilbudet",
+			"purr på svaret fra kunden per e-post",
+			"har det kommet noe fra leverandøren denne uken?",
 		},
 	},
 	{
@@ -315,7 +320,7 @@ var Registry = []Intent{
 		Examples: []string{
 			"hva synes du vi burde gjøre her?",
 			"er det trygt å dele dataene våre?",
-			"hjelp meg å formulere en e-post til en kunde",
+			"hjelp meg å formulere en vanskelig beskjed",
 			"oppsummer det vi har snakket om",
 			"oversett dette til engelsk",
 			"gi meg råd om prisstrategien vår",

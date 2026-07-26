@@ -84,3 +84,6 @@
 {"text": "finn e-posten om tilbudet fra ACKES", "want": "email"}
 {"text": "noen viktige e-poster i dag?", "want": "email"}
 {"text": "kan du hjelpe meg sende en epost?", "want": "email"}
+{"text": "send meg en oppsummering av innboksen hver morgen", "want": "create_routine"}
+{"text": "skriv en hyggelig takkemail til leverandøren", "want": "email"}
+{"text": "svar Advania at vi tar oppdateringen på fredag", "want": "email"}
