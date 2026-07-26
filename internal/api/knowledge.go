@@ -143,13 +143,37 @@ func cosine(a, b []float32) float64 {
 
 var ftsTokenRe = regexp.MustCompile(`\p{L}[\p{L}\p{N}]+`)
 
-// ftsQuery bygger et trygt FTS5 MATCH-uttrykk fra fri tekst: plukker ut ord-
-// tokens (bokstav-initiale), siterer hver og OR-slår dem. Tåler tegnsetting og
-// fanger eksakte koder/navn embeddings bommer på.
+// ftsStopwords: norske funksjonsord som bærer null søke-hensikt. Uten dette
+// filteret OR-matcher «kan du … om … til meg» praktisk talt alle lapper, og
+// irrelevante meldinger får injisert kunnskap (målt i knowledge-eval:
+// 392-995 tegn støy). Innholdsord slipper alltid gjennom.
+var ftsStopwords = map[string]bool{
+	"og": true, "i": true, "på": true, "til": true, "for": true, "med": true,
+	"av": true, "om": true, "er": true, "var": true, "det": true, "den": true,
+	"de": true, "en": true, "et": true, "ei": true, "jeg": true, "du": true,
+	"vi": true, "han": true, "hun": true, "dere": true, "meg": true, "deg": true,
+	"oss": true, "min": true, "din": true, "vår": true, "hva": true, "hvem": true,
+	"hvor": true, "når": true, "hvordan": true, "hvorfor": true, "hvilke": true,
+	"hvilken": true, "kan": true, "skal": true, "vil": true, "må": true,
+	"har": true, "hadde": true, "blir": true, "ble": true, "som": true,
+	"at": true, "ikke": true, "noe": true, "noen": true, "denne": true,
+	"dette": true, "der": true, "her": true, "da": true, "så": true, "seg": true,
+	"sin": true, "sitt": true, "våre": true, "mine": true, "eller": true,
+	"men": true, "også": true, "bare": true, "litt": true, "lite": true,
+	"veldig": true, "helt": true, "egentlig": true, "gjerne": true, "takk": true,
+}
+
+// ftsQuery bygger et trygt FTS5 MATCH-uttrykk fra fri tekst: plukker ut
+// innholdsord (stoppord filtreres), siterer hver og OR-slår dem. Tåler
+// tegnsetting og fanger eksakte koder/navn embeddings bommer på. Tom streng
+// når meldingen ikke inneholder ett eneste innholdsord.
 func ftsQuery(query string) string {
 	toks := ftsTokenRe.FindAllString(strings.ToLower(query), -1)
 	parts := make([]string, 0, len(toks))
 	for _, t := range toks {
+		if ftsStopwords[t] {
+			continue
+		}
 		parts = append(parts, `"`+t+`"`)
 	}
 	return strings.Join(parts, " OR ")
@@ -196,6 +220,39 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 
 	// Nøkkelord-kandidater (BM25), allerede rangert av SQLite.
 	fts, _ := s.store.SearchNotesFTS(tenantID, ftsQuery(query), candDepth)
+
+	// Enslig-ord-vernet: en kandidat UTEN vektor-støtte må treffe minst to
+	// distinkte innholdsord fra spørsmålet. Ett tilfeldig felles ord («våren»)
+	// er støy, ikke intern kunnskap (målt i knowledge-eval).
+	inVec := map[string]bool{}
+	for _, v := range vec {
+		inVec[v.id] = true
+	}
+	qToks := map[string]bool{}
+	for _, t := range ftsTokenRe.FindAllString(strings.ToLower(query), -1) {
+		if !ftsStopwords[t] {
+			qToks[t] = true
+		}
+	}
+	kept := fts[:0]
+	for _, id := range fts {
+		if inVec[id] {
+			kept = append(kept, id)
+			continue
+		}
+		note := byID[id]
+		text := strings.ToLower(note.Text + " " + note.Context)
+		matches := 0
+		for t := range qToks {
+			if strings.Contains(text, t) {
+				matches++
+			}
+		}
+		if matches >= 2 {
+			kept = append(kept, id)
+		}
+	}
+	fts = kept
 
 	// RRF-fusjon: hver liste bidrar 1/(k + rangering).
 	rrf := map[string]float64{}
