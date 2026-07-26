@@ -34,6 +34,23 @@ type Server struct {
 	// så vi ikke starter samme oppdrag to ganger.
 	missionMu      sync.Mutex
 	missionRunning map[string]bool
+
+	// Spinup-jobber som pågår (agent-id → bygger), så samme plan aldri
+	// kompileres to ganger samtidig.
+	planMu       sync.Mutex
+	planBuilding map[string]bool
+
+	// Rutinekjøringer som pågår akkurat nå (agent-id → kjører) — kun for
+	// live-tilstanden i farmen, ingen styring.
+	runMu     sync.Mutex
+	runActive map[string]bool
+
+	// Intent-motoren (INTENT_ENGINE=shadow) — nil til den er bygget.
+	intent intentState
+
+	// Midlertidige e-postvedlegg (Excel fra spørringer) frem til brukeren
+	// klikker Send.
+	mailAttach attachmentStore
 }
 
 func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
@@ -53,8 +70,11 @@ func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 		credsKey: key,
 
 		missionRunning: map[string]bool{},
+		planBuilding:   map[string]bool{},
+		runActive:      map[string]bool{},
 	}
 	s.startScheduler(context.Background())
+	s.initIntentEngine()
 	return s
 }
 
@@ -86,6 +106,25 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /v1/chats/{id}", s.requireAuth(s.handleDeleteChat))
 	mux.HandleFunc("POST /v1/chats/{id}/title", s.requireAuth(s.handleGenerateChatTitle))
 	mux.HandleFunc("PATCH /v1/chats/{id}", s.requireAuth(s.handleRenameChat))
+	mux.HandleFunc("PUT /v1/chats/{id}/folder", s.requireAuth(s.handleSetChatFolder))
+	mux.HandleFunc("POST /v1/export/xlsx", s.requireAuth(s.handleExportXLSX))
+	mux.HandleFunc("POST /v1/export/live", s.requireAuth(s.handleCreateLiveExport))
+	mux.HandleFunc("POST /v1/export/onedrive", s.requireAuth(s.handleExportOneDrive))
+	mux.HandleFunc("GET /v1/m365/status", s.requireAuth(s.handleM365Status))
+	mux.HandleFunc("GET /v1/m365/connect", s.requireAuth(s.handleM365Connect))
+	mux.HandleFunc("DELETE /v1/m365", s.requireAuth(s.handleM365Disconnect))
+	mux.HandleFunc("POST /v1/m365/app", s.requireAdmin(s.handleSaveM365App))
+	// OAuth-callback kommer fra Microsofts redirect — ingen sesjon, state-vernet.
+	mux.HandleFunc("GET /v1/m365/callback", s.handleM365Callback)
+	mux.HandleFunc("GET /v1/export/links", s.requireAuth(s.handleListExportLinks))
+	mux.HandleFunc("DELETE /v1/export/links/{id}", s.requireAuth(s.handleRevokeExportLink))
+	// Live-lenkene autentiseres av selve tokenet (Excel har ingen sesjon).
+	mux.HandleFunc("GET /v1/live/{token}/data.xlsx", s.handleLiveXLSX)
+	mux.HandleFunc("GET /v1/live/{token}/table", s.handleLiveHTML)
+	mux.HandleFunc("GET /v1/folders", s.requireAuth(s.handleListFolders))
+	mux.HandleFunc("POST /v1/folders", s.requireAuth(s.handleCreateFolder))
+	mux.HandleFunc("PATCH /v1/folders/{id}", s.requireAuth(s.handleRenameFolder))
+	mux.HandleFunc("DELETE /v1/folders/{id}", s.requireAuth(s.handleDeleteFolder))
 	mux.HandleFunc("GET /v1/connections", s.requireAdmin(s.handleListConnections))
 	mux.HandleFunc("POST /v1/connections", s.requireAdmin(s.handleCreateConnection))
 	mux.HandleFunc("POST /v1/connections/test", s.requireAdmin(s.handleTestConnection))
@@ -110,9 +149,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /v1/knowledge/{id}", s.requireAdmin(s.handleUpdateNode))
 	mux.HandleFunc("DELETE /v1/knowledge/{id}", s.requireAdmin(s.handleDeleteNode))
 	mux.HandleFunc("GET /v1/agents", s.requireAuth(s.handleListAgents))
+	mux.HandleFunc("PATCH /v1/agents/{id}/persona", s.requireAuth(s.handleSetAgentPersona))
+	mux.HandleFunc("GET /v1/agents/runs", s.requireAuth(s.handleAgentRuns))
+	mux.HandleFunc("POST /v1/agents/{id}/seen", s.requireAuth(s.handleMarkAgentSeen))
 	mux.HandleFunc("GET /v1/agent-connections", s.requireAuth(s.handleAgentConnections))
 	mux.HandleFunc("GET /v1/mail/account", s.requireAuth(s.handleGetMailAccount))
 	mux.HandleFunc("POST /v1/mail/send", s.requireAuth(s.handleMailSend))
+	mux.HandleFunc("GET /v1/mail/attachments/{id}", s.requireAuth(s.handleMailAttachment))
 	mux.HandleFunc("GET /v1/employees", s.requireAuth(s.handleListEmployees))
 	mux.HandleFunc("POST /v1/employees", s.requireAdmin(s.handleCreateEmployee))
 	mux.HandleFunc("PUT /v1/employees/{id}", s.requireAdmin(s.handleUpdateEmployee))
@@ -122,6 +165,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/widgets", s.requireAuth(s.handleListWidgets))
 	mux.HandleFunc("GET /v1/widgets/{slug}", s.requireAuth(s.handleGetWidget))
 	mux.HandleFunc("DELETE /v1/widgets/{slug}", s.requireAuth(s.handleDeleteWidget))
+	mux.HandleFunc("POST /v1/widgets/{slug}/save", s.requireAuth(s.handleSaveWidget))
+	mux.HandleFunc("POST /v1/widgets/{slug}/share", s.requireAuth(s.handleShareWidget))
+	mux.HandleFunc("GET /v1/users", s.requireAuth(s.handleListTenantUsers))
 	mux.HandleFunc("GET /v1/widgets/{slug}/query", s.requireAuth(s.handleWidgetQuery))
 	mux.HandleFunc("GET /v1/chats/{chatId}/agent", s.requireAuth(s.handleAgentByChat))
 	mux.HandleFunc("PATCH /v1/agents/{id}", s.requireAuth(s.handleSetAgentEnabled))
@@ -149,11 +195,61 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 	patched, full, pickedModel := withRoutingDefaults(body)
 
-	// Berik med relevant bransjekunnskap fra tenantens graf.
-	if kb := s.knowledgeFor(r.Context(), full); kb != "" {
-		injectSystem(full, kb)
-		if b, err := json.Marshal(full); err == nil {
-			patched = b
+	// Intent-motoren: shadow logger bare; on styrer flyten.
+	if _, widgetMode := full["nordavind_widget"]; !widgetMode {
+		if _, connMode := full["nordavind_connector"]; !connMode {
+			if setup, _ := full["nordavind_agent_setup"].(bool); !setup {
+				if user, ok := r.Context().Value(userKey).(store.User); ok {
+					switch s.cfg.IntentMode {
+					case "shadow":
+						s.shadowIntent(user, lastUserText(full))
+					case "on":
+						// FART: ruting og kunnskapsoppslag kjører PARALLELT med et
+						// hardt tidsbudsjett — ingen av dem får noensinne holde
+						// modellen tilbake lenger enn budsjettet (fail-open).
+						rctx, rcancel := context.WithTimeout(r.Context(), routingBudget)
+						type routed struct {
+							block string
+							apply func()
+						}
+						rCh := make(chan routed, 1)
+						kbCh := make(chan string, 1)
+						go func() {
+							b, a := s.applyIntent(rctx, user, full)
+							rCh <- routed{block: b, apply: a}
+						}()
+						go func() { kbCh <- s.knowledgeFor(rctx, full) }()
+						rd := <-rCh
+						kb := <-kbCh
+						rcancel()
+						if rd.block != "" {
+							s.respondSSEBlock(w, rd.block)
+							s.log.Info("chat/completions", "mode", "intent-deterministic",
+								"dur", time.Since(start).Round(time.Millisecond))
+							return
+						}
+						if rd.apply != nil {
+							rd.apply()
+						}
+						if kb != "" {
+							injectSystem(full, kb)
+						}
+						if b, err := json.Marshal(full); err == nil {
+							patched = b
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Berik med relevant bransjekunnskap (kun moduser uten parallell-løypa over).
+	if s.cfg.IntentMode != "on" {
+		if kb := s.knowledgeFor(r.Context(), full); kb != "" {
+			injectSystem(full, kb)
+			if b, err := json.Marshal(full); err == nil {
+				patched = b
+			}
 		}
 	}
 
@@ -201,6 +297,11 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
+// routingBudget er maksimal tid ruting + kunnskapsoppslag får bruke FORAN
+// modellen. Typisk lander begge på 200-500 ms; ved treghet fail-open til
+// fri chat i stedet for å forsinke svaret.
+const routingBudget = 900 * time.Millisecond
+
 // withRoutingDefaults gjør to ting: løser "auto" til konkret modell ut fra
 // spørsmålets kompleksitet, og sorterer leverandører på throughput hvis
 // klienten ikke har bedt om noe annet — enkelte leverandører har flere
@@ -232,27 +333,57 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 			system := map[string]any{
 				"role": "system",
 				"content": "I dag er " + time.Now().Format("2006-01-02") + ". " +
-					"Svar EKSTREMT tett: pakk mest mulig konkret verdi i færrest ord. Legg det viktigste i de " +
-					"FØRSTE 1-2 setningene — brukeren leser sjelden mer. Gi eksakte tall, retning/trend, tidsrom " +
-					"og en relevant nyanse der det finnes, men si HVERT poeng bare ÉN gang (aldri gjenta at noe " +
-					"«kan variere» e.l.) og STOPP straks verdien er levert — ikke fyll opp mot noe tak. Sikt mot " +
-					"1-2 setninger; flere kun hvis hver bærer NYTT, konkret innhold. Null fyll og tomme forbehold. " +
+					"Svar KORTEST MULIG, men alltid i hele, naturlige setninger — aldri telegramstil eller " +
+					"ettordssvar: «Hvor mange cm er det i en meter?» → «En meter er 100 cm.» Ferdig. Ingen innramming, " +
+					"kontekst, forbehold eller oppfølgingstilbud med mindre brukeren ber om det. Trengs substans: " +
+					"legg det viktigste i FØRSTE setning, si hvert poeng bare ÉN gang, og STOPP straks verdien er " +
+					"levert — ikke fyll opp mot noe tak. Null fyll og tomme forbehold. " +
 					"Selv når du har mye data (f.eks. etter research): ALDRI en punkt-for-punkt-gjennomgang av flere " +
 					"ting — velg det viktigste og gi anbefalingen, ikke en rapport. " +
-					"Kun løpende tekst, aldri overskrifter eller lister. Gi kun svaret: ingen tankerekke, " +
+					"Kun løpende tekst, aldri overskrifter eller lister. UNNTAK: ber brukeren eksplisitt om en " +
+					"tabell (eller struktur), svar med en ```table kodeblokk med JSON {\"columns\":[...],\"rows\":[[...]]} " +
+					"som inneholder radene fra dataene — maks én kort setning i tillegg. Gi kun svaret: ingen tankerekke, " +
 					"innledning eller oppsummering. GJETT ALDRI på fakta. For ENHVER konkret opplysning om " +
 					"virkeligheten — navn, tall, datoer, priser, statistikk, hendelser, «hvem/når/hvor mye/" +
 					"nyeste/hvor» — skal du anta at du IKKE vet det sikkert og bruke web_search FØR du svarer, " +
 					"også når spørsmålet virker trivielt. Kun ren logikk/regning/språk du er helt sikker på kan " +
 					"besvares uten søk. Dekker ikke kildene svaret, si det heller enn å gjette. Skriv aldri " +
-					"URL-er eller kildehenvisninger, de " +
-					"vises automatisk. Ved råd: land én tydelig anbefaling. Kun hvis forespørselen er for " +
+					"URL-er eller kildehenvisninger fra websøk, de " +
+					"vises automatisk. UNNTAK: OneDrive/SharePoint-lenker (url fra m365-verktøyene) SKAL deles " +
+					"som klikkbar markdown-lenke når brukeren vil åpne eller ha fila. " +
+					"UNNTAK 2: spørsmål om bedriftens egne data (ordre, kunder, salg, tall) besvares ALLTID " +
+					"ved å kjøre query_database — aldri web_search, aldri hukommelse, og aldri påstå manglende " +
+					"tilgang uten å ha prøvd verktøyet. Ber brukeren om en tabell eller liste over rader: vis " +
+					"resultatet med show_table, ikke beskriv radene i prosa. " +
+					"HANDLINGSREGEL: har du et verktøy som kan utføre eller sjekke det brukeren spør om, KJØR det " +
+					"med en gang — spør ALDRI «vil du at jeg skal …» eller om lov/tillatelse for søk og lesing. " +
+					"Brukeren har allerede gitt tillatelsen ved å spørre; handlingen er svaret. " +
+					"Får du et bekreftelsesspørsmål («sikker?», «stemmer det?»): bekreft eller korriger med en NY " +
+					"formulering og nevn gjerne grunnlaget — ALDRI gjenta forrige svar ordrett. " +
+					"Ved råd: land én tydelig anbefaling. Kun hvis forespørselen er for " +
 					"vag: still ett oppklarende spørsmål. Tone: avslappet og lun som en trygg kollega, " +
 					"uformell men aldri på bekostning av korthet eller presisjon. Bruk kun naturlige " +
 					"norske uttrykk, aldri direkte oversatt engelsk slang. Du kan tolke bilder brukeren " +
 					"laster opp via bindersen, si aldri at du ikke kan se bilder.",
 			}
-			full["messages"] = append([]any{system}, raw...)
+			// Few-shot: faste eksempel-utvekslinger som VISER svarstilen —
+			// langt mer robust enn instrukser alene for akkurat stil.
+			// Bildemeldinger er i praksis sin egen flyt: vision-modellen skal
+			// BESKRIVE, og korthets-eksemplene gjør den ordknapp til det
+			// meningsløse («T.») — de utelates derfor for bilder.
+			fewshot := []any{
+				map[string]any{"role": "user", "content": "Hvor mange cm er det i en meter?"},
+				map[string]any{"role": "assistant", "content": "En meter er 100 cm."},
+				map[string]any{"role": "user", "content": "Opprett en ny kobling"},
+				map[string]any{"role": "assistant", "content": "Hva skal vi koble til?"},
+				map[string]any{"role": "user", "content": "hva er mva-satsen i Norge?"},
+				map[string]any{"role": "assistant", "content": "Standardsatsen er 25 %, med 15 % på mat og 12 % på persontransport."},
+			}
+			if router.LastUserHasImage(payload.Messages) {
+				full["messages"] = append([]any{system}, raw...)
+			} else {
+				full["messages"] = append(append([]any{system}, fewshot...), raw...)
+			}
 		}
 	}
 

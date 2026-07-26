@@ -37,11 +37,30 @@ func (s *Server) startScheduler(ctx context.Context) {
 	}()
 	// Gjenoppta kontinuerlige oppdrag som var i gang (også etter omstart).
 	s.resumeMissions(ctx)
+
+	// Live OneDrive-eksporter: push ferske tall inn i arbeidsbøkene fast.
+	pushTicker := time.NewTicker(15 * time.Minute)
+	go func() {
+		defer pushTicker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-pushTicker.C:
+			}
+		}
+	}()
 }
 
 // resumeMissions starter løkker for alle godkjente, aktive oppdrag.
 func (s *Server) resumeMissions(ctx context.Context) {
+	// Oppdrags-modus er fjernet fra produktflyten — agenter er kun rutiner.
+	// Løkker gjenopptas ikke; funksjonen står til DB-feltene ryddes.
 	agents, err := s.store.RunningMissions()
+	_ = agents
+	if true {
+		return
+	}
 	if err != nil {
 		s.log.Error("kunne ikke hente aktive oppdrag", "err", err)
 		return
@@ -148,6 +167,16 @@ func (s *Server) runDueAgents(ctx context.Context) {
 // runAgentOnce utfører én agent, poster resultatet i agentens chat, logger
 // kjøringen og planlegger neste.
 func (s *Server) runAgentOnce(ctx context.Context, a store.Agent, now time.Time) {
+	// Marker kjøringen for live-tilstanden (trollet «skriver» i farmen).
+	s.runMu.Lock()
+	s.runActive[a.ID] = true
+	s.runMu.Unlock()
+	defer func() {
+		s.runMu.Lock()
+		delete(s.runActive, a.ID)
+		s.runMu.Unlock()
+	}()
+
 	// Reschedule først, så en feilende agent ikke kjøres i loop.
 	if err := s.store.RescheduleAgent(a, now); err != nil {
 		s.log.Error("kunne ikke omplanlegge agent", "id", a.ID, "err", err)
@@ -163,23 +192,63 @@ func (s *Server) runAgentOnce(ctx context.Context, a store.Agent, now time.Time)
 		}
 	}
 
-	// Oppdrag håndteres av den kontinuerlige løkka (startMissionRunner), ikke her.
-	output, tokens, err := s.executeAgent(ctx, a)
+	// Har agenten en ferdig kompilert plan, kjøres den deterministisk — billig
+	// og med samme tall hver gang. Uten plan (eller hvis den nettopp brakk)
+	// faller vi tilbake til fri kjøring, så agenten alltid gjør nytte.
+	var (
+		run     planRun
+		planned bool
+		err     error
+	)
+	if a.PlanStatus == "ready" && strings.TrimSpace(a.Plan) != "" {
+		run, err = s.executeAgentPlan(ctx, a)
+		planned = err == nil
+		if err != nil {
+			s.log.Warn("plan-kjøring feilet, faller tilbake til fri kjøring", "id", a.ID, "err", err)
+			run.output, run.tokens, err = s.executeAgent(ctx, a)
+		}
+	} else {
+		run.output, run.tokens, err = s.executeAgent(ctx, a)
+		// Ingen plan ennå: bygg den i bakgrunnen, så neste kjøring blir bedre.
+		if a.PlanStatus == "" {
+			s.startPlanBuild(a.ID)
+		}
+	}
 	if err != nil {
 		s.log.Warn("agent-kjøring feilet", "id", a.ID, "err", err)
-		s.store.RecordRun(a.ID, store.AgentRun{Status: "error", TokensUsed: tokens, Error: err.Error()})
+		s.store.RecordRun(a.ID, store.AgentRun{Status: "error", TokensUsed: run.tokens, Error: err.Error()})
 		s.postToAgentChat(a, "Kjøringen feilet: "+err.Error())
 		return
 	}
-	s.store.RecordRun(a.ID, store.AgentRun{Status: "ok", Output: output, TokensUsed: tokens})
-	s.postToAgentChat(a, output)
-	s.log.Info("agent kjørt", "id", a.ID, "navn", a.Name, "tokens", tokens)
 
-	// Push-varsel: kun hvis brukeren har slått det på OG resultatet er verdt å
-	// varsle om (billig sjekk), så en rutinekjøring uten nytt ikke maser.
-	if a.PushEnabled {
-		go s.maybePush(a, output)
+	// Ingenting har endret seg siden sist: logg det, men ikke mas i chatten.
+	if run.unchanged {
+		s.store.RecordRun(a.ID, store.AgentRun{Status: "unchanged"})
+		s.log.Info("agent kjørt, ingen endring", "id", a.ID, "navn", a.Name)
+		return
 	}
+
+	// Alert («Funn!» i grafen): KUN plan-kjøringer, der agentens egen
+	// varselregel har avgjort det. Frie kjøringer har ingen pålitelig
+	// funn-signal — et postet resultat kan like gjerne være «ingenting nytt»,
+	// og en falsk bjelle er verre enn en manglende.
+	alert := planned && run.alert
+	s.store.RecordRun(a.ID, store.AgentRun{Status: "ok", Output: run.output, TokensUsed: run.tokens, Alert: alert})
+	s.postToAgentChat(a, run.output)
+	s.log.Info("agent kjørt", "id", a.ID, "navn", a.Name, "tokens", run.tokens, "varsel", alert)
+
+	if !a.PushEnabled {
+		return
+	}
+	// Med plan har tolkningen allerede avgjort mot agentens egen varselregel —
+	// da trengs ingen ekstra klassifisering. Uten plan må vi spørre.
+	if planned {
+		if run.alert {
+			go s.pushNow(a, run.output)
+		}
+		return
+	}
+	go s.maybePush(a, run.output)
 }
 
 const pushClassifySystem = "Du vurderer et resultat fra en automatisk agent-kjøring. Er dette verdt å " +
@@ -202,11 +271,20 @@ func (s *Server) maybePush(a store.Agent, output string) {
 	if err != nil || !strings.Contains(strings.ToLower(raw), "ja") {
 		return
 	}
-	title := a.Name
+	s.pushNow(a, body)
+}
+
+// pushNow køer varselet uten å vurdere det på nytt — brukes når avgjørelsen
+// allerede er tatt (agentens egen varselregel).
+func (s *Server) pushNow(a store.Agent, output string) {
+	body := strings.TrimSpace(output)
+	if body == "" {
+		return
+	}
 	if len(body) > 200 {
 		body = body[:200]
 	}
-	if err := s.store.EnqueuePush(a.TenantID, a.UserID, a.ID, title, body); err != nil {
+	if err := s.store.EnqueuePush(a.TenantID, a.UserID, a.ID, a.Name, body); err != nil {
 		s.log.Warn("kunne ikke køe push", "id", a.ID, "err", err)
 		return
 	}
@@ -410,7 +488,7 @@ func missionTools(dbCtx *dbToolCtx, canSend bool) []any {
 					"next_steps": map[string]any{"type": "string", "description": "hva som gjenstår neste kjøring (tom hvis ferdig)"},
 					"status":     map[string]any{"type": "string", "description": "continue = mer arbeid gjenstår, done = målet er nådd"},
 					"result":     map[string]any{"type": "string", "description": "det brukerrettede resultatet — vises i chatten KUN når du konkluderer (done) eller notify=true"},
-					"notify":      map[string]any{"type": "boolean", "description": "true KUN når du har en konklusjon verdt å poste i chatten nå. Ellers false — da jobber du bare videre, aktiviteten din vises live uansett"},
+					"notify":     map[string]any{"type": "boolean", "description": "true KUN når du har en konklusjon verdt å poste i chatten nå. Ellers false — da jobber du bare videre, aktiviteten din vises live uansett"},
 					"mail": map[string]any{
 						"type":        "object",
 						"description": "KUN hvis du IKKE har send_mail-tillatelse og vil foreslå en mail brukeren selv sender",

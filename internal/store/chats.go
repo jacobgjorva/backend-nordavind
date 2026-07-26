@@ -15,7 +15,15 @@ type Chat struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 	AgentID      string    `json:"agent_id,omitempty"`
 	AgentEnabled bool      `json:"agent_enabled,omitempty"`
-	Kind         string    `json:"kind,omitempty"` // "chat" | "dashboard"
+	Kind         string    `json:"kind,omitempty"`      // "chat" | "dashboard"
+	FolderID     string    `json:"folder_id,omitempty"` // mappe chatten ligger i (tom = ingen)
+}
+
+// Folder er en brukeropprettet mappe for å organisere chatter i sidebaren.
+type Folder struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // ChatMessage er én melding i en samtale. Sources er JSON fra websøk.
@@ -52,11 +60,98 @@ func (s *Store) migrateChats() error {
 		`ALTER TABLE chats ADD COLUMN agent_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE chats ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat'`,
 		`ALTER TABLE chats ADD COLUMN dashboard_spec TEXT NOT NULL DEFAULT '{"components":[]}'`,
+		`ALTER TABLE chats ADD COLUMN folder_id TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.db.Exec(col); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column") {
 			return err
 		}
+	}
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS folders (
+			id         TEXT PRIMARY KEY,
+			tenant_id  TEXT NOT NULL,
+			user_id    TEXT NOT NULL,
+			name       TEXT NOT NULL,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE INDEX IF NOT EXISTS idx_folders_user ON folders (user_id, created_at);
+	`); err != nil {
+		return err
+	}
+	return nil
+}
+
+// CreateFolder oppretter en mappe for brukeren.
+func (s *Store) CreateFolder(tenantID, userID, name string) (Folder, error) {
+	id, err := newID()
+	if err != nil {
+		return Folder{}, err
+	}
+	f := Folder{ID: id, Name: name, CreatedAt: time.Now()}
+	_, err = s.db.Exec(
+		`INSERT INTO folders (id, tenant_id, user_id, name) VALUES (?, ?, ?, ?)`,
+		f.ID, tenantID, userID, f.Name,
+	)
+	return f, err
+}
+
+// ListFolders returnerer brukerens mapper, eldst først (stabil rekkefølge).
+func (s *Store) ListFolders(userID string) ([]Folder, error) {
+	rows, err := s.db.Query(
+		`SELECT id, name, created_at FROM folders WHERE user_id = ? ORDER BY created_at`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Folder
+	for rows.Next() {
+		var f Folder
+		if err := rows.Scan(&f.ID, &f.Name, &f.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+// RenameFolder endrer navnet på en mappe brukeren eier.
+func (s *Store) RenameFolder(id, userID, name string) error {
+	res, err := s.db.Exec(`UPDATE folders SET name = ? WHERE id = ? AND user_id = ?`, name, id, userID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteFolder sletter en mappe og løsner chattene (de havner i historikken igjen).
+func (s *Store) DeleteFolder(id, userID string) error {
+	res, err := s.db.Exec(`DELETE FROM folders WHERE id = ? AND user_id = ?`, id, userID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	_, err = s.db.Exec(`UPDATE chats SET folder_id = '' WHERE folder_id = ? AND user_id = ?`, id, userID)
+	return err
+}
+
+// SetChatFolder flytter en chat inn i en mappe (tom folderID = ut av mappe).
+func (s *Store) SetChatFolder(chatID, userID, folderID string) error {
+	res, err := s.db.Exec(
+		`UPDATE chats SET folder_id = ? WHERE id = ? AND user_id = ?`, folderID, chatID, userID,
+	)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
 	}
 	return nil
 }
@@ -77,7 +172,7 @@ func (s *Store) CreateChat(tenantID, userID, title string) (Chat, error) {
 // ListChats returnerer brukerens samtaler, nyest oppdatert først.
 func (s *Store) ListChats(userID string) ([]Chat, error) {
 	rows, err := s.db.Query(
-		`SELECT c.id, c.title, c.updated_at, c.agent_id, COALESCE(a.enabled, 0), c.kind
+		`SELECT c.id, c.title, c.updated_at, c.agent_id, COALESCE(a.enabled, 0), c.kind, c.folder_id
 		 FROM chats c LEFT JOIN agents a ON a.id = c.agent_id
 		 WHERE c.user_id = ? ORDER BY c.updated_at DESC LIMIT 100`,
 		userID,
@@ -91,7 +186,7 @@ func (s *Store) ListChats(userID string) ([]Chat, error) {
 	for rows.Next() {
 		var c Chat
 		var enabled int
-		if err := rows.Scan(&c.ID, &c.Title, &c.UpdatedAt, &c.AgentID, &enabled, &c.Kind); err != nil {
+		if err := rows.Scan(&c.ID, &c.Title, &c.UpdatedAt, &c.AgentID, &enabled, &c.Kind, &c.FolderID); err != nil {
 			return nil, err
 		}
 		c.AgentEnabled = enabled != 0

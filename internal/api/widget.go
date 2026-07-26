@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	crand "crypto/rand"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -41,7 +42,10 @@ const widgetSystemBase = "Du bygger ÉN widget for brukeren — én enkelt visua
 	"kunne filtreres på f.eks. region, MÅ SELECT ta med region-kolonnen i tillegg til x og y (og typisk " +
 	"gruppere på x + region), slik at brukeren kan skru serien ned til én region. Uten kolonnen i resultatet " +
 	"blir det ingen filter-verdier. " +
-	"Legg kun på det som faktisk hjelper; en ren tidsserie eller kpi trenger ofte ingen kontroller." +
+	"STANDARD: for hver data-widget (table/bar/line/donut/sparkline), velg selv de 1-3 mest naturlige " +
+	"dimensjonene fra skjemaet (typisk kunde, produkt, region, status, kategori), ta dem med i SELECT og " +
+	"definer filters for dem — brukeren skal kunne filtrere på det som er meningsfullt uten å be om det. " +
+	"Kun kpi trenger vanligvis ingen kontroller." +
 	"\nEtter verktøykallet svarer du med maks ett kort ord (f.eks. «Ok»). Aldri lange svar."
 
 // widgetSystem legger til databaseskjemaet så modellen kan skrive SQL.
@@ -120,6 +124,35 @@ func (s *Server) runWidgetOp(ctx context.Context, slug, rawArgs string) string {
 	if !ok {
 		return "Ikke innlogget."
 	}
+	// Uten widget-kontekst (create_widget-flyten i vanlig chat): opprett en ny
+	// widget fra spec-en — før feilet dette med «Fant ikke widgeten».
+	createdNew := false
+	if strings.TrimSpace(slug) == "" {
+		createdNew = true
+		var t struct {
+			Title string `json:"title"`
+		}
+		json.Unmarshal([]byte(rawArgs), &t)
+		title := strings.TrimSpace(t.Title)
+		if title == "" {
+			title = "Widget"
+		}
+		ns := slugify(title)
+		if ns == "" {
+			ns = "widget"
+		}
+		created, err := s.store.CreateWidget(user.TenantID, user.ID, ns, title)
+		if err != nil {
+			// Navnekollisjon: gjør slugen unik og prøv én gang til.
+			created, err = s.store.CreateWidget(user.TenantID, user.ID,
+				ns+"-"+strings.ToLower(randToken(4)), title)
+			if err != nil {
+				s.log.Error("kunne ikke opprette widget fra chat", "err", err)
+				return "Kunne ikke opprette widgeten."
+			}
+		}
+		slug = created.Slug
+	}
 	w, err := s.store.Widget(slug, user.ID)
 	if err != nil {
 		return "Fant ikke widgeten."
@@ -146,7 +179,21 @@ func (s *Server) runWidgetOp(ctx context.Context, slug, rawArgs string) string {
 	if err := s.store.SetWidget(slug, user.ID, title, string(out)); err != nil {
 		return "Kunne ikke lagre."
 	}
+	if createdNew {
+		return "Widget opprettet (slug=" + slug + "). Svar med maks én kort setning — widgeten vises automatisk."
+	}
 	return "ok"
+}
+
+// randToken gir en kort tilfeldig suffiks for slug-kollisjoner.
+func randToken(n int) string {
+	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, n)
+	crand.Read(b)
+	for i := range b {
+		b[i] = chars[int(b[i])%len(chars)]
+	}
+	return string(b)
 }
 
 var slugRe = regexp.MustCompile(`[^a-z0-9-]+`)
@@ -227,6 +274,89 @@ func (s *Server) handleGetWidget(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(wg)
 }
 
+// handleSaveWidget gjør et widget-utkast til en lagret widget (vises i menyen).
+func (s *Server) handleSaveWidget(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	err := s.store.MarkWidgetSaved(r.PathValue("slug"), user.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleListTenantUsers gir kollegalisten (id + e-post) til delings-velgeren.
+// Trygt for alle innloggede — kun egen tenant, ingen forbruksdata.
+func (s *Server) handleListTenantUsers(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	users, err := s.store.ListUsers(user.TenantID)
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	out := make([]map[string]string, 0, len(users))
+	for _, u := range users {
+		if u.ID == user.ID {
+			continue // ikke del med seg selv
+		}
+		out = append(out, map[string]string{"id": u.ID, "email": u.Email})
+	}
+	writeJSON(w, map[string]any{"users": out})
+}
+
+// handleShareWidget deler en widget med valgte brukere i samme tenant: hver
+// mottaker får en selvstendig kopi i sin meny (mottakerens datatilganger gjelder).
+func (s *Server) handleShareWidget(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		UserIDs []string `json:"user_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.UserIDs) == 0 {
+		http.Error(w, "ingen mottakere", http.StatusBadRequest)
+		return
+	}
+	// Valider at mottakerne er i samme tenant.
+	tenantUsers, err := s.store.ListUsers(user.TenantID)
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	valid := map[string]bool{}
+	for _, u := range tenantUsers {
+		valid[u.ID] = true
+	}
+	slug := r.PathValue("slug")
+	shared := 0
+	for _, rid := range req.UserIDs {
+		if !valid[rid] || rid == user.ID {
+			continue
+		}
+		if _, err := s.store.ShareWidgetTo(slug, user.ID, user.TenantID, rid); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				http.Error(w, "ikke funnet", http.StatusNotFound)
+				return
+			}
+			s.log.Warn("widget-deling feilet", "slug", slug, "til", rid, "err", err)
+			continue
+		}
+		shared++
+	}
+	writeJSON(w, map[string]any{"shared": shared})
+}
+
 // handleDeleteWidget fjerner en widget brukeren eier.
 func (s *Server) handleDeleteWidget(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.user(w, r)
@@ -286,10 +416,16 @@ func (s *Server) handleWidgetQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer db.Close()
-	cols, rows, err := connector.SafeQuery(r.Context(), db, dc.creds.Driver, sql, dc.allowed)
+	cols, rows, err := connector.SafeQueryViewsN(r.Context(), db, dc.creds.Driver, sql, dc.allowed, dc.views, 5000)
 	if err != nil {
 		http.Error(w, "spørringen feilet: "+err.Error(), http.StatusBadGateway)
 		return
+	}
+	if cols == nil {
+		cols = []string{}
+	}
+	if rows == nil {
+		rows = [][]string{}
 	}
 	writeJSON(w, map[string]any{"columns": cols, "rows": rows, "row_count": len(rows)})
 }

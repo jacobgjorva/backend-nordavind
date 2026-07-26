@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -15,6 +17,7 @@ type Widget struct {
 	Slug      string          `json:"slug"`
 	Title     string          `json:"title"`
 	Spec      json.RawMessage `json:"spec,omitempty"`
+	Saved     bool            `json:"saved"`
 	UpdatedAt time.Time       `json:"updated_at"`
 }
 
@@ -32,7 +35,31 @@ func (s *Store) migrateWidgets() error {
 		);
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_widgets_slug ON widgets (user_id, slug);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	// Nye widgets er utkast til brukeren lagrer dem eksplisitt. Widgets som
+	// fantes FØR feltet kom regnes som lagret (engangs, kun når kolonnen lages).
+	if _, err := s.db.Exec(`ALTER TABLE widgets ADD COLUMN saved INTEGER NOT NULL DEFAULT 0`); err == nil {
+		s.db.Exec(`UPDATE widgets SET saved = 1`)
+	} else if !strings.Contains(err.Error(), "duplicate column") {
+		return err
+	}
+	return nil
+}
+
+// MarkWidgetSaved gjør et utkast til en lagret widget (vises i menyen).
+func (s *Store) MarkWidgetSaved(slug, userID string) error {
+	res, err := s.db.Exec(
+		`UPDATE widgets SET saved = 1 WHERE slug = ? AND user_id = ?`, slug, userID,
+	)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // CreateWidget oppretter en tom widget med gitt slug. Slug er unik per bruker.
@@ -52,7 +79,7 @@ func (s *Store) CreateWidget(tenantID, userID, slug, title string) (Widget, erro
 // ListWidgets returnerer brukerens widgets, nyest først (uten spec).
 func (s *Store) ListWidgets(userID string) ([]Widget, error) {
 	rows, err := s.db.Query(
-		`SELECT id, slug, title, updated_at FROM widgets WHERE user_id = ? ORDER BY updated_at DESC`,
+		`SELECT id, slug, title, updated_at FROM widgets WHERE user_id = ? AND saved = 1 ORDER BY updated_at DESC`,
 		userID,
 	)
 	if err != nil {
@@ -75,10 +102,12 @@ func (s *Store) ListWidgets(userID string) ([]Widget, error) {
 func (s *Store) Widget(slug, userID string) (Widget, error) {
 	var w Widget
 	var spec string
+	var saved int
 	err := s.db.QueryRow(
-		`SELECT id, slug, title, spec, updated_at FROM widgets WHERE slug = ? AND user_id = ?`,
+		`SELECT id, slug, title, spec, saved, updated_at FROM widgets WHERE slug = ? AND user_id = ?`,
 		slug, userID,
-	).Scan(&w.ID, &w.Slug, &w.Title, &spec, &w.UpdatedAt)
+	).Scan(&w.ID, &w.Slug, &w.Title, &spec, &saved, &w.UpdatedAt)
+	w.Saved = saved != 0
 	if errors.Is(err, sql.ErrNoRows) {
 		return w, ErrNotFound
 	}
@@ -102,6 +131,43 @@ func (s *Store) SetWidget(slug, userID, title, spec string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// ShareWidgetTo kopierer en widget til en annen bruker i samme tenant. Kopien
+// er selvstendig og lagret (vises i mottakerens meny). Slug-kollisjon hos
+// mottaker løses med -2, -3 osv. Dataene hentes med MOTTAKERENS tilganger.
+func (s *Store) ShareWidgetTo(slug, ownerID, tenantID, recipientID string) (string, error) {
+	src, err := s.Widget(slug, ownerID)
+	if err != nil {
+		return "", err
+	}
+	target := src.Slug
+	for i := 2; ; i++ {
+		var one int
+		err := s.db.QueryRow(
+			`SELECT 1 FROM widgets WHERE user_id = ? AND slug = ?`, recipientID, target,
+		).Scan(&one)
+		if errors.Is(err, sql.ErrNoRows) {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		target = src.Slug + "-" + itoa(i)
+	}
+	id, err := newID()
+	if err != nil {
+		return "", err
+	}
+	_, err = s.db.Exec(
+		`INSERT INTO widgets (id, tenant_id, user_id, slug, title, spec, saved) VALUES (?, ?, ?, ?, ?, ?, 1)`,
+		id, tenantID, recipientID, target, src.Title, string(src.Spec),
+	)
+	return target, err
+}
+
+func itoa(n int) string {
+	return strconv.Itoa(n)
 }
 
 // DeleteWidget fjerner en widget brukeren eier.

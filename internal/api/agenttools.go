@@ -52,31 +52,31 @@ const agentSetupSystem = "Du er i OPPSETT-modus. Du skal KUN sette opp agenten, 
 // missionPlanSystem styrer en fersk agent-chat. Agenten er en arbeidsmaskin:
 // forstår oppgaven, utleder selv fullført-kriterier, og starter løkka umiddelbart
 // via start_mission — uten å ekko målet, uten kort, uten å nevne token-tak.
-const missionPlanSystem = "Du er en autonom arbeidsagent brukeren nettopp opprettet. Du får ETT oppdrag som " +
-	"du så jobber sammenhengende mot til det er fullført. Vær en arbeidsmaskin: ikke gjenta målet tilbake, " +
-	"ikke lag noe kort, ikke nevn tokens eller begrensninger. " +
-	"Når brukeren gir oppgaven: utled SELV konkrete, målbare fullført-kriterier (hvordan vet vi sikkert at " +
-	"målet er nådd), og kall start_mission med goal (oppgaven) og criteria med det samme. Svar KUN med en " +
-	"kort, bestemt kvittering: «Oppgave forstått, starter.» — ingenting mer. " +
-	"Kun hvis oppgaven er helt uforståelig: still ETT kort oppklarende spørsmål i stedet for å starte. " +
-	"IKKE utfør selve oppgaven her (ikke søk/spør database) — start_mission setter i gang løkka som gjør det."
+const missionPlanSystem = "Du setter opp en gjentakende agent-rutine for brukeren. Når brukeren beskriver " +
+	"behovet: kall setup_routine med prompt (hva som gjøres HVER kjøring), interval_seconds (minimum 900; " +
+	"time=3600, dag=86400, uke=604800) og en kort label («hvert 15. minutt», «hver morgen kl 08»). " +
+	"Beskriver brukeren noe uten frekvens: foreslå en fornuftig frekvens i prompten din, eller spør kort. " +
+	"Svar KUN med en kort kvittering («Rutine opprettet — kjører <frekvens>.») — ingenting mer. " +
+	"IKKE utfør selve oppgaven her (ikke søk/spør database) — rutinen gjør jobben på hver kjøring."
 
-// missionStartTools gir planleggeren ÉT verktøy: start oppdraget med utledede
-// kriterier (ubegrenset token-tak inntil videre).
+// missionStartTools gir planleggeren to verktøy: start et engangsoppdrag,
+// eller sett opp en gjentakende rutine når behovet aldri «fullføres».
 func missionStartTools() []any {
 	return []any{
 		map[string]any{
 			"type": "function",
 			"function": map[string]any{
-				"name":        "start_mission",
-				"description": "Start oppdraget nå. Du utleder selv fullført-kriteriene. Løkka begynner umiddelbart.",
+				"name":        "setup_routine",
+				"description": "Gjør agenten til en gjentakende rutine som kjører prompten på fast intervall. Bruk for alt som skal skje «hvert/hver …» — rutiner fullføres aldri.",
 				"parameters": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"goal":     map[string]any{"type": "string", "description": "oppgaven, i klartekst"},
-						"criteria": map[string]any{"type": "string", "description": "målbare kriterier for når målet er nådd"},
+						"prompt":           map[string]any{"type": "string", "description": "hva agenten skal gjøre hver kjøring"},
+						"interval_seconds": map[string]any{"type": "integer", "description": "sekunder mellom kjøringer, minimum 900"},
+						"label":            map[string]any{"type": "string", "description": "menneskelig frekvens, f.eks. «hvert 15. minutt»"},
+						"name":             map[string]any{"type": "string", "description": "kort agentnavn"},
 					},
-					"required": []string{"goal", "criteria"},
+					"required": []string{"prompt", "interval_seconds"},
 				},
 			},
 		},
@@ -150,8 +150,10 @@ func (s *Server) runUpdateAgent(ctx context.Context, a agentToolArgs) string {
 	if strings.TrimSpace(a.Name) != "" {
 		cur.Name = strings.TrimSpace(a.Name)
 	}
-	if strings.TrimSpace(a.Task) != "" {
-		cur.Task = strings.TrimSpace(a.Task)
+	taskChanged := false
+	if t := strings.TrimSpace(a.Task); t != "" && t != strings.TrimSpace(cur.Task) {
+		cur.Task = t
+		taskChanged = true
 	}
 	if strings.TrimSpace(a.ScheduleLabel) != "" {
 		cur.ScheduleLabel = strings.TrimSpace(a.ScheduleLabel)
@@ -170,6 +172,11 @@ func (s *Server) runUpdateAgent(ctx context.Context, a agentToolArgs) string {
 	}
 	if err := s.store.UpdateAgentConfig(a.AgentID, user.ID, cur); err != nil {
 		return "Kunne ikke oppdatere agenten."
+	}
+	// Ny oppgave = den gamle planen gjelder ikke lenger.
+	if taskChanged {
+		s.store.ClearAgentPlan(a.AgentID)
+		s.startPlanBuild(a.AgentID)
 	}
 	return "Agent oppdatert."
 }
@@ -195,6 +202,77 @@ func (s *Server) runStartMission(ctx context.Context, agentID, goal, criteria st
 	}
 	s.startMissionRunner(context.Background(), agentID)
 	return "startet"
+}
+
+// runSetupRoutine gjør utkast-agenten til en gjentakende rutine: prompt +
+// intervall, aktivert, ingen oppdrags-løkke. Rutiner «fullføres» aldri.
+func (s *Server) runSetupRoutine(ctx context.Context, agentID, rawArgs string) string {
+	user, ok := ctx.Value(userKey).(store.User)
+	if !ok {
+		return "Ikke innlogget."
+	}
+	var args struct {
+		Prompt          string `json:"prompt"`
+		IntervalSeconds int    `json:"interval_seconds"`
+		Label           string `json:"label"`
+		Name            string `json:"name"`
+	}
+	json.Unmarshal([]byte(rawArgs), &args)
+	if strings.TrimSpace(args.Prompt) == "" {
+		return "Mangler prompt."
+	}
+	if args.IntervalSeconds < 900 {
+		args.IntervalSeconds = 900
+	}
+	// Uten agent-kontekst (create_routine-flyten i vanlig chat): opprett en ny
+	// rutine direkte — før feilet dette med «Fant ikke agenten».
+	if strings.TrimSpace(agentID) == "" {
+		name := strings.TrimSpace(args.Name)
+		if name == "" {
+			name = strings.TrimSpace(args.Label)
+		}
+		if name == "" {
+			name = "Rutine"
+		}
+		agent, err := s.store.CreateAgent(user.TenantID, user.ID, store.Agent{
+			Name:            name,
+			Task:            args.Prompt,
+			ScheduleLabel:   strings.TrimSpace(args.Label),
+			IntervalSeconds: args.IntervalSeconds,
+		})
+		if err != nil {
+			s.log.Error("kunne ikke opprette rutine fra chat", "err", err)
+			return "Kunne ikke opprette rutinen."
+		}
+		s.log.Info("rutine opprettet fra chat", "id", agent.ID, "navn", agent.Name)
+		freq := strings.TrimSpace(args.Label)
+		if freq == "" {
+			freq = fmt.Sprintf("hvert %d. minutt", args.IntervalSeconds/60)
+		}
+		return "Rutine «" + agent.Name + "» opprettet — kjører " + freq + "."
+	}
+	a, err := s.store.GetAgent(agentID, user.ID)
+	if err != nil {
+		return "Fant ikke agenten."
+	}
+	a.Task = args.Prompt
+	a.IntervalSeconds = args.IntervalSeconds
+	if args.Label != "" {
+		a.ScheduleLabel = args.Label
+	}
+	if args.Name != "" {
+		a.Name = args.Name
+	}
+	if err := s.store.UpdateAgentConfig(agentID, user.ID, a); err != nil {
+		return "Kunne ikke lagre rutinen."
+	}
+	if err := s.store.SetAgentEnabled(agentID, user.ID, true); err != nil {
+		return "Kunne ikke aktivere rutinen."
+	}
+	// Spinup i bakgrunnen: finn beste fremgangsmåte før første kjøring.
+	s.store.ClearAgentPlan(agentID)
+	s.startPlanBuild(agentID)
+	return "rutine opprettet"
 }
 
 // buildAgentSetupTools gir veiviseren KUN list_agents. Selve opprettelsen skjer
@@ -371,6 +449,8 @@ func (s *Server) runDeleteAgent(ctx context.Context, a agentToolArgs) string {
 	if !ok {
 		return "Ikke innlogget."
 	}
+	// Grafen først — etter sletting finnes ikke planen som peker på den.
+	s.deleteAgentChart(a.AgentID, user.ID)
 	if err := s.store.DeleteAgent(a.AgentID, user.ID); err != nil {
 		return "Fant ikke agenten."
 	}

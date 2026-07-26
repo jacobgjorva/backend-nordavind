@@ -18,10 +18,14 @@ func atoiDefault(s string, def int) int {
 type Config struct {
 	Port            string
 	UpstreamBaseURL string // OpenAI-kompatibelt endepunkt (Scaleway Generative APIs)
+	PublicBaseURL   string // utadvendt base-URL (live Excel-lenker, OAuth-callbacks)
+	MSClientID      string // Azure app-registrering (Microsoft 365-connector)
+	MSClientSecret  string
 	UpstreamAPIKey  string
 	AllowedOrigins  []string // CORS-origins for frontend (kommaseparert i env)
 	DBPath          string   // SQLite-fil for tenants/brukere/sesjoner
 	AuthRequired    bool     // krev innlogging på chat/extract (default på; sett AUTH_REQUIRED=false kun i dev)
+	IntentMode      string   // intent-motoren: "off" (default) | "shadow" (rut + logg, endrer ingenting)
 
 	// MIDLERTIDIG: hardkodet e-postkonto til /mail (env). Flyttes til
 	// Connector-siden på produksjonsnivå senere.
@@ -46,11 +50,15 @@ func Load() (Config, error) {
 	loadDotEnv(".env")
 	cfg := Config{
 		Port:            getenv("PORT", "8080"),
+		PublicBaseURL:   getenv("PUBLIC_BASE_URL", "http://localhost:8080"),
+		MSClientID:      getenv("MS_CLIENT_ID", ""),
+		MSClientSecret:  getenv("MS_CLIENT_SECRET", ""),
 		UpstreamBaseURL: getenv("UPSTREAM_BASE_URL", "https://api.scaleway.ai/v1"),
 		UpstreamAPIKey:  os.Getenv("UPSTREAM_API_KEY"),
 		AllowedOrigins:  strings.Split(getenv("ALLOWED_ORIGIN", "http://localhost:5173,http://127.0.0.1:5173"), ","),
 		DBPath:          getenv("DB_PATH", "data/nordavind.db"),
 		AuthRequired:    getenv("AUTH_REQUIRED", "true") != "false",
+		IntentMode:      getenv("INTENT_ENGINE", "off"),
 		Mail: MailConfig{
 			Email:     os.Getenv("MAIL_EMAIL"),
 			IMAPHost:  os.Getenv("MAIL_IMAP_HOST"),

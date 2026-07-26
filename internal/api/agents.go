@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
@@ -85,6 +87,8 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("agent opprettet", "id", agent.ID, "navn", agent.Name)
+	// Spinup: finn beste fremgangsmåte én gang, i bakgrunnen, før første kjøring.
+	s.startPlanBuild(agent.ID)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(agent)
 }
@@ -196,7 +200,38 @@ func (s *Server) handleAgentConnections(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(map[string]any{"connections": out})
 }
 
-// handleListAgents returnerer brukerens agenter.
+// agentState avleder live-tilstanden trollet viser i farmen. Prioritet:
+// pågående arbeid slår plan-status, plan-status slår hvile.
+func (s *Server) agentState(a store.Agent) string {
+	s.runMu.Lock()
+	running := s.runActive[a.ID]
+	s.runMu.Unlock()
+	if running {
+		return "working"
+	}
+	s.planMu.Lock()
+	building := s.planBuilding[a.ID]
+	s.planMu.Unlock()
+	if building {
+		return "thinking"
+	}
+	switch {
+	case a.PlanStatus == "broken":
+		return "broken"
+	case !a.Enabled:
+		return "paused"
+	default:
+		return "sleeping"
+	}
+}
+
+// agentWithState er en agent + live-tilstand, til farmen og agent-widgetene.
+type agentWithState struct {
+	store.Agent
+	State string `json:"state"`
+}
+
+// handleListAgents returnerer brukerens agenter med live-tilstand.
 func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.user(w, r)
 	if !ok {
@@ -207,11 +242,77 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "intern feil", http.StatusInternalServerError)
 		return
 	}
-	if agents == nil {
-		agents = []store.Agent{}
+	out := make([]agentWithState, 0, len(agents))
+	for _, a := range agents {
+		out = append(out, agentWithState{Agent: a, State: s.agentState(a)})
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"agents": agents})
+	json.NewEncoder(w).Encode(map[string]any{"agents": out})
+}
+
+// handleAgentRuns returnerer kjøringshistorikken til trådgrafen.
+// ?hours styrer vinduet (default 24, maks 168).
+func (s *Server) handleAgentRuns(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	hours := 24
+	if h, err := strconv.Atoi(r.URL.Query().Get("hours")); err == nil && h > 0 && h <= 168 {
+		hours = h
+	}
+	runs, err := s.store.AgentRunsSince(user.ID, time.Now().Add(-time.Duration(hours)*time.Hour))
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	if runs == nil {
+		runs = []store.AgentRunEvent{}
+	}
+	writeJSON(w, map[string]any{"runs": runs})
+}
+
+// handleMarkAgentSeen kvitterer ut et ulest svar — kalles når brukeren
+// ekspanderer funn-pillen i grafen (eller åpner chatten, som også kvitterer).
+func (s *Server) handleMarkAgentSeen(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	if err := s.store.MarkAgentResponseSeen(r.PathValue("id"), user.ID); err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleSetAgentPersona setter navn og/eller personlighet fra farmen.
+func (s *Server) handleSetAgentPersona(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Name        string  `json:"name"`
+		Personality *string `json:"personality"` // nil = ikke endre; tom streng = fjern
+		Category    *string `json:"category"`    // nil = ikke endre; tom streng = fjern
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "ugyldig request", http.StatusBadRequest)
+		return
+	}
+	err := s.store.SetAgentPersona(r.PathValue("id"), user.ID, store.AgentPersona{
+		Name: req.Name, Personality: req.Personality, Category: req.Category,
+	})
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleAgentByChat returnerer agenten som eier en chat (for pause-knappen).
@@ -228,6 +329,11 @@ func (s *Server) handleAgentByChat(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "intern feil", http.StatusInternalServerError)
 		return
+	}
+	// Å åpne agent-chatten kvitterer ut et ulest svar (grafen flytter noden
+	// tilbake fra svar-seksjonen).
+	if err := s.store.MarkAgentResponseSeen(agent.ID, user.ID); err != nil {
+		s.log.Warn("kunne ikke markere svar som sett", "id", agent.ID, "err", err)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(agent)
@@ -324,7 +430,13 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 	} else if req.IntervalSeconds < 900 {
 		req.IntervalSeconds = 900 // minimum 15 min
 	}
-	err := s.store.UpdateAgentConfig(r.PathValue("id"), user.ID, store.Agent{
+	// Endres oppgaven, er den gamle planen ikke lenger gyldig — den ble
+	// kompilert for noe annet. Bygg en ny.
+	id := r.PathValue("id")
+	prev, _ := s.store.GetAgent(id, user.ID)
+	taskChanged := strings.TrimSpace(prev.Task) != req.Task
+
+	err := s.store.UpdateAgentConfig(id, user.ID, store.Agent{
 		Name:            req.Name,
 		Task:            req.Task,
 		ConnectionID:    req.ConnectionID,
@@ -342,6 +454,10 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "intern feil", http.StatusInternalServerError)
 		return
 	}
+	if taskChanged {
+		s.store.ClearAgentPlan(id)
+		s.startPlanBuild(id)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -351,6 +467,8 @@ func (s *Server) handleDeleteAgent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Grafen først — etter sletting finnes ikke planen som peker på den.
+	s.deleteAgentChart(r.PathValue("id"), user.ID)
 	err := s.store.DeleteAgent(r.PathValue("id"), user.ID)
 	if errors.Is(err, store.ErrNotFound) {
 		http.Error(w, "ikke funnet", http.StatusNotFound)

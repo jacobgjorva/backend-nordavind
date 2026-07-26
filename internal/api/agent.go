@@ -5,22 +5,28 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
+	"github.com/jacobgjorva/backend-nordavind/internal/intent"
 	"github.com/jacobgjorva/backend-nordavind/internal/search"
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
 
 // Modellen bestemmer selv når den trenger nettet — ingen forhåndsdommer.
+// widgetSlugRe plukker slugen ut av runWidgetOp-kvitteringen.
+var widgetSlugRe = regexp.MustCompile(`slug=([a-z0-9-]+)`)
+
 var webSearchTool = map[string]any{
 	"type": "function",
 	"function": map[string]any{
 		"name": "web_search",
 		"description": "Søk på nettet. Bruk når svaret krever fersk informasjon eller fakta om " +
 			"spesifikke entiteter (personer, selskaper, produkter, steder, hendelser) du ikke er " +
-			"sikker på. Gjør ett kall per entitet/tema. Ga ikke resultatene svaret: søk igjen " +
-			"med en annen formulering før du gir opp.",
+			"sikker på. Gjør ett kall per entitet/tema. FANT DU IKKE SVARET: gjør MINST to nye søk " +
+			"med ulike vinkler (synonymer, offisielle begreper, engelsk) FØR du melder tomt — å gi opp " +
+			"etter ett søk er feil. Meld først «fant ikke» når flere vinkler faktisk er prøvd.",
 		"parameters": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -64,6 +70,37 @@ var deepMarkers = []string{
 	"veldig viktig", "svært viktig", "ekstremt viktig", "kjempeviktig",
 	"ikke forstyrr", "bare få det gjort", "bare fiks det", "gjør det ordentlig",
 	"gjør en skikkelig", "skikkelig jobb", "grav", "kartlegg grundig",
+}
+
+// showTableTool viser siste databasesvar som en rendret tabell for brukeren.
+// Modellen sender IKKE dataene selv — backend rendrer dem deterministisk fra
+// spørringen, så tabellen kan aldri bli feilskrevet eller utelatt.
+var showTableTool = map[string]any{
+	"type": "function",
+	"function": map[string]any{
+		"name": "show_table",
+		"description": "Vis resultatet av siste query_database-kall som en ferdig tabell for brukeren. " +
+			"KALL ALLTID denne når brukeren ber om en tabell, liste eller oversikt over data. Dataene " +
+			"hentes automatisk fra spørringen — ikke gjengi radene i tekst.",
+		"parameters": map[string]any{"type": "object", "properties": map[string]any{}},
+	},
+}
+
+// tableBlock bygger ```table-blokken frontend rendrer som tabell (med Excel-knapp).
+func tableBlock(cols []string, rows [][]string) string {
+	spec, _ := json.Marshal(map[string]any{"columns": cols, "rows": rows})
+	return "```table\n" + string(spec) + "\n```\n\n"
+}
+
+// tableIntent er sann når brukeren eksplisitt ber om en tabell/oversikt i rader.
+func tableIntent(text string) bool {
+	lower := strings.ToLower(text)
+	for _, m := range []string{"tabell", "table", "liste over", "oversikt over"} {
+		if strings.Contains(lower, m) {
+			return true
+		}
+	}
+	return false
 }
 
 // deepIntent er sann når siste brukermelding ber om grundig/uforstyrret arbeid.
@@ -143,6 +180,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// forespørselen sendes videre til upstream.
 	setup, _ := full["nordavind_agent_setup"].(bool)
 	delete(full, "nordavind_agent_setup")
+	// Flyt-kontrakten (intent-modus): leses ut her, skal aldri videre upstream.
+	flowKey, _ := full[flowKeyField].(string)
+	answerLimit := answerCharLimit(full)
+	delete(full, flowKeyField)
+	delete(full, flowMaxField)
 	if setup {
 		injectSystem(full, agentSetupSystem)
 	}
@@ -152,6 +194,18 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	delete(full, "nordavind_widget")
 	if widgetSlug != "" {
 		injectSystem(full, s.widgetSystem(ctx))
+	}
+	// Widget-flytene fra intent-ruting trenger samme feltskjema-instruks som
+	// widget-editoren — uten den famler modellen blindt med set_widget.
+	if widgetSlug == "" && (flowKey == "create_widget" || flowKey == "edit_widget" || flowKey == "create_presentation") {
+		injectSystem(full, s.widgetSystem(ctx))
+	}
+
+	// Connector-agent: hjelper brukeren koble til eksterne kilder via verktøy.
+	connectorMode, _ := full["nordavind_connector"].(bool)
+	delete(full, "nordavind_connector")
+	if connectorMode {
+		injectSystem(full, s.connectorAgentSystem())
 	}
 
 	// Agent-chat: enten oppdrags-planlegging (før kriteriene er godkjent) eller
@@ -163,8 +217,10 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	if editID != "" {
 		if user, ok := ctx.Value(userKey).(store.User); ok {
 			if a, err := s.store.GetAgent(editID, user.ID); err == nil {
-				if !a.CriteriaApproved {
-					// Draft: hjelp brukeren definere mål + fullført-kriterier.
+				if !a.CriteriaApproved && !a.Enabled {
+					// Ferskt utkast: avgjør rutine vs engangsoppdrag og start.
+					// (En aktivert rutine er Enabled uten godkjente kriterier —
+					// den skal til vanlig redigering, ikke ny planlegging.)
 					injectSystem(full, missionPlanSystem)
 					planning = true
 				} else {
@@ -183,6 +239,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			// ikke modellen svare på dataspørsmål — den må skrive SQL-en inn i
 			// widgeten. Skjemaet ligger allerede i system-prompten.
 			full["tools"] = widgetTools()
+		} else if connectorMode {
+			// Connector-agent: KUN tilkoblings-verktøyene.
+			full["tools"] = connectorAgentTools()
 		} else if setup {
 			// Agent-oppsett: KUN agent-verktøy. Ingen web_search/query_database/
 			// contact_person — veiviseren skal samle inn oppsettet og la
@@ -193,10 +252,51 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			// Oppdrags-planlegging: KUN start_mission. Modellen forstår oppgaven,
 			// utleder selv fullført-kriterier, og starter løkka med det samme.
 			full["tools"] = missionStartTools()
+		} else if flowKey != "" && flowKey != intent.FreeChatKey {
+			// Intent-modus: flyt-tabellen bestemmer verktøysettet (flowtools.go).
+			// Kan flyten ikke innfris (mangler db/M365): fritt sett, fail-open.
+			if tools, ok := s.flowTools(ctx, flowKey, dbCtx); ok {
+				if len(tools) > 0 {
+					full["tools"] = tools
+				} else {
+					delete(full, "tools")
+				}
+			} else if dbCtx == nil && flowNeedsDB(flowKey) {
+				// Dataflyt uten datatilgang: svar ærlig i kode — modellen skal
+				// aldri dikte «databasen tillater ikke lesing».
+				emit0 := func(line string) {
+					w.Write([]byte(line + "\n"))
+					if flusher, ok := w.(http.Flusher); ok {
+						flusher.Flush()
+					}
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				emit0(contentSSE("Du har ikke fått tilgang til bedriftsdataene ennå — be administratoren dele de aktuelle tabellene med deg, så svarer jeg på dette med en gang etterpå."))
+				emit0("data: [DONE]")
+				return
+			} else {
+				tools := []any{webSearchTool, fetchURLTool}
+				if dbCtx != nil {
+					tools = append(tools, dbCtx.tool, showTableTool)
+				}
+				if _, ok := s.m365Connected(ctx); ok {
+					tools = append(tools, m365SearchTool, m365ReadTool)
+				}
+				full["tools"] = tools
+			}
 		} else {
 			tools := []any{webSearchTool, fetchURLTool}
 			if dbCtx != nil {
-				tools = append(tools, dbCtx.tool)
+				tools = append(tools, dbCtx.tool, showTableTool)
+			}
+			// Admin kan opprette tilkoblinger rett fra vanlig chat — ingen egen
+			// connector-chat. Verktøybeskrivelsene bærer veiledningen.
+			if user, ok := ctx.Value(userKey).(store.User); ok && user.Role == "admin" {
+				tools = append(tools, connectorAgentTools()...)
+			}
+			// M365-verktøy (filer + e-post) kun når brukeren har koblet til.
+			if _, ok := s.m365Connected(ctx); ok {
+				tools = append(tools, m365SearchTool, m365ReadTool, mailSearchTool, mailReadTool, mailComposeTool)
 			}
 			// Eskalerings-verktøy (registeret ligger i verktøy-beskrivelsen).
 			if user, ok := ctx.Value(userKey).(store.User); ok {
@@ -210,6 +310,15 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			full["tools"] = tools
 		}
 	}
+	// Tilstand slår historikk: har brukeren datatilgang NÅ (uansett flyt),
+	// skal gamle avslag i samtalen aldri gjentas — tilgang deles gjerne midt
+	// i samtalen («kan du sjekke nå?»).
+	if !setup && widgetSlug == "" && !connectorMode && !planning && dbCtx != nil {
+		injectSystem(full, "VIKTIG: Brukeren HAR datatilgang akkurat nå (query_database er tilgjengelig "+
+			"med skjemaet i verktøyet). Eventuelle påstander tidligere i samtalen om manglende tilgang "+
+			"eller databasefeil er UTDATERTE — ignorer dem, kjør spørringen og svar med ferske tall.")
+	}
+
 	// Grundig modus: vanlig chat (ikke oppsett/widget/agent-redigering) der
 	// brukeren ber om grundig/uforstyrret dybdearbeid → ekspert-prompt og mange
 	// runder før den konkluderer i chatten.
@@ -232,9 +341,46 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		}
 	}
 
+	// Momentan kvittering: verktøyflyter melder fra i KODE før modellen har
+	// startet — vises der «Tenker»-teksten står, ikke i selve svaret.
+	if ack := flowAcks[flowKey]; ack != "" {
+		meta, _ := json.Marshal(map[string]any{"nordavind_step": ack})
+		emit("data: " + string(meta))
+	}
+
 	start := time.Now()
 	var promptTokens, completionTokens, searches int
 	usedTool := false // om noen verktøy (søk/lese/db) er kjørt — styrer tom-svar-vernet
+	// Slug for widget opprettet i denne turen (create_widget-flyten) — blokka
+	// appendes i KODE hvis modellen glemmer den; widgeten skal alltid vises.
+	createdWidget := ""
+	// Datavern mot fabrikkerte tall: feiler ALLE databasespørringene i turen,
+	// overstyres svaret i kode — modellen diktet en «nyligste salgsrad» etter
+	// tre timeouts.
+	dbAttempted, dbSucceeded := false, false
+	// Kode-håndhevet søkeinnsats: «fant ikke» etter bare ett søk godtas aldri —
+	// modellen sendes tilbake for flere vinkler (én gang).
+	searchNudged := false
+	// Kildekontroll: alt verktøyene returnerer denne turen, ordrett — prosaen
+	// måles mot dette før den vises (grounding.go).
+	var toolResults []string
+	lastDBResult := ""
+	lastDBSQL, lastDBConn := "", ""
+	// Handlings-verktøy (endrer tilstand: rutine, widget, agent, m365 …) gir
+	// korte kvitteringer med vilje — de skal ALDRI utløse backstop-syntesen.
+	actionTool := false
+	readTools := map[string]bool{
+		"web_search": true, "fetch_url": true, "query_database": true,
+		"m365_search": true, "m365_read": true, "mail_search": true, "mail_read": true,
+		"list_agents": true, "show_table": true,
+	}
+	// Tabell-garanti: show_table-verktøyet rendrer siste databasesvar
+	// deterministisk, og ba brukeren om tabell rendrer vi uansett fra første
+	// svar med rader — prompt alene er ikke til å stole på her.
+	wantsTable := tableIntent(lastUserText(full))
+	tableShown := false
+	var lastCols []string
+	var lastRows [][]string
 	defer func() {
 		s.recordUsage(ctx, full, promptTokens, completionTokens, searches, time.Since(start))
 	}()
@@ -256,31 +402,142 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			return
 		}
 
-		// Svaret bufres (streamContent=false): vi måler det FØR vi viser noe, så
-		// vi kan fange både tomt svar (backstop) og for lange svar (komprimering)
-		// uten å kappe midt i en setning. Arbeids-indikatoren dekker ventetiden.
-		calls, usage, content := s.relayRound(resp, emit, false)
+		// FART: svaret STRØMMES live (hybrid) — brukeren ser hvert ord i det
+		// det skrives. Kun spesialtilfeller bufres: widget-flyter (blokk-
+		// garantien) og turer der databasen har feilet (datavernet må kunne
+		// overstyre HELE svaret).
+		streamThis := !usedTool && !(dbAttempted && !dbSucceeded) &&
+			flowKey != "create_widget" && flowKey != "edit_widget" &&
+			flowKey != "create_presentation" && flowKey != "export_excel" && widgetSlug == ""
+		if resp.StatusCode != http.StatusOK {
+			s.log.Warn("upstream-runde ikke OK", "status", resp.StatusCode)
+		}
+		calls, usage, content := s.relayRound(resp, emit, streamThis)
+		// Tvunget verktøyvalg gjelder kun én runde.
+		delete(full, "tool_choice")
 		resp.Body.Close()
 		promptTokens += usage.PromptTokens
 		completionTokens += usage.CompletionTokens
 		if len(calls) == 0 {
 			trimmed := strings.TrimSpace(content)
+			if !searchNudged && searches == 1 && round < roundCap &&
+				(gaveUpRe.MatchString(trimmed) || len([]rune(trimmed)) < 3) {
+				searchNudged = true
+				s.log.Info("søke-nudge utløst")
+				msgs, _ := full["messages"].([]any)
+				full["messages"] = append(msgs,
+					map[string]any{"role": "assistant", "content": trimmed},
+					map[string]any{"role": "user", "content": "Ikke gi deg etter ett søk: gjør minst to nye søk med helt andre vinkler (offisielle begreper, synonymer, engelsk) og svar deretter."})
+				// Tving et faktisk søk i neste runde — instruks alene ble ignorert.
+				full["tool_choice"] = map[string]any{"type": "function", "function": map[string]any{"name": "web_search"}}
+				step, _ := json.Marshal(map[string]any{"nordavind_step": "Søker med nye vinkler"})
+				emit("data: " + string(step))
+				continue
+			}
+			// Datavern: databasen ble forsøkt men ga aldri ett eneste svar —
+			// da finnes det ingen tall å gjengi. Ærlig feilmelding i kode i
+			// stedet for modellens tekst (som kan være fabrikkert).
+			if dbAttempted && !dbSucceeded {
+				emit(contentSSE("Databasen svarte ikke i tide på dette, så jeg har ingen tall å gi deg akkurat nå — prøv igjen om et lite øyeblikk."))
+				emit("data: [DONE]")
+				return
+			}
+			if streamThis {
+				// Alt synlig er allerede sendt live. Kun tomhets-backstop og
+				// grense-LOGG igjen (aldri omskriving av noe brukeren har sett).
+				switch {
+				case len([]rune(trimmed)) < 3 && usedTool && !actionTool:
+					step, _ := json.Marshal(map[string]any{"nordavind_step": "Oppsummerer funnene"})
+					emit("data: " + string(step))
+					s.streamBackstop(ctx, full, emit, &promptTokens, &completionTokens)
+				case trimmed == "" && !actionTool:
+					emit(contentSSE(backstopGraceful))
+				case len([]rune(trimmed)) > answerLimit:
+					s.log.Info("svar over myk grense (streamet)", "tegn", len([]rune(trimmed)), "grense", answerLimit)
+				}
+				emit("data: [DONE]")
+				return
+			}
 			switch {
-			case len(trimmed) < 40 && usedTool:
+			case len([]rune(trimmed)) < 3 && usedTool && !actionTool:
+				// Reelt tomt (eller bare tegnsetting) etter verktøybruk —
+				// korte, gyldige svar («426 ordre.») skal IKKE hit.
 				// (Nesten) tomt etter verktøybruk → synteser fra det den fant.
 				step, _ := json.Marshal(map[string]any{"nordavind_step": "Oppsummerer funnene"})
 				emit("data: " + string(step))
 				s.streamBackstop(ctx, full, emit, &promptTokens, &completionTokens)
-			case trimmed == "":
+			case trimmed == "" && !actionTool:
 				emit(contentSSE(backstopGraceful))
-			case len([]rune(trimmed)) > wallCharLimit:
-				// Nødbrems: modellen ignorerte korthet og skrev en vegg →
-				// komprimer til noen få HELE setninger (sjelden, minimal sløsing).
-				step, _ := json.Marshal(map[string]any{"nordavind_step": "Strammer svaret"})
-				emit("data: " + string(step))
-				emit(contentSSE(s.compressAnswer(ctx, trimmed)))
 			default:
-				emit(contentSSE(content))
+				final := content
+				if off := groundingOffenders(final, toolResults); len(off) > 0 {
+					s.log.Warn("kildekontroll: avvik i svar", "avvik", strings.Join(off, ", "))
+					// Rene tallavvik er som regel LOVLIGE beregninger (differanser,
+					// prosent) — de slipper gjennom med kildetabellen vedlagt som
+					// kvittering. Diktede NAVN blokkeres fortsatt hardt.
+					if !hasNameOffender(off) {
+						emit(contentSSE(final))
+						if lastDBResult != "" {
+							emit(contentSSE("\n\n```table\n" + lastDBResult + "\n```"))
+						}
+						emit("data: [DONE]")
+						return
+					}
+					step, _ := json.Marshal(map[string]any{"nordavind_step": "Dobbeltsjekker mot kildene"})
+					emit("data: " + string(step))
+					final = s.regroundAnswer(ctx, full, final, off, toolResults, &promptTokens, &completionTokens)
+					if final == "" {
+						// Omforsøket holdt heller ikke: vis kilden i stedet for
+						// utrygg prosa — tabellen for data, kildehenvisning ellers.
+						if lastDBResult != "" {
+							emit(contentSSE("Her er de faktiske dataene:\n```table\n" + lastDBResult + "\n```"))
+						} else {
+							emit(contentSSE("Jeg fikk ikke formulert dette kildefast — se kildene over for detaljene."))
+						}
+						if flowKey == "export_excel" && lastDBResult != "" {
+							emit(contentSSE("\n\n```export\n" + lastDBResult + "\n```"))
+						}
+						emit("data: [DONE]")
+						return
+					}
+				}
+				// Arbeids-dommer for viktige oppgaver: dobbeltsjekk svaret mot
+				// verktøydataene FØR det vises — med egen status i chatten.
+				if usedTool && importantWorkRe.MatchString(lastUserText(full)) {
+					step, _ := json.Marshal(map[string]any{"nordavind_step": "Dette høres viktig ut, la meg dobbeltsjekke arbeidet mitt"})
+					emit("data: " + string(step))
+					if ok, problems := s.verifyWork(ctx, lastUserText(full), final, toolResults); !ok && len(problems) > 0 {
+						s.log.Warn("arbeids-dommer: underkjent", "problemer", strings.Join(problems, "; "))
+						if fixed := s.regroundAnswer(ctx, full, final, problems, toolResults, &promptTokens, &completionTokens); fixed != "" {
+							final = fixed
+						}
+					}
+				}
+				// Innsats-sjekk ETTER kildekontrollen: også et forsiktig
+				// omforsøk som melder tomt etter få søk sendes tilbake.
+				if !searchNudged && searches <= 2 && round < roundCap && gaveUpRe.MatchString(final) {
+					searchNudged = true
+					s.log.Info("søke-nudge utløst", "searches", searches)
+					msgs, _ := full["messages"].([]any)
+					full["messages"] = append(msgs,
+						map[string]any{"role": "assistant", "content": final},
+						map[string]any{"role": "user", "content": "Ikke gi deg ennå: gjør minst to nye søk med helt andre vinkler (offisielle begreper, synonymer, engelsk) og svar deretter."})
+					full["tool_choice"] = map[string]any{"type": "function", "function": map[string]any{"name": "web_search"}}
+					step, _ := json.Marshal(map[string]any{"nordavind_step": "Søker med nye vinkler"})
+					emit("data: " + string(step))
+					continue
+				}
+				emit(contentSSE(final))
+			}
+			// Eksportflyt: eksportkortet leveres ALLTID i kode — brukeren ba
+			// om eksport, da skal valget stå der uten oppfølgingsspørsmål.
+			if flowKey == "export_excel" && lastDBResult != "" && !strings.Contains(content, "```export") {
+				emit(contentSSE("\n\n```export\n" + lastDBResult + "\n```"))
+			}
+			// Bulletproof: ny widget skal ALLTID rendres, selv om modellen
+			// glemmer blokka i svaret sitt.
+			if createdWidget != "" && !strings.Contains(content, "```widget") {
+				emit(contentSSE("\n\n```widget\n" + createdWidget + "\n```"))
 			}
 			emit("data: [DONE]")
 			return
@@ -289,6 +546,50 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		// Eskalering: modellen ba om å kontakte en person. Rendrer compose-kortet
 		// deterministisk og avslutter — ingen fri-tekst-blokk å bomme på.
 		for _, c := range calls {
+			if c.Name == "mail_compose" {
+				var ma struct {
+					ToEmail    string `json:"to_email"`
+					ToName     string `json:"to_name"`
+					Subject    string `json:"subject"`
+					Body       string `json:"body"`
+					AttachSQL  string `json:"attach_sql"`
+					AttachConn string `json:"attach_connection_id"`
+					AttachName string `json:"attach_filename"`
+				}
+				_ = json.Unmarshal([]byte(c.Args.String()), &ma)
+				spec := map[string]any{
+					"to":      []map[string]string{},
+					"subject": ma.Subject,
+					"body":    ma.Body,
+				}
+				if strings.TrimSpace(ma.ToEmail) != "" {
+					spec["to"] = []map[string]string{{"name": ma.ToName, "address": ma.ToEmail}}
+				}
+				// Kjørte modellen spørringen FØR kortet (vanlig mønster) og
+				// brukeren ba om vedlegg/oversikt: fest samme spørring
+				// deterministisk i stedet for å kreve attach_sql-disiplin.
+				if strings.TrimSpace(ma.AttachSQL) == "" && lastDBSQL != "" &&
+					attachHintRe.MatchString(lastUserText(full)) {
+					ma.AttachSQL, ma.AttachConn = lastDBSQL, lastDBConn
+				}
+				if strings.TrimSpace(ma.AttachSQL) != "" {
+					if user, ok := ctx.Value(userKey).(store.User); ok {
+						meta, _ := json.Marshal(map[string]any{"nordavind_step": "Bygger Excel-vedlegget"})
+						emit("data: " + string(meta))
+						id, name, nrows, errMsg := s.buildQueryAttachment(ctx, user.ID, dbCtx, ma.AttachConn, ma.AttachSQL, ma.AttachName)
+						if errMsg != "" {
+							// Vedlegget feilet: ærlig beskjed + kort uten vedlegg.
+							emit(contentSSE("Fikk ikke laget Excel-vedlegget (" + errMsg + ") — kortet under er uten vedlegg.\n\n"))
+						} else {
+							spec["attachments"] = []map[string]any{{"id": id, "name": name, "rows": nrows}}
+						}
+					}
+				}
+				sj, _ := json.Marshal(spec)
+				emit(contentSSE("```mailcompose\n" + string(sj) + "\n```"))
+				emit("data: [DONE]")
+				return
+			}
 			if c.Name != "contact_person" {
 				continue
 			}
@@ -309,6 +610,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 
 		// Utfør verktøykallene og legg resultatene inn i samtalen.
 		usedTool = true
+		for _, c := range calls {
+			if !readTools[c.Name] {
+				actionTool = true
+			}
+		}
 		assistantCalls := make([]any, 0, len(calls))
 		toolMsgs := make([]any, 0, len(calls))
 		for _, c := range calls {
@@ -325,7 +631,49 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			case "query_database":
 				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Spør databasen"})
 				emit("data: " + string(meta))
+				stopWait := emitAfter(emit, 4*time.Second, "Venter på svar fra databasen")
 				result = s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL)
+				stopWait()
+				dbAttempted = true
+				if strings.HasPrefix(strings.TrimSpace(result), "{") {
+					dbSucceeded = true
+					lastDBResult = result
+					lastDBSQL, lastDBConn = args.SQL, args.ConnectionID
+				}
+				// Send spørringen som metadata så tabellen i svaret kan tilby
+				// live Excel-kobling (frontend fester den til meldingen).
+				if strings.TrimSpace(args.SQL) != "" {
+					qm, _ := json.Marshal(map[string]any{"nordavind_query": map[string]string{
+						"connection_id": args.ConnectionID,
+						"sql":           args.SQL,
+					}})
+					emit("data: " + string(qm))
+				}
+				// Husk siste resultat (til show_table) og rendr tabellen
+				// deterministisk med en gang når brukeren ba om tabell.
+				var qr struct {
+					Columns []string   `json:"columns"`
+					Rows    [][]string `json:"rows"`
+				}
+				if json.Unmarshal([]byte(result), &qr) == nil && len(qr.Columns) > 0 {
+					lastCols, lastRows = qr.Columns, qr.Rows
+					if wantsTable && !tableShown && len(qr.Rows) > 0 {
+						emit(contentSSE(tableBlock(qr.Columns, qr.Rows)))
+						tableShown = true
+						result += "\n\n(Tabellen er allerede vist til brukeren — IKKE gjengi radene i tekst, legg til maks én kort setning.)"
+					}
+				}
+			case "show_table":
+				switch {
+				case tableShown:
+					result = "Tabellen er allerede vist til brukeren. Svar med maks én kort setning."
+				case len(lastCols) > 0:
+					emit(contentSSE(tableBlock(lastCols, lastRows)))
+					tableShown = true
+					result = "Tabellen vises nå til brukeren. Svar med maks én kort setning — ikke gjengi radene."
+				default:
+					result = "Ingen data å vise ennå — kjør query_database først, så show_table."
+				}
 			case "fetch_url":
 				step := "Leser en side"
 				if u := strings.TrimSpace(args.URL); u != "" {
@@ -351,17 +699,80 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				default:
 					result = s.runListAgents(ctx)
 				}
-			case "start_mission":
-				var m struct {
-					Goal     string `json:"goal"`
-					Criteria string `json:"criteria"`
+			case "mail_search":
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Søker i e-posten"})
+				emit("data: " + string(meta))
+				if uid, ok := s.m365Connected(ctx); ok {
+					result = s.runMailSearch(ctx, uid, args.Query)
+				} else {
+					result = "Microsoft 365 er ikke koblet til."
 				}
-				_ = json.Unmarshal([]byte(c.Args.String()), &m)
-				result = s.runStartMission(ctx, editID, m.Goal, m.Criteria)
+			case "mail_read":
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Leser e-posten"})
+				emit("data: " + string(meta))
+				var ma struct {
+					MailID string `json:"mail_id"`
+				}
+				json.Unmarshal([]byte(c.Args.String()), &ma)
+				if uid, ok := s.m365Connected(ctx); ok {
+					result = s.runMailRead(ctx, uid, ma.MailID)
+				} else {
+					result = "Microsoft 365 er ikke koblet til."
+				}
+			case "m365_search":
+				var ma struct {
+					Query string `json:"query"`
+				}
+				_ = json.Unmarshal([]byte(c.Args.String()), &ma)
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Søker i OneDrive: " + ma.Query})
+				emit("data: " + string(meta))
+				if uid, ok := s.m365Connected(ctx); ok {
+					result = s.runM365Search(ctx, uid, ma.Query)
+				} else {
+					result = "Microsoft 365 er ikke koblet til."
+				}
+			case "m365_read":
+				var ma struct {
+					FileID string `json:"file_id"`
+					Name   string `json:"name"`
+				}
+				_ = json.Unmarshal([]byte(c.Args.String()), &ma)
+				step := "Leser fil"
+				if ma.Name != "" {
+					step = "Leser: " + ma.Name
+				}
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": step})
+				emit("data: " + string(meta))
+				if uid, ok := s.m365Connected(ctx); ok {
+					result = s.runM365Read(ctx, uid, ma.FileID, ma.Name)
+				} else {
+					result = "Microsoft 365 er ikke koblet til."
+				}
+			case "connect_database":
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Tester tilkoblingen"})
+				emit("data: " + string(meta))
+				result = s.runConnectDatabase(ctx, c.Args.String(), emit)
+			case "connect_m365":
+				result = s.runConnectM365(ctx, emit)
+			case "check_m365":
+				result = s.runCheckM365(ctx)
+			case "save_m365_app":
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Lagrer app-registreringen"})
+				emit("data: " + string(meta))
+				result = s.runSaveM365App(ctx, c.Args.String())
+			case "setup_routine":
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Setter opp rutinen"})
+				emit("data: " + string(meta))
+				result = s.runSetupRoutine(ctx, editID, c.Args.String())
 			case "set_widget":
 				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Bygger widget"})
 				emit("data: " + string(meta))
 				result = s.runWidgetOp(ctx, widgetSlug, c.Args.String())
+				if widgetSlug == "" {
+					if m := widgetSlugRe.FindStringSubmatch(result); m != nil {
+						createdWidget = m[1]
+					}
+				}
 				emit(`data: {"nordavind_widget_updated":true}`)
 			default:
 				if q := strings.TrimSpace(args.Query); q != "" {
@@ -371,12 +782,17 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				}
 				searches++
 				var sources []sourceRef
+				stopWait := emitAfter(emit, 4*time.Second, "Søker dypere")
 				result, sources = s.runWebSearch(ctx, args.Query)
+				stopWait()
 				if len(sources) > 0 {
 					// Kildene sendes som metadata til frontend — de skal ikke stå i svaret.
 					meta, _ := json.Marshal(map[string]any{"nordavind_sources": sources})
 					emit("data: " + string(meta))
 				}
+			}
+			if readTools[c.Name] {
+				toolResults = append(toolResults, result)
 			}
 			assistantCalls = append(assistantCalls, map[string]any{
 				"id":   c.ID,
@@ -449,28 +865,30 @@ type sourceRef struct {
 // wallCharLimit: over dette regnes svaret som en «vegg» og komprimeres (nødbrems).
 const wallCharLimit = 600
 
+// answerCharLimit: flytens MaxChars når intent-modus har satt den, ellers
+// standard nødbrems-grense.
+func answerCharLimit(full map[string]any) int {
+	if v, ok := full[flowMaxField].(int); ok && v > 0 {
+		return v
+	}
+	if v, ok := full[flowMaxField].(float64); ok && v > 0 {
+		return int(v)
+	}
+	return wallCharLimit
+}
+
 const compressSystem = "Komprimer teksten under til MAKS 3 korte, HELE setninger på norsk. Anbefaling/" +
 	"konklusjon først, deretter bare det aller viktigste. Behold nøkkeltall og navn. ALDRI liste, " +
 	"overskrifter eller punkt-for-punkt. Behold samme mening, bare tettere. Svar kun med den komprimerte teksten."
-
-// compressAnswer strammer et for langt svar til noen få hele setninger. Feiler
-// kallet, returneres originalen (heller en vegg enn blankt — men svært sjelden).
-func (s *Server) compressAnswer(ctx context.Context, text string) string {
-	out, err := s.llmComplete(ctx, compressSystem, text, 260)
-	if err != nil || strings.TrimSpace(out) == "" {
-		return text
-	}
-	return strings.TrimSpace(out)
-}
 
 // backstopNudge ber modellen konkludere fra det den alt har hentet, aldri tomt.
 const backstopNudge = "Verktøyene er ikke lenger tilgjengelige. Svar NÅ i MAKS 2-3 korte setninger med KUN det " +
 	"viktigste fra det du har funnet — anbefaling/konklusjon først. ALDRI en liste eller punkt-for-punkt-" +
 	"gjennomgang av flere ting, ALDRI en lang oppsummering. Velg det ene som betyr mest. Svar aldri tomt."
 
-// backstopGraceful er den siste, varme utveien hvis alt annet gir tomt.
-const backstopGraceful = "Jeg fant en del, men rakk ikke å lande det rent nå. Vil du at jeg går grundig " +
-	"til verks på dette?"
+// backstopGraceful er den siste utveien hvis alt annet gir tomt: en ærlig,
+// kort feilmelding — aldri en påstand om utført arbeid.
+const backstopGraceful = "Klarte ikke hente et svar nå — prøv igjen."
 
 // streamBackstop kjøres når et svar kom tomt: ett synteser-kall (uten verktøy) på
 // samtalen slik den står — all verktøy-data er alt i konteksten. Gir det fortsatt
@@ -498,7 +916,7 @@ func (s *Server) streamBackstop(ctx context.Context, full map[string]any, emit f
 	resp.Body.Close()
 	*promptTokens += usage.PromptTokens
 	*completionTokens += usage.CompletionTokens
-	if len(strings.TrimSpace(content)) < 40 {
+	if len([]rune(strings.TrimSpace(content))) < 3 {
 		emit(contentSSE(backstopGraceful))
 	}
 }
@@ -532,6 +950,8 @@ func (s *Server) runWebSearch(ctx context.Context, query string) (string, []sour
 	if len(results) > 3 {
 		results = results[:3]
 	}
+	// Alltid full sidehenting: snippet-søket ga feilkoblinger (24AI-saken) —
+	// korrekthet vinner over fart, Jacobs beslutning 2026-07-26.
 	pages := s.search.FetchPages(ctx, results, 2800)
 	s.log.Info("websøk", "query", query, "treff", len(results))
 
@@ -539,5 +959,52 @@ func (s *Server) runWebSearch(ctx context.Context, query string) (string, []sour
 	for _, r := range results {
 		refs = append(refs, sourceRef{Title: r.Title, URL: r.URL})
 	}
-	return search.FormatContext(query, results, pages), refs
+	return search.FormatContext(query, results, pages) +
+		"\nTrenger du mer enn dette: kall fetch_url på den mest relevante kilden.", refs
 }
+
+// flowNeedsDB: flyten lover databaseverktøy i flyt-tabellen.
+func flowNeedsDB(flowKey string) bool {
+	f, ok := intent.Flows[flowKey]
+	if !ok {
+		return false
+	}
+	for _, t := range f.Tools {
+		if t == intent.ToolQueryDatabase || t == intent.ToolShowTable {
+			return true
+		}
+	}
+	return false
+}
+
+// flowAcks: momentane kvitteringer per verktøyflyt — sendes av koden før
+// modellen starter, så selv trege spørringer FØLES umiddelbare.
+var flowAcks = map[string]string{
+	"data_question":  "Sjekker tallene nå.",
+	"show_table":     "Henter radene.",
+	"web_fact":       "Søker det opp.",
+	"m365_files":     "Ser i filene dine.",
+	"create_routine": "Setter opp rutinen.",
+	"edit_routine":   "Justerer rutinen.",
+}
+
+// emitAfter sender en steg-status hvis operasjonen fortsatt pågår etter d.
+// Returnert funksjon stanser varselet (kalles når operasjonen er ferdig).
+func emitAfter(emit func(string), d time.Duration, status string) func() {
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-done:
+		case <-time.After(d):
+			meta, _ := json.Marshal(map[string]any{"nordavind_step": status})
+			emit("data: " + string(meta))
+		}
+	}()
+	return func() { close(done) }
+}
+
+// gaveUpRe: svar som melder tomt uten reell innsats.
+var gaveUpRe = regexp.MustCompile(`(?i)fant (ikke|ingen)|ingen pålitelig|ikke pålitelig informasjon`)
+
+// attachHintRe: brukeren ba om fil/vedlegg/oversikt i e-posten.
+var attachHintRe = regexp.MustCompile(`(?i)vedlegg|excel|xlsx|regneark|oversikt|rapport|liste|fil\b`)

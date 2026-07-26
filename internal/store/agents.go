@@ -12,17 +12,20 @@ import (
 // oppgave mot en tilkobling på en fast frekvens.
 // Standard er kun lesetilgang; skrivetilgang må settes eksplisitt.
 type Agent struct {
-	ID              string     `json:"id"`
-	Name            string     `json:"name"`
-	Task            string     `json:"task"`
-	ConnectionID    string     `json:"connection_id"`
-	ScheduleLabel   string     `json:"schedule_label"`   // menneskelig, f.eks. "hver dag kl 08:00"
-	IntervalSeconds int        `json:"interval_seconds"` // hvor ofte den kjøres
-	RunTime         string     `json:"run_time"`         // HH:MM for dag/uke-intervaller
-	DailyTokenLimit int        `json:"daily_token_limit"`
-	WriteAccess     bool       `json:"write_access"`
-	Enabled         bool       `json:"enabled"`
-	PushEnabled     bool       `json:"push_enabled"`
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Personality     string `json:"personality"`  // brukersatt lynne, farger tolknings-tonen og trollet i farmen
+	Category        string `json:"category"`     // brukersatt kategori - styrer klynge og farge i agent-grafen
+	HasResponse     bool   `json:"has_response"` // siste kjøring ga et resultat brukeren ikke har åpnet ennå
+	Task            string `json:"task"`
+	ConnectionID    string `json:"connection_id"`
+	ScheduleLabel   string `json:"schedule_label"`   // menneskelig, f.eks. "hver dag kl 08:00"
+	IntervalSeconds int    `json:"interval_seconds"` // hvor ofte den kjøres
+	RunTime         string `json:"run_time"`         // HH:MM for dag/uke-intervaller
+	DailyTokenLimit int    `json:"daily_token_limit"`
+	WriteAccess     bool   `json:"write_access"`
+	Enabled         bool   `json:"enabled"`
+	PushEnabled     bool   `json:"push_enabled"`
 
 	// Oppdrags-modus: agenten jobber mot et mål over flere kjøringer og gir seg
 	// først når det er nådd.
@@ -35,10 +38,23 @@ type Agent struct {
 	MissionBudget    int    `json:"mission_budget"`    // totalt token-tak for hele oppdraget (0 = ubegrenset)
 	MissionActivity  string `json:"mission_activity"`  // live «hva jeg gjør/tenker» (JSON: thought + steps)
 
-	CreatedAt time.Time `json:"created_at"`
-	ChatID          string     `json:"chat_id"`
-	NextRunAt       *time.Time `json:"next_run_at,omitempty"`
-	LastRunAt       *time.Time `json:"last_run_at,omitempty"`
+	// Kompilert plan: spinup finner én gang ut HVORDAN oppgaven løses best, og
+	// lagrer stegene her. Hver kjøring utfører planen deterministisk i stedet
+	// for å lete på nytt.
+	Plan        string     `json:"plan"`        // JSON: steps + watch + alert_rule
+	PlanStatus  string     `json:"plan_status"` // "" | building | ready | broken
+	PlanError   string     `json:"plan_error"`  // hvorfor planen ikke ble bygget/er ødelagt
+	PlanBuiltAt *time.Time `json:"plan_built_at,omitempty"`
+
+	// Minne mellom kjøringer: rådataene forrige kjøring hentet. Er de identiske
+	// denne gangen, har ingenting endret seg — da trengs verken tolkning eller
+	// varsel. Snapshotet eksponeres ikke til klienten (kan være stort).
+	LastSnapshot string `json:"-"`
+
+	CreatedAt time.Time  `json:"created_at"`
+	ChatID    string     `json:"chat_id"`
+	NextRunAt *time.Time `json:"next_run_at,omitempty"`
+	LastRunAt *time.Time `json:"last_run_at,omitempty"`
 
 	// Internt for scheduleren (ikke eksponert i JSON til klient).
 	TenantID string `json:"-"`
@@ -105,6 +121,16 @@ func (s *Store) migrateAgents() error {
 		`ALTER TABLE agents ADD COLUMN criteria_approved INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE agents ADD COLUMN mission_budget INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE agents ADD COLUMN mission_activity TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN plan TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN plan_status TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN plan_error TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN plan_built_at TIMESTAMP`,
+		`ALTER TABLE agents ADD COLUMN personality TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN category TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN response_seen_at TIMESTAMP`,
+		`ALTER TABLE agent_runs ADD COLUMN alert INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE agents ADD COLUMN last_snapshot TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN last_snapshot_at TIMESTAMP`,
 	} {
 		if _, err := s.db.Exec(col); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column") {
@@ -183,7 +209,8 @@ func (s *Store) ListAgents(userID string) ([]Agent, error) {
 	rows, err := s.db.Query(
 		`SELECT id, name, task, connection_id, schedule_label, interval_seconds,
 		        run_time, daily_token_limit, write_access, enabled, created_at,
-		        next_run_at, last_run_at, chat_id, mission, send_mail, mission_status
+		        next_run_at, last_run_at, chat_id, mission, send_mail, mission_status, plan_status,
+		        personality, mission_activity, category
 		 FROM agents WHERE user_id = ? ORDER BY created_at DESC`,
 		userID,
 	)
@@ -199,7 +226,8 @@ func (s *Store) ListAgents(userID string) ([]Agent, error) {
 		if err := rows.Scan(&a.ID, &a.Name, &a.Task, &a.ConnectionID, &a.ScheduleLabel,
 			&a.IntervalSeconds, &a.RunTime, &a.DailyTokenLimit, &write, &enabled,
 			&a.CreatedAt, &a.NextRunAt, &a.LastRunAt, &a.ChatID,
-			&mission, &sendMail, &a.MissionStatus); err != nil {
+			&mission, &sendMail, &a.MissionStatus, &a.PlanStatus,
+			&a.Personality, &a.MissionActivity, &a.Category); err != nil {
 			return nil, err
 		}
 		a.WriteAccess = write != 0
@@ -208,7 +236,88 @@ func (s *Store) ListAgents(userID string) ([]Agent, error) {
 		a.SendMail = sendMail != 0
 		out = append(out, a)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Ulest svar: siste kjøring med faktisk output som er nyere enn sist
+	// brukeren åpnet agent-chatten. Én spørring for alle agentene.
+	unseen, err := s.db.Query(
+		`SELECT r.agent_id
+		 FROM agent_runs r
+		 JOIN agents a ON a.id = r.agent_id
+		 WHERE a.user_id = ? AND r.status = 'ok' AND r.output != ''
+		 GROUP BY r.agent_id
+		 HAVING MAX(r.started_at) > COALESCE(a.response_seen_at, '1970-01-01')`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer unseen.Close()
+	fresh := map[string]bool{}
+	for unseen.Next() {
+		var id string
+		if err := unseen.Scan(&id); err != nil {
+			return nil, err
+		}
+		fresh[id] = true
+	}
+	for i := range out {
+		out[i].HasResponse = fresh[out[i].ID]
+	}
+	return out, unseen.Err()
+}
+
+// AgentRunEvent er én kjøring i historikk-grafen: når, for hvilken agent,
+// og om den la igjen et resultat.
+type AgentRunEvent struct {
+	AgentID   string    `json:"agent_id"`
+	StartedAt time.Time `json:"started_at"`
+	Status    string    `json:"status"`
+	HasOutput bool      `json:"has_output"`
+	Alert     bool      `json:"alert"`  // «Funn!» — kjøringen fant noe med verdi
+	Output    string    `json:"output"` // meldingen (kappet), til pille-ekspansjonen
+}
+
+// AgentRunsSince returnerer alle kjøringer for brukerens agenter etter et
+// tidspunkt (til trådgrafen), eldste først.
+func (s *Store) AgentRunsSince(userID string, since time.Time) ([]AgentRunEvent, error) {
+	rows, err := s.db.Query(
+		`SELECT r.agent_id, r.started_at, r.status, r.output != '', r.alert,
+		        substr(r.output, 1, 4000)
+		 FROM agent_runs r
+		 JOIN agents a ON a.id = r.agent_id
+		 WHERE a.user_id = ? AND r.started_at >= ?
+		 ORDER BY r.started_at`,
+		userID, since,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AgentRunEvent
+	for rows.Next() {
+		var e AgentRunEvent
+		var hasOut, alert int
+		if err := rows.Scan(&e.AgentID, &e.StartedAt, &e.Status, &hasOut, &alert, &e.Output); err != nil {
+			return nil, err
+		}
+		e.HasOutput = hasOut != 0
+		e.Alert = alert != 0
+		out = append(out, e)
+	}
 	return out, rows.Err()
+}
+
+// MarkAgentResponseSeen registrerer at brukeren har åpnet agentens chat —
+// noden glir da tilbake fra svar-seksjonen i grafen.
+func (s *Store) MarkAgentResponseSeen(agentID, userID string) error {
+	_, err := s.db.Exec(
+		`UPDATE agents SET response_seen_at = ? WHERE id = ? AND user_id = ?`,
+		time.Now(), agentID, userID,
+	)
+	return err
 }
 
 // DueAgents returnerer aktiverte agenter som skal kjøres nå.
@@ -216,7 +325,7 @@ func (s *Store) DueAgents(now time.Time) ([]Agent, error) {
 	rows, err := s.db.Query(
 		`SELECT id, tenant_id, user_id, name, task, connection_id, schedule_label,
 		        interval_seconds, run_time, daily_token_limit, write_access, next_run_at, chat_id, push_enabled,
-		        mission, send_mail, mission_state, mission_status
+		        mission, send_mail, mission_state, mission_status, plan, plan_status, last_snapshot, personality
 		 FROM agents
 		 WHERE enabled = 1 AND mission = 0 AND next_run_at IS NOT NULL AND next_run_at <= ?
 		 ORDER BY next_run_at`,
@@ -234,7 +343,8 @@ func (s *Store) DueAgents(now time.Time) ([]Agent, error) {
 		if err := rows.Scan(&a.ID, &a.TenantID, &a.UserID, &a.Name, &a.Task,
 			&a.ConnectionID, &a.ScheduleLabel, &a.IntervalSeconds, &a.RunTime,
 			&a.DailyTokenLimit, &write, &a.NextRunAt, &a.ChatID, &push,
-			&mission, &sendMail, &a.MissionState, &a.MissionStatus); err != nil {
+			&mission, &sendMail, &a.MissionState, &a.MissionStatus,
+			&a.Plan, &a.PlanStatus, &a.LastSnapshot, &a.Personality); err != nil {
 			return nil, err
 		}
 		a.WriteAccess = write != 0
@@ -245,6 +355,96 @@ func (s *Store) DueAgents(now time.Time) ([]Agent, error) {
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+// SetPlanStatus setter plan-tilstanden (building/ready/broken) og en evt. årsak.
+// Tømmer ikke selve planen — en «broken» plan beholdes til den er bygget på nytt.
+func (s *Store) SetPlanStatus(agentID, status, reason string) error {
+	_, err := s.db.Exec(
+		`UPDATE agents SET plan_status = ?, plan_error = ? WHERE id = ?`,
+		status, reason, agentID,
+	)
+	return err
+}
+
+// SetAgentPlan lagrer en ferdig kompilert plan og markerer den som klar.
+func (s *Store) SetAgentPlan(agentID, plan string) error {
+	_, err := s.db.Exec(
+		`UPDATE agents SET plan = ?, plan_status = 'ready', plan_error = '', plan_built_at = ?
+		 WHERE id = ?`,
+		plan, time.Now(), agentID,
+	)
+	return err
+}
+
+// ClearAgentPlan fjerner planen helt (brukes når oppgaven endres, så den gamle
+// planen aldri kjøres mot en ny oppgave). Snapshotet nullstilles med, siden
+// gamle data ikke er sammenlignbare med det en ny plan henter.
+func (s *Store) ClearAgentPlan(agentID string) error {
+	_, err := s.db.Exec(
+		`UPDATE agents SET plan = '', plan_status = '', plan_error = '', plan_built_at = NULL,
+		        last_snapshot = '', last_snapshot_at = NULL
+		 WHERE id = ?`, agentID,
+	)
+	return err
+}
+
+// AgentPersona er de brukersatte identitetsfeltene. Nil-peker = ikke endre;
+// tom streng = fjern verdien.
+type AgentPersona struct {
+	Name        string
+	Personality *string
+	Category    *string
+}
+
+// SetAgentPersona setter navn, personlighet og/eller kategori.
+// Chattens tittel følger navnet, som ellers.
+func (s *Store) SetAgentPersona(agentID, userID string, p AgentPersona) error {
+	if err := s.agentOwned(agentID, userID); err != nil {
+		return err
+	}
+	if n := strings.TrimSpace(p.Name); n != "" {
+		if _, err := s.db.Exec(`UPDATE agents SET name=? WHERE id=?`, n, agentID); err != nil {
+			return err
+		}
+		if _, err := s.db.Exec(`UPDATE chats SET title=? WHERE agent_id=?`, n, agentID); err != nil {
+			return err
+		}
+	}
+	if p.Personality != nil {
+		if _, err := s.db.Exec(`UPDATE agents SET personality=? WHERE id=?`,
+			strings.TrimSpace(*p.Personality), agentID); err != nil {
+			return err
+		}
+	}
+	if p.Category != nil {
+		if _, err := s.db.Exec(`UPDATE agents SET category=? WHERE id=?`,
+			strings.TrimSpace(*p.Category), agentID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SetAgentSnapshot lagrer rådataene fra siste kjøring, så neste kjøring kan se
+// hva som faktisk er endret.
+func (s *Store) SetAgentSnapshot(agentID, snapshot string) error {
+	_, err := s.db.Exec(
+		`UPDATE agents SET last_snapshot = ?, last_snapshot_at = ? WHERE id = ?`,
+		snapshot, time.Now(), agentID,
+	)
+	return err
+}
+
+// AgentPlanStatus leser plan-feltene for én agent.
+func (s *Store) AgentPlanStatus(agentID string) (plan, status, planErr string, err error) {
+	err = s.db.QueryRow(
+		`SELECT plan, plan_status, plan_error FROM agents WHERE id = ?`, agentID,
+	).Scan(&plan, &status, &planErr)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", "", ErrNotFound
+	}
+	return plan, status, planErr, err
 }
 
 // SetMissionState lagrer agentens komprimerte oppdrags-tilstand mellom kjøringer.
@@ -313,7 +513,7 @@ func (s *Store) MissionTokensSpent(agentID string) (int, error) {
 }
 
 // missionScanCols er felt-lista for å lese en agent med alle oppdrags-felt.
-const missionScanCols = `id, tenant_id, user_id, name, task, connection_id, chat_id,
+const missionScanCols = `id, tenant_id, user_id, name, task, connection_id, chat_id, schedule_label,
 	daily_token_limit, enabled, push_enabled,
 	mission, send_mail, mission_state, mission_status, mission_criteria, criteria_approved, mission_budget,
 	mission_activity`
@@ -322,7 +522,7 @@ func scanMission(sc interface{ Scan(...any) error }) (Agent, error) {
 	var a Agent
 	var enabled, push, mission, sendMail, approved int
 	err := sc.Scan(&a.ID, &a.TenantID, &a.UserID, &a.Name, &a.Task, &a.ConnectionID, &a.ChatID,
-		&a.DailyTokenLimit, &enabled, &push,
+		&a.ScheduleLabel, &a.DailyTokenLimit, &enabled, &push,
 		&mission, &sendMail, &a.MissionState, &a.MissionStatus, &a.MissionCriteria, &approved, &a.MissionBudget,
 		&a.MissionActivity)
 	a.Enabled = enabled != 0
@@ -386,14 +586,15 @@ type AgentRun struct {
 	Output     string
 	TokensUsed int
 	Error      string
+	Alert      bool // kjøringen fant noe med verdi (agentens egen varselregel)
 }
 
 // RecordRun logger resultatet av en agent-kjøring.
 func (s *Store) RecordRun(agentID string, r AgentRun) error {
 	_, err := s.db.Exec(
-		`INSERT INTO agent_runs (agent_id, status, output, tokens_used, error)
-		 VALUES (?, ?, ?, ?, ?)`,
-		agentID, r.Status, r.Output, r.TokensUsed, r.Error,
+		`INSERT INTO agent_runs (agent_id, status, output, tokens_used, error, alert)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		agentID, r.Status, r.Output, r.TokensUsed, r.Error, boolToInt(r.Alert),
 	)
 	return err
 }
@@ -479,13 +680,15 @@ func (s *Store) GetAgent(id, userID string) (Agent, error) {
 	err := s.db.QueryRow(
 		`SELECT id, name, task, connection_id, schedule_label, interval_seconds,
 		        run_time, daily_token_limit, write_access, enabled, created_at, chat_id,
-		        mission, mission_status, mission_criteria, criteria_approved, mission_budget
+		        mission, mission_status, mission_criteria, criteria_approved, mission_budget,
+		        plan, plan_status, plan_error
 		 FROM agents WHERE id = ? AND user_id = ?`,
 		id, userID,
 	).Scan(&a.ID, &a.Name, &a.Task, &a.ConnectionID, &a.ScheduleLabel,
 		&a.IntervalSeconds, &a.RunTime, &a.DailyTokenLimit, &write, &enabled,
 		&a.CreatedAt, &a.ChatID,
-		&mission, &a.MissionStatus, &a.MissionCriteria, &approved, &a.MissionBudget)
+		&mission, &a.MissionStatus, &a.MissionCriteria, &approved, &a.MissionBudget,
+		&a.Plan, &a.PlanStatus, &a.PlanError)
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, ErrNotFound
 	}
@@ -505,14 +708,14 @@ func (s *Store) AgentByChat(chatID, userID string) (Agent, error) {
 		        run_time, daily_token_limit, write_access, enabled, created_at,
 		        next_run_at, last_run_at, chat_id, push_enabled,
 		        mission, send_mail, mission_status, mission_criteria, criteria_approved, mission_budget,
-		        mission_activity
+		        mission_activity, plan, plan_status, plan_error, plan_built_at
 		 FROM agents WHERE chat_id = ? AND user_id = ?`,
 		chatID, userID,
 	).Scan(&a.ID, &a.Name, &a.Task, &a.ConnectionID, &a.ScheduleLabel,
 		&a.IntervalSeconds, &a.RunTime, &a.DailyTokenLimit, &write, &enabled,
 		&a.CreatedAt, &a.NextRunAt, &a.LastRunAt, &a.ChatID, &push,
 		&mission, &sendMail, &a.MissionStatus, &a.MissionCriteria, &approved, &a.MissionBudget,
-		&a.MissionActivity)
+		&a.MissionActivity, &a.Plan, &a.PlanStatus, &a.PlanError, &a.PlanBuiltAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, ErrNotFound
 	}

@@ -1,0 +1,30 @@
+{"text": "har jeg fått svar fra revisoren?", "want": "email"}
+{"text": "hva var den siste eposten jeg fikk?", "want": "email"}
+{"text": "noen nye viktige eposter i dag?", "want": "email"}
+{"text": "finn mailen fra Advania om sikkerhetsoppdateringer", "want": "email"}
+{"text": "hva skrev Kari i går?", "want": "email"}
+{"text": "les den nyeste eposten fra banken", "want": "email"}
+{"text": "har det kommet noe fra Vinmonopolet denne uken?", "want": "email"}
+{"text": "sjekk innboksen min", "want": "email"}
+{"text": "hva svarte kunden på tilbudet?", "want": "email"}
+{"text": "vis de fem siste epostene", "want": "email"}
+{"text": "er det noe i innboksen jeg bør se på?", "want": "email"}
+{"text": "fant du en epost om fakturaen fra oktober?", "want": "email"}
+{"text": "send en epost til Kari om møtet i morgen", "want": "email"}
+{"text": "kan du hjelpe meg sende en epost?", "want": "email"}
+{"text": "skriv en epost til kunden og purr på svaret", "want": "email"}
+{"text": "svar Advania at vi tar oppdateringen på fredag", "want": "email"}
+{"text": "lag et utkast til epost om prisøkningen", "want": "email"}
+{"text": "send tilbudet på nytt til ACKES", "want": "email"}
+{"text": "epost til hele salgsavdelingen om fredagsmøtet", "want": "email"}
+{"text": "skriv en hyggelig takkemail til leverandøren", "want": "email"}
+{"text": "finn presentasjonen fra styremøtet", "want": "m365_files"}
+{"text": "hvor mange filer har jeg i OneDrive?", "want": "m365_files"}
+{"text": "lagre dette notatet som bedriftskunnskap", "want": "upload_document"}
+{"text": "hvor mange ordre fikk vi i går?", "want": "data_question"}
+{"text": "hva er beste praksis for kalde salgs-eposter?", "want": "web_fact"}
+{"text": "hjelp meg å formulere en vanskelig beskjed til en ansatt", "want": ""}
+{"text": "koble til outlook-kontoen", "want": "connect_m365"}
+{"text": "er m365-koblingen aktiv?", "want": "manage_connections"}
+{"text": "send meg en oppsummering av innboksen hver morgen", "want": "create_routine"}
+{"text": "takk for hjelpen med mailen!", "want": "smalltalk"}

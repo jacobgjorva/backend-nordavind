@@ -1,0 +1,24 @@
+# Caddy: automatisk HTTPS (Let's Encrypt), statisk frontend + API-proxy.
+# Bytt ut domenet med ditt eget før bruk.
+${NORDAVIND_DOMAIN}
+
+# API-et proxes til Go-backend på loopback.
+handle /v1/* {
+	reverse_proxy 127.0.0.1:8080
+}
+
+# Alt annet er frontend-bygget (SPA med fallback til index.html).
+handle {
+	root * /opt/nordavind/frontend
+	try_files {path} /index.html
+	file_server
+}
+
+encode zstd gzip
+
+header {
+	Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	X-Content-Type-Options "nosniff"
+	X-Frame-Options "DENY"
+	Referrer-Policy "strict-origin-when-cross-origin"
+}

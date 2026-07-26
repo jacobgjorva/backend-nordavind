@@ -47,7 +47,9 @@ type Link struct {
 	ToColumn   string `json:"to_column"`
 }
 
-const queryTimeout = 10 * time.Second
+// queryTimeout: reelle kunde-spørringer (sortering over views uten indeks)
+// trenger romsligere frist enn 10 s — modellen viser status underveis.
+const queryTimeout = 30 * time.Second
 
 // Open åpner en tilkobling og verifiserer den med ping.
 func Open(ctx context.Context, c Creds) (*sql.DB, error) {
@@ -203,10 +205,58 @@ func ReferencedTables(query string) []string {
 	return out
 }
 
-// SafeQuery kjører kun én SELECT-setning mot tillatte tabeller.
+// ExpandViews bytter FROM/JOIN-referanser til kuraterte utsnitt med
+// utsnittets SQL som subquery. Modellen kan dermed bruke utsnittsnavnet uten
+// at råtabellene bak trenger å være tillatt for fri spørring.
+func ExpandViews(query string, views map[string]string) string {
+	for name, sql := range views {
+		re := regexp.MustCompile(`(?i)\b(from|join)\s+` + regexp.QuoteMeta(name) + `\b`)
+		query = re.ReplaceAllString(query, "$1 ("+sql+") AS "+name)
+	}
+	return query
+}
+
+// SafeQueryViewsN er SafeQueryN med kuraterte utsnitt: modellens spørring
+// valideres mot tillatte tabeller + utsnittsnavn, deretter ekspanderes
+// utsnittene server-side. Råtabellene et utsnitt bruker er KUN kjørbare via
+// ekspansjonen — aldri direkte fra modellens egen SQL.
+func SafeQueryViewsN(ctx context.Context, db *sql.DB, driver, query string, allowedTables []string, views map[string]string, rowCap int) ([]string, [][]string, error) {
+	visible := make(map[string]bool, len(allowedTables)+len(views))
+	for _, t := range allowedTables {
+		visible[strings.ToLower(t)] = true
+	}
+	for name := range views {
+		visible[strings.ToLower(name)] = true
+	}
+	for _, r := range ReferencedTables(query) {
+		if !visible[r] {
+			return nil, nil, fmt.Errorf("tabellen %q er ikke tilgjengelig", r)
+		}
+	}
+	expanded := ExpandViews(query, views)
+	all := append([]string{}, allowedTables...)
+	for name, sql := range views {
+		all = append(all, name)
+		all = append(all, ReferencedTables(sql)...)
+	}
+	return SafeQueryN(ctx, db, driver, expanded, all, rowCap)
+}
+
+// SafeQuery kjører kun én SELECT-setning mot tillatte tabeller, med standard
+// radgrense (100 — dimensjonert for LLM-kontekst).
+func SafeQuery(ctx context.Context, db *sql.DB, driver, query string, allowed []string) ([]string, [][]string, error) {
+	return SafeQueryN(ctx, db, driver, query, allowed, maxRows)
+}
+
+// SafeQueryN er SafeQuery med eksplisitt radgrense — widgets og eksport trenger
+// langt flere rader enn LLM-konteksten (100 rader kuttet tidsserier til to
+// måneder når dimensjonskolonner blåste opp radantallet).
 // Radgrensen håndheves alltid ved lesing; LIMIT legges kun på for
 // dialekter som støtter det (SQL Server bruker TOP og hopper over).
-func SafeQuery(ctx context.Context, db *sql.DB, driver, query string, allowed []string) ([]string, [][]string, error) {
+func SafeQueryN(ctx context.Context, db *sql.DB, driver, query string, allowed []string, rowCap int) ([]string, [][]string, error) {
+	if rowCap <= 0 {
+		rowCap = maxRows
+	}
 	q := strings.TrimSpace(commentRe.ReplaceAllString(query, " "))
 	q = strings.TrimSuffix(q, ";")
 	if strings.Contains(q, ";") {
@@ -239,7 +289,7 @@ func SafeQuery(ctx context.Context, db *sql.DB, driver, query string, allowed []
 	}
 
 	if driver != "mssql" && !limitRe.MatchString(q) {
-		q = fmt.Sprintf("%s LIMIT %d", q, maxRows)
+		q = fmt.Sprintf("%s LIMIT %d", q, rowCap)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
@@ -249,12 +299,16 @@ func SafeQuery(ctx context.Context, db *sql.DB, driver, query string, allowed []
 	// driveren støtter det, slik at en eventuell skrivende setning som
 	// slipper forbi mønstervernet avvises på DB-nivå. Faller tilbake til
 	// et vanlig kall for drivere som ikke støtter ReadOnly.
+	var rows *sql.Rows
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return nil, nil, err
+	if err == nil {
+		defer tx.Rollback()
+		rows, err = tx.QueryContext(ctx, q)
+	} else {
+		// Driveren støtter ikke read-only-transaksjoner (f.eks. enkelte
+		// SQL Server-oppsett): kjør vanlig kall — regex-vernet står fortsatt.
+		rows, err = db.QueryContext(ctx, q)
 	}
-	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, q)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -270,7 +324,7 @@ func SafeQuery(ctx context.Context, db *sql.DB, driver, query string, allowed []
 	for i := range vals {
 		ptrs[i] = &vals[i]
 	}
-	for rows.Next() && len(out) < maxRows {
+	for rows.Next() && len(out) < rowCap {
 		if err := rows.Scan(ptrs...); err != nil {
 			return nil, nil, err
 		}

@@ -76,7 +76,19 @@ func Open(path string) (*Store, error) {
 	if err := s.migrateNotes(); err != nil {
 		return nil, err
 	}
-	return s, s.migrateEmployees()
+	if err := s.migrateExportLinks(); err != nil {
+		return nil, err
+	}
+	if err := s.migrateM365(); err != nil {
+		return nil, err
+	}
+	if err := s.migrateOneDrive(); err != nil {
+		return nil, err
+	}
+	if err := s.migrateEmployees(); err != nil {
+		return nil, err
+	}
+	return s, s.migrateIntentDecisions()
 }
 
 func (s *Store) Close() error { return s.db.Close() }

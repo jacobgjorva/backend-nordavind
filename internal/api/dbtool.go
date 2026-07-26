@@ -21,6 +21,9 @@ type dbConn struct {
 	conn    store.Connection
 	creds   connector.Creds
 	allowed []string
+	// views: kuraterte utsnitt (navn → SQL). Kjøres ved server-side
+	// ekspansjon — råtabellene bak er IKKE fritt spørrbare.
+	views map[string]string
 }
 
 // dbToolContext bygger query_database-verktøyet for innlogget bruker.
@@ -54,6 +57,21 @@ func (s *Server) buildDBTool(tenantID, userID, onlyConnID string) *dbToolCtx {
 			continue
 		}
 		views, _ := s.store.ConnectionViews(c.ID)
+		// SIKKERHET: et utsnitt arver tilgangen til tabellen det er laget for
+		// («<tabell>_query») — uten dette så brukere UTEN tabelltilgang likevel
+		// alle utsnittene på koblingen.
+		accessible := map[string]bool{}
+		for _, tb := range tables {
+			accessible[strings.ToLower(tb.Name)] = true
+		}
+		filtered := views[:0]
+		for _, v := range views {
+			base := strings.ToLower(strings.TrimSuffix(v.Name, "_query"))
+			if accessible[base] {
+				filtered = append(filtered, v)
+			}
+		}
+		views = filtered
 		if len(tables) == 0 && len(views) == 0 {
 			s.log.Warn("db-verktøy: dropper kobling, ingen tilgjengelige tabeller/views", "connection", c.Name, "id", c.ID, "user", userID)
 			continue
@@ -97,17 +115,36 @@ func (s *Server) buildDBTool(tenantID, userID, onlyConnID string) *dbToolCtx {
 		for _, l := range links {
 			fmt.Fprintf(&schema, "JOIN: %s.%s = %s.%s\n", l.FromTable, l.FromColumn, l.ToTable, l.ToColumn)
 		}
+		viewMap := map[string]string{}
+		replaced := map[string]bool{}
 		for _, v := range views {
 			fmt.Fprintf(&schema, "Ferdig spørring %q", v.Name)
 			if v.Description != "" {
 				fmt.Fprintf(&schema, " (%s)", v.Description)
 			}
-			fmt.Fprintf(&schema, ": %s\n", v.SQL)
-			// Tabellene spørringen bruker må være kjørbare selv om de
-			// ikke er valgt enkeltvis.
-			allowed = append(allowed, connector.ReferencedTables(v.SQL)...)
+			fmt.Fprintf(&schema, ": %s — spørres som FROM %s\n", v.SQL, v.Name)
+			// SIKKERHET: et utsnitt ERSTATTER tabellen sin — både utsnittsnavnet
+			// og selve tabellnavnet ekspanderes til utsnittets SQL server-side
+			// (SafeQueryViewsN). Uten dette kunne modellen spørre råtabellen
+			// direkte og hente rader utenfor admin-filteret (2023-utsnitt ga
+			// 2026-rader).
+			sql := strings.TrimSuffix(strings.TrimSpace(v.SQL), ";")
+			viewMap[strings.ToLower(v.Name)] = sql
+			base := strings.ToLower(strings.TrimSuffix(v.Name, "_query"))
+			viewMap[base] = sql
+			replaced[base] = true
+			allowed = append(allowed, v.Name)
 		}
-		t.conns[c.ID] = dbConn{conn: c, creds: creds, allowed: allowed}
+		if len(replaced) > 0 {
+			kept := allowed[:0]
+			for _, name := range allowed {
+				if !replaced[strings.ToLower(name)] {
+					kept = append(kept, name)
+				}
+			}
+			allowed = kept
+		}
+		t.conns[c.ID] = dbConn{conn: c, creds: creds, allowed: allowed, views: viewMap}
 	}
 	if len(t.conns) == 0 {
 		s.log.Warn("db-verktøy: ingen brukbare koblinger, modellen får ingen database", "tenant", tenantID, "user", userID, "onlyConnID", onlyConnID)
@@ -126,7 +163,7 @@ func (s *Server) buildDBTool(tenantID, userID, onlyConnID string) *dbToolCtx {
 				"type": "object",
 				"properties": map[string]any{
 					"connection_id": map[string]any{"type": "string", "description": "id for databasen"},
-					"sql":           map[string]any{"type": "string", "description": "SELECT-spørringen"},
+					"sql":           map[string]any{"type": "string", "description": "SELECT-spørringen. Ved ORDER BY: legg ALLTID til en entydig andresortering (f.eks. dokumentnr eller id) så «nyligste/største» aldri er vilkårlig blant like verdier."},
 				},
 				"required": []string{"connection_id", "sql"},
 			},
@@ -228,8 +265,10 @@ func (s *Server) runDBQuery(ctx context.Context, t *dbToolCtx, connID, query str
 	}
 	defer db.Close()
 
-	cols, rows, err := connector.SafeQuery(ctx, db, dc.creds.Driver, query, dc.allowed)
+	cols, rows, err := connector.SafeQueryViewsN(ctx, db, dc.creds.Driver, query, dc.allowed, dc.views, 0)
 	if err != nil {
+		s.log.Warn("db-spørring feilet", "connection", dc.conn.Name, "driver", dc.creds.Driver,
+			"err", err, "sql", query)
 		// Gi modellen nok kontekst til å rette seg selv i neste runde.
 		msg := "Spørringen feilet: " + err.Error()
 		if strings.Contains(err.Error(), "ikke tilgjengelig") {

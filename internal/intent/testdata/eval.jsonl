@@ -1,0 +1,90 @@
+{"text": "koble til Postgres-basen vår", "want": "connect_database"}
+{"text": "vi har en ny MySQL-server som må inn", "want": "connect_database"}
+{"text": "m365", "want": "connect_m365"}
+{"text": "koble til Microsoft 365", "want": "connect_m365"}
+{"text": "slett Neon-koblingen", "want": "manage_connections"}
+{"text": "deaktiver kunde-databasen", "want": "manage_connections"}
+{"text": "lag et linjediagram over månedlig omsetning", "want": "create_widget"}
+{"text": "trenger en graf over ordre per status", "want": "create_widget"}
+{"text": "gjør stolpene grønne i widgeten", "want": "edit_widget"}
+{"text": "legg til kunde-filter på grafen", "want": "edit_widget"}
+{"text": "lag en presentasjon om salget i år", "want": "create_presentation"}
+{"text": "bygg slides til styremøtet med ferske tall", "want": "create_presentation"}
+{"text": "eksporter tabellen til Excel", "want": "export_excel"}
+{"text": "legg denne i OneDrive med live kobling", "want": "export_excel"}
+{"text": "hvor mye omsatte vi for i juni?", "want": "data_question"}
+{"text": "hvem er største kunden vår?", "want": "data_question"}
+{"text": "trenger en tabell med de 10 nyligste ordrene", "want": "show_table"}
+{"text": "list opp alle ordre fra ACKES", "want": "show_table"}
+{"text": "hvor mye tokens har vi brukt denne måneden?", "want": "usage_stats"}
+{"text": "hva koster AI-bruken oss?", "want": "usage_stats"}
+{"text": "inviter kari@family.no", "want": "manage_users"}
+{"text": "gjør Jacob til admin", "want": "manage_users"}
+{"text": "simuler Kari sin bruker", "want": "impersonate_user"}
+{"text": "jeg vil se appen slik en vanlig ansatt ser den", "want": "impersonate_user"}
+{"text": "hva husker AI-en om oss?", "want": "knowledge_admin"}
+{"text": "godkjenn kunnskapsforslagene", "want": "knowledge_admin"}
+{"text": "lagre dette dokumentet som bedriftskunnskap", "want": "upload_document"}
+{"text": "husk innholdet i denne PDF-en", "want": "upload_document"}
+{"text": "gå gjennom denne leieavtalen for meg", "want": "contract_review"}
+{"text": "hva bør jeg passe på i denne kontrakten?", "want": "contract_review"}
+{"text": "trenger verdi av bitcoin hvert 15 min", "want": "create_routine"}
+{"text": "sjekk lagerstatus hver morgen kl 07", "want": "create_routine"}
+{"text": "kjør rutinen hver halvtime i stedet", "want": "edit_routine"}
+{"text": "endre agenten til å varsle på e-post", "want": "edit_routine"}
+{"text": "legg til en ny ansatt i registeret", "want": "employees_admin"}
+{"text": "hvem jobber i salgsavdelingen?", "want": "employees_admin"}
+{"text": "hva er kursen på polight-aksjen?", "want": "web_fact"}
+{"text": "når ble Telenor grunnlagt?", "want": "web_fact"}
+{"text": "takk for hjelpen!", "want": "smalltalk"}
+{"text": "hei, hva kan du gjøre?", "want": "smalltalk"}
+{"text": "hva er en embedding?", "want": "web_fact"}
+{"text": "trenger kursen til polight når den går over 15kr", "want": "create_routine"}
+{"text": "Opprett en ny kobling", "want": "connect_database"}
+{"text": "vis meg forbruket", "want": "usage_stats"}
+{"text": "hvordan ligger vi an mot budsjett?", "want": "data_question"}
+{"text": "hva er konsumprisindeksen for juni?", "want": "web_fact"}
+{"text": "hva er en holdingstruktur?", "want": "web_fact"}
+{"text": "forklar forskjellen på AS og ENK", "want": "web_fact"}
+{"text": "hva er siste nytt om kunstig intelligens?", "want": "web_fact"}
+{"text": "hvor mange innbyggere har Norge?", "want": "web_fact"}
+{"text": "hva ligger gullprisen på?", "want": "web_fact"}
+{"text": "når er det ferielov å ta ut restferie innen?", "want": "web_fact"}
+{"text": "hva er arbeidsgiveravgiften i 2026?", "want": "web_fact"}
+{"text": "hvem vant sykkelrittet i går?", "want": "web_fact"}
+{"text": "er det streik i transportsektoren nå?", "want": "web_fact"}
+{"text": "hva betyr EBITDA?", "want": "web_fact"}
+{"text": "hvilke land er med i EØS?", "want": "web_fact"}
+{"text": "hva sier finn.no om bruktpriser på varebiler?", "want": "web_fact"}
+{"text": "googl hva GDPR krever ved kundedata", "want": "web_fact"}
+{"text": "hva er minstelønn for lagerarbeidere?", "want": "web_fact"}
+{"text": "finn åpningstidene til tollvesenet", "want": "web_fact"}
+{"text": "hva er inflasjonen i eurosonen?", "want": "web_fact"}
+{"text": "hvor mye kostet strømmen i natt?", "want": "web_fact"}
+{"text": "hvor mye har vi solgt av produkt X denne måneden?", "want": "data_question"}
+{"text": "hva er snittprisen vi tar for frakt?", "want": "data_question"}
+{"text": "si fra når dollaren går under 10 kr", "want": "create_routine"}
+{"text": "endre bitcoin-varselet til hvert kvarter", "want": "edit_routine"}
+{"text": "skriv et sammendrag av denne artikkelen jeg limer inn", "want": ""}
+{"text": "hjelp meg å svare på denne e-posten fra Skatteetaten", "want": ""}
+{"text": "hvordan ligger vi an mot bransjesnittet vi la inn i fjor?", "want": "data_question"}
+{"text": "lag en graf over oljeprisen siste år", "want": "create_widget"}
+{"text": "hva synes du om prisstrategien vår?", "want": ""}
+{"text": "hvor mange filer har jeg?", "want": "m365_files"}
+{"text": "kan du se filene mine?", "want": "m365_files"}
+{"text": "er det trygt å gi dere databasetilgang?", "want": ""}
+{"text": "hvilke datakilder BURDE vi koble til?", "want": ""}
+{"text": "hva skjer med dataene våre hvis vi sier opp?", "want": ""}
+{"text": "excel-filene på onedrive skal være live", "want": "export_excel"}
+{"text": "hvem har tilgang til kundedatabasen?", "want": "manage_users"}
+{"text": "se om scaleway har et api som gir oss kostnad per token bruk", "want": "web_fact"}
+{"text": "Har jeg tilgang til intern data?", "want": "data_question"}
+{"text": "hvilke data kan jeg se?", "want": "data_question"}
+{"text": "har jeg fått svar fra Kari?", "want": "email"}
+{"text": "finn e-posten om tilbudet fra ACKES", "want": "email"}
+{"text": "noen viktige e-poster i dag?", "want": "email"}
+{"text": "kan du hjelpe meg sende en epost?", "want": "email"}
+{"text": "send meg en oppsummering av innboksen hver morgen", "want": "create_routine"}
+{"text": "skriv en hyggelig takkemail til leverandøren", "want": "email"}
+{"text": "svar Advania at vi tar oppdateringen på fredag", "want": "email"}
+{"text": "lag en epost til kunden med en excel-oversikt over ordrene som vedlegg", "want": "email"}
