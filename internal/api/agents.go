@@ -272,6 +272,20 @@ func (s *Server) handleAgentRuns(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"runs": runs})
 }
 
+// handleMarkAgentSeen kvitterer ut et ulest svar — kalles når brukeren
+// ekspanderer funn-pillen i grafen (eller åpner chatten, som også kvitterer).
+func (s *Server) handleMarkAgentSeen(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	if err := s.store.MarkAgentResponseSeen(r.PathValue("id"), user.ID); err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleSetAgentPersona setter navn og/eller personlighet fra farmen.
 func (s *Server) handleSetAgentPersona(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.user(w, r)

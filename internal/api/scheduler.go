@@ -52,7 +52,6 @@ func (s *Server) startScheduler(ctx context.Context) {
 	}()
 }
 
-
 // resumeMissions starter løkker for alle godkjente, aktive oppdrag.
 func (s *Server) resumeMissions(ctx context.Context) {
 	// Oppdrags-modus er fjernet fra produktflyten — agenter er kun rutiner.
@@ -229,12 +228,11 @@ func (s *Server) runAgentOnce(ctx context.Context, a store.Agent, now time.Time)
 		return
 	}
 
-	// Alert («Funn!» i grafen): plan-kjøringer bruker agentens egen varselregel;
-	// frie kjøringer regner et postet resultat som funn.
-	alert := run.alert
-	if !planned {
-		alert = strings.TrimSpace(run.output) != ""
-	}
+	// Alert («Funn!» i grafen): KUN plan-kjøringer, der agentens egen
+	// varselregel har avgjort det. Frie kjøringer har ingen pålitelig
+	// funn-signal — et postet resultat kan like gjerne være «ingenting nytt»,
+	// og en falsk bjelle er verre enn en manglende.
+	alert := planned && run.alert
 	s.store.RecordRun(a.ID, store.AgentRun{Status: "ok", Output: run.output, TokensUsed: run.tokens, Alert: alert})
 	s.postToAgentChat(a, run.output)
 	s.log.Info("agent kjørt", "id", a.ID, "navn", a.Name, "tokens", run.tokens, "varsel", alert)
@@ -490,7 +488,7 @@ func missionTools(dbCtx *dbToolCtx, canSend bool) []any {
 					"next_steps": map[string]any{"type": "string", "description": "hva som gjenstår neste kjøring (tom hvis ferdig)"},
 					"status":     map[string]any{"type": "string", "description": "continue = mer arbeid gjenstår, done = målet er nådd"},
 					"result":     map[string]any{"type": "string", "description": "det brukerrettede resultatet — vises i chatten KUN når du konkluderer (done) eller notify=true"},
-					"notify":      map[string]any{"type": "boolean", "description": "true KUN når du har en konklusjon verdt å poste i chatten nå. Ellers false — da jobber du bare videre, aktiviteten din vises live uansett"},
+					"notify":     map[string]any{"type": "boolean", "description": "true KUN når du har en konklusjon verdt å poste i chatten nå. Ellers false — da jobber du bare videre, aktiviteten din vises live uansett"},
 					"mail": map[string]any{
 						"type":        "object",
 						"description": "KUN hvis du IKKE har send_mail-tillatelse og vil foreslå en mail brukeren selv sender",
