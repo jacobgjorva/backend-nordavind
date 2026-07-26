@@ -197,8 +197,15 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	}
 	// Widget-flytene fra intent-ruting trenger samme feltskjema-instruks som
 	// widget-editoren — uten den famler modellen blindt med set_widget.
-	if widgetSlug == "" && (flowKey == "create_widget" || flowKey == "edit_widget" || flowKey == "create_presentation") {
+	if widgetSlug == "" && (flowKey == "create_widget" || flowKey == "edit_widget") {
 		injectSystem(full, s.widgetSystem(ctx))
+	}
+	// Presentasjonsflyten: kit-katalogen (temaets ferdige slides) i stedet for
+	// widget-skjemaet — modellen velger layout og fyller felter.
+	deckSlug, _ := full["nordavind_deck"].(string)
+	delete(full, "nordavind_deck")
+	if flowKey == "create_presentation" || deckSlug != "" {
+		injectSystem(full, s.deckSystem(ctx, s.deckTheme(ctx, deckSlug)))
 	}
 
 	// Connector-agent: hjelper brukeren koble til eksterne kilder via verktøy.
@@ -234,7 +241,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// Bilder tolkes av vision-modellen uten verktøy — web_search/db gir
 	// tomme svar sammen med bilde-input.
 	if !hasImageMessage(full) {
-		if widgetSlug != "" {
+		if deckSlug != "" {
+			// Åpent presentasjons-canvas: KUN slide-verktøyene, uansett hva
+			// ruteren måtte mene om meldingen.
+			full["tools"] = deckTools(s.deckTheme(ctx, deckSlug))
+		} else if widgetSlug != "" {
 			// Widget-editor: KUN set_widget. Uten query_database/web_search kan
 			// ikke modellen svare på dataspørsmål — den må skrive SQL-en inn i
 			// widgeten. Skjemaet ligger allerede i system-prompten.
@@ -827,6 +838,23 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					}
 				}
 				emit(`data: {"nordavind_widget_updated":true}`)
+			case "set_slide", "set_deck":
+				// Presentasjon: hver patch lagres med en gang, og canvaset får
+				// beskjed om å hente specen på nytt.
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Bygger presentasjon"})
+				emit("data: " + string(meta))
+				if c.Name == "set_slide" {
+					result, deckSlug = s.runSlideOp(ctx, deckSlug, c.Args.String())
+				} else {
+					result, deckSlug = s.runDeckOp(ctx, deckSlug, c.Args.String())
+				}
+				if createdWidget == "" {
+					if m := widgetSlugRe.FindStringSubmatch(result); m != nil {
+						createdWidget = m[1]
+					}
+				}
+				dm, _ := json.Marshal(map[string]any{"nordavind_deck_updated": deckSlug})
+				emit("data: " + string(dm))
 			default:
 				if q := strings.TrimSpace(args.Query); q != "" {
 					// Fremdriftssteg til tidslinjen i frontend.

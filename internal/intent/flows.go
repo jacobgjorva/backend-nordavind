@@ -48,6 +48,8 @@ const (
 	ToolMailCompose   = "mail_compose"
 	ToolContactPerson = "contact_person"
 	ToolSetWidget     = "set_widget"
+	ToolSetSlide      = "set_slide"
+	ToolSetDeck       = "set_deck"
 	ToolConnectDB     = "connect_database"
 	ToolConnectM365   = "connect_m365"
 	ToolCheckM365     = "check_m365"
@@ -109,9 +111,11 @@ var Flows = map[string]Flow{
 	},
 	"create_presentation": {
 		Knowledge: true,
-		Tools:     []string{ToolSetWidget},
-		Model:     "mid",
-		MaxChars:  120, // canvaset er svaret
+		// Egne verktøy: presentasjonen bygges slide for slide som patcher, aldri
+		// som én stor spec — brukerens egne canvas-endringer skal overleve.
+		Tools:    []string{ToolSetSlide, ToolSetDeck},
+		Model:    "mid",
+		MaxChars: 120, // canvaset er svaret
 		Fallback:  FreeChatKey,
 		Sticky:    true,
 	},

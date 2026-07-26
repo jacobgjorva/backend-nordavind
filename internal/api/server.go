@@ -173,6 +173,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/widgets/{slug}/share", s.requireAuth(s.handleShareWidget))
 	mux.HandleFunc("GET /v1/users", s.requireAuth(s.handleListTenantUsers))
 	mux.HandleFunc("GET /v1/widgets/{slug}/query", s.requireAuth(s.handleWidgetQuery))
+	mux.HandleFunc("POST /v1/query", s.requireAuth(s.handleAdhocQuery))
+	mux.HandleFunc("GET /v1/deck/kits", s.requireAuth(s.handleDeckKits))
 	mux.HandleFunc("GET /v1/chats/{chatId}/agent", s.requireAuth(s.handleAgentByChat))
 	mux.HandleFunc("PATCH /v1/agents/{id}", s.requireAuth(s.handleSetAgentEnabled))
 	mux.HandleFunc("PUT /v1/agents/{id}", s.requireAuth(s.handleUpdateAgent))
