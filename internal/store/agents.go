@@ -632,6 +632,24 @@ func (s *Store) AgentTokensToday(agentID string, since time.Time) (int, error) {
 	return int(n.Int64), nil
 }
 
+// SetAgentSchedule setter frekvensen (og evt. klokkeslett) og planlegger
+// neste kjøring på nytt. Brukes av Start-noden i flyt-visningen.
+func (s *Store) SetAgentSchedule(id, userID string, intervalSeconds int, runTime, label string) error {
+	if err := s.agentOwned(id, userID); err != nil {
+		return err
+	}
+	if intervalSeconds < 900 {
+		intervalSeconds = 900 // minimum 15 min
+	}
+	next := NextRun(time.Now(), intervalSeconds, runTime)
+	_, err := s.db.Exec(
+		`UPDATE agents SET interval_seconds=?, run_time=?, schedule_label=?, next_run_at=?
+		 WHERE id=? AND user_id=?`,
+		intervalSeconds, strings.TrimSpace(runTime), strings.TrimSpace(label), next, id, userID,
+	)
+	return err
+}
+
 // UpdateAgentConfig oppdaterer en agents konfigurasjon og planlegger neste
 // kjøring på nytt. Chattens tittel følger agentnavnet.
 func (s *Store) UpdateAgentConfig(id, userID string, a Agent) error {

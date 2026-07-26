@@ -155,6 +155,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/agents/{id}/plan", s.requireAuth(s.handleGetAgentPlan))
 	mux.HandleFunc("PUT /v1/agents/{id}/plan", s.requireAuth(s.handleSaveAgentPlan))
 	mux.HandleFunc("POST /v1/agents/{id}/plan/rebuild", s.requireAuth(s.handleRebuildAgentPlan))
+	mux.HandleFunc("PUT /v1/agents/{id}/schedule", s.requireAuth(s.handleSetAgentSchedule))
 	mux.HandleFunc("GET /v1/agent-connections", s.requireAuth(s.handleAgentConnections))
 	mux.HandleFunc("GET /v1/mail/account", s.requireAuth(s.handleGetMailAccount))
 	mux.HandleFunc("POST /v1/mail/send", s.requireAuth(s.handleMailSend))

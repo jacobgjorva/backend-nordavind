@@ -269,6 +269,7 @@ func (s *Server) handleGetAgentPlan(w http.ResponseWriter, r *http.Request) {
 		"task":             a.Task,
 		"agent_name":       a.Name,
 		"interval_seconds": a.IntervalSeconds,
+		"run_time":         a.RunTime,
 	})
 }
 
@@ -313,6 +314,33 @@ func (s *Server) handleSaveAgentPlan(w http.ResponseWriter, r *http.Request) {
 	}
 	s.log.Info("plan redigert av bruker", "agent", id, "steg", len(plan.Steps))
 	writeJSON(w, map[string]any{"plan": plan})
+}
+
+// handleSetAgentSchedule setter frekvensen fra Start-noden i flyt-visningen.
+func (s *Server) handleSetAgentSchedule(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		IntervalSeconds int    `json:"interval_seconds"`
+		RunTime         string `json:"run_time"`
+		Label           string `json:"schedule_label"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "ugyldig request", http.StatusBadRequest)
+		return
+	}
+	err := s.store.SetAgentSchedule(r.PathValue("id"), user.ID, req.IntervalSeconds, req.RunTime, req.Label)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleRebuildAgentPlan kaster planen og kjører spinup på nytt.
