@@ -239,6 +239,12 @@ func (s *Server) runSlideOp(ctx context.Context, slug, rawArgs string) (string, 
 	if err := json.Unmarshal([]byte(rawArgs), &args); err != nil {
 		return "Ugyldige argumenter.", slug
 	}
+	return s.patchSlide(user, slug, args)
+}
+
+// patchSlide er den ENE veien inn til slide-listen: både modellens set_slide
+// og brukerens redigering i canvaset går her, med samme patch-semantikk.
+func (s *Server) patchSlide(user store.User, slug string, args map[string]any) (string, string) {
 	id, _ := args["id"].(string)
 	op, _ := args["op"].(string)
 	if op == "" {
@@ -362,6 +368,64 @@ func (s *Server) runDeckOp(ctx context.Context, slug, rawArgs string) (string, s
 		return "Presentasjon opprettet (slug=" + slug + ").", slug
 	}
 	return "ok", slug
+}
+
+// handleDeckSlide er brukerens egen redigering i canvaset: samme patch som
+// modellen gjør, så et dobbeltklikk og en chat-instruks aldri kan komme i
+// utakt med hverandre.
+func (s *Server) handleDeckSlide(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var args map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&args); err != nil {
+		http.Error(w, "ugyldig kropp", http.StatusBadRequest)
+		return
+	}
+	slug := r.PathValue("slug")
+	if strings.TrimSpace(slug) == "" {
+		http.Error(w, "mangler slug", http.StatusBadRequest)
+		return
+	}
+	result, _ := s.patchSlide(user, slug, args)
+	if !strings.HasPrefix(result, "ok") && !strings.HasPrefix(result, "Presentasjon") {
+		http.Error(w, result, http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDeckMeta setter tittel, tema eller stil fra canvaset.
+func (s *Server) handleDeckMeta(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var args map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&args); err != nil {
+		http.Error(w, "ugyldig kropp", http.StatusBadRequest)
+		return
+	}
+	slug, spec, ok2 := s.deckSpec(user, r.PathValue("slug"), "")
+	if !ok2 {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if title, _ := args["title"].(string); title != "" {
+		spec["title"] = title
+	}
+	if th, _ := args["theme"].(string); th != "" {
+		spec["theme"] = deck.Get(th).Name
+	}
+	if st, ok := args["style"].(map[string]any); ok {
+		spec["style"] = st
+	}
+	if !s.saveDeck(user, slug, spec) {
+		http.Error(w, "kunne ikke lagre", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleDeckKits gir frontend kittene: tokens, bilder og slide-komposisjoner.
