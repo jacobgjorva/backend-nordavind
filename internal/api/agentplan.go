@@ -296,6 +296,11 @@ func (s *Server) handleSaveAgentPlan(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ugyldig request", http.StatusBadRequest)
 		return
 	}
+	// Hadde planen en graf som nå er fjernet? Da skal widgeten ryddes bort.
+	var prev agentPlan
+	if strings.TrimSpace(a.Plan) != "" {
+		_ = json.Unmarshal([]byte(a.Plan), &prev)
+	}
 	dbCtx := s.buildDBTool(user.TenantID, user.ID, "")
 	plan, problems := s.validatePlan(r.Context(), dbCtx, string(raw))
 	if len(problems) > 0 {
@@ -306,11 +311,22 @@ func (s *Server) handleSaveAgentPlan(w http.ResponseWriter, r *http.Request) {
 	// Grafen kan ha blitt endret — oppdater widgeten den bor i.
 	a.TenantID = user.TenantID
 	a.UserID = user.ID
+	if plan.Chart == nil && prev.ChartSlug != "" {
+		if err := s.store.DeleteWidget(prev.ChartSlug, user.ID); err != nil {
+			s.log.Warn("kunne ikke slette fjernet agent-graf", "slug", prev.ChartSlug, "err", err)
+		}
+	}
 	s.ensureChartWidget(a, &plan)
 	out, _ := json.Marshal(plan)
 	if err := s.store.SetAgentPlan(id, string(out)); err != nil {
 		http.Error(w, "kunne ikke lagre", http.StatusInternalServerError)
 		return
+	}
+	// Snapshotet gjelder den GAMLE planen — behold det, og neste kjøring kan
+	// feilaktig konkludere «ingen endring». Nullstill så første kjøring etter
+	// en redigering alltid tolkes på nytt.
+	if err := s.store.SetAgentSnapshot(id, ""); err != nil {
+		s.log.Warn("kunne ikke nullstille snapshot", "agent", id, "err", err)
 	}
 	s.log.Info("plan redigert av bruker", "agent", id, "steg", len(plan.Steps))
 	writeJSON(w, map[string]any{"plan": plan})
