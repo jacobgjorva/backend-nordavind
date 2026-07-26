@@ -501,6 +501,18 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 						return
 					}
 				}
+				// Arbeids-dommer for viktige oppgaver: dobbeltsjekk svaret mot
+				// verktøydataene FØR det vises — med egen status i chatten.
+				if usedTool && importantWorkRe.MatchString(lastUserText(full)) {
+					step, _ := json.Marshal(map[string]any{"nordavind_step": "Dette høres viktig ut, la meg dobbeltsjekke arbeidet mitt"})
+					emit("data: " + string(step))
+					if ok, problems := s.verifyWork(ctx, lastUserText(full), final, toolResults); !ok && len(problems) > 0 {
+						s.log.Warn("arbeids-dommer: underkjent", "problemer", strings.Join(problems, "; "))
+						if fixed := s.regroundAnswer(ctx, full, final, problems, toolResults, &promptTokens, &completionTokens); fixed != "" {
+							final = fixed
+						}
+					}
+				}
 				// Innsats-sjekk ETTER kildekontrollen: også et forsiktig
 				// omforsøk som melder tomt etter få søk sendes tilbake.
 				if !searchNudged && searches <= 2 && round < roundCap && gaveUpRe.MatchString(final) {
