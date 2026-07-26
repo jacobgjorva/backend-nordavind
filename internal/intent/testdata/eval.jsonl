@@ -83,3 +83,4 @@
 {"text": "har jeg fått svar fra Kari?", "want": "email"}
 {"text": "finn e-posten om tilbudet fra ACKES", "want": "email"}
 {"text": "noen viktige e-poster i dag?", "want": "email"}
+{"text": "kan du hjelpe meg sende en epost?", "want": "email"}

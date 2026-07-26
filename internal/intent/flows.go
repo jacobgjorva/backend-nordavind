@@ -40,6 +40,7 @@ const (
 	ToolM365Read      = "m365_read"
 	ToolMailSearch    = "mail_search"
 	ToolMailRead      = "mail_read"
+	ToolMailCompose   = "mail_compose"
 	ToolContactPerson = "contact_person"
 	ToolSetWidget     = "set_widget"
 	ToolConnectDB     = "connect_database"
@@ -169,7 +170,7 @@ var Flows = map[string]Flow{
 	},
 
 	"email": {
-		Tools:    []string{ToolMailSearch, ToolMailRead},
+		Tools:    []string{ToolMailSearch, ToolMailRead, ToolMailCompose},
 		Model:    "mid",
 		MaxChars: 300,
 		Fallback: FreeChatKey,

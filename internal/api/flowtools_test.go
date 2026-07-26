@@ -14,7 +14,7 @@ func TestAllFlowToolsResolvable(t *testing.T) {
 		intent.ToolWebSearch: true, intent.ToolFetchURL: true,
 		intent.ToolQueryDatabase: true, intent.ToolShowTable: true,
 		intent.ToolM365Search: true, intent.ToolM365Read: true,
-		intent.ToolMailSearch: true, intent.ToolMailRead: true,
+		intent.ToolMailSearch: true, intent.ToolMailRead: true, intent.ToolMailCompose: true,
 		intent.ToolConnectDB: true, intent.ToolConnectM365: true,
 		intent.ToolCheckM365: true, intent.ToolSaveM365App: true,
 		intent.ToolSetupRoutine: true, intent.ToolListAgents: true,

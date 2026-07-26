@@ -296,7 +296,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			}
 			// M365-verktøy (filer + e-post) kun når brukeren har koblet til.
 			if _, ok := s.m365Connected(ctx); ok {
-				tools = append(tools, m365SearchTool, m365ReadTool, mailSearchTool, mailReadTool)
+				tools = append(tools, m365SearchTool, m365ReadTool, mailSearchTool, mailReadTool, mailComposeTool)
 			}
 			// Eskalerings-verktøy (registeret ligger i verktøy-beskrivelsen).
 			if user, ok := ctx.Value(userKey).(store.User); ok {
@@ -533,6 +533,18 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		// Eskalering: modellen ba om å kontakte en person. Rendrer compose-kortet
 		// deterministisk og avslutter — ingen fri-tekst-blokk å bomme på.
 		for _, c := range calls {
+			if c.Name == "mail_compose" {
+				var ma struct {
+					ToEmail string `json:"to_email"`
+					ToName  string `json:"to_name"`
+					Subject string `json:"subject"`
+					Body    string `json:"body"`
+				}
+				_ = json.Unmarshal([]byte(c.Args.String()), &ma)
+				emit(contentSSE(composeBlock(ma.ToName, ma.ToEmail, ma.Subject, ma.Body)))
+				emit("data: [DONE]")
+				return
+			}
 			if c.Name != "contact_person" {
 				continue
 			}

@@ -399,3 +399,23 @@ func (s *Server) runMailRead(ctx context.Context, userID, mailID string) string 
 	return fmt.Sprintf("Fra: %s <%s>\nDato: %s\nEmne: %s\n\n%s",
 		m.From.EmailAddress.Name, m.From.EmailAddress.Address, m.Received, m.Subject, text)
 }
+
+var mailComposeTool = map[string]any{
+	"type": "function",
+	"function": map[string]any{
+		"name": "mail_compose",
+		"description": "Sett opp en e-post for utsending: brukeren får et redigerbart send-kort med " +
+			"mottaker, emne og utkastet ferdig utfylt, og trykker selv Send. Bruk ALLTID denne når " +
+			"brukeren vil sende eller skrive en e-post — sending er tilgjengelig via Microsoft 365.",
+		"parameters": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"to_email": map[string]any{"type": "string", "description": "mottakerens e-postadresse (tom hvis ukjent)"},
+				"to_name":  map[string]any{"type": "string", "description": "mottakerens navn"},
+				"subject":  map[string]any{"type": "string", "description": "emne"},
+				"body":     map[string]any{"type": "string", "description": "utkast til meldingstekst"},
+			},
+			"required": []string{"subject", "body"},
+		},
+	},
+}

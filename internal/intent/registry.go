@@ -302,6 +302,9 @@ var Registry = []Intent{
 			"finn e-posten om tilbudet",
 			"noen nye viktige e-poster i dag?",
 			"les den siste e-posten fra banken",
+			"send en e-post til Kari om møtet",
+			"skriv en e-post til kunden og spør om leveransen",
+			"kan du hjelpe meg å sende en e-post?",
 		},
 	},
 	{
