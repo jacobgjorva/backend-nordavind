@@ -1004,6 +1004,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		})
 		msgs = append(msgs, toolMsgs...)
 		full["messages"] = msgs
+		// TOKEN: uten dette vokser turen kvadratisk — hver runde re-sender
+		// ALLE tidligere verktøyresultater ubeskåret (grundig-modus endte på
+		// 30-50k prompt-tokens per svar). Eldste resultater klippes først;
+		// kildekontrollen mister ingenting, den måler mot toolResults-lista.
+		trimToolHistory(full, toolHistoryBudget)
 
 		// Tvungen verktøybruk gjelder KUN første runde (presentasjonsflyten):
 		// minst én endring skal skje, men modellen skal kunne stoppe etterpå.
@@ -1030,6 +1035,62 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	emit("data: " + string(step))
 	s.streamBackstop(ctx, full, emit, &promptTokens, &completionTokens)
 	emit("data: [DONE]")
+}
+
+// toolHistoryBudget: samlet tak (tegn) på verktøyresultater som bæres videre
+// mellom rundene i én tur. Ferske resultater beholdes alltid uklippet —
+// modellen bruker dem i runden rett etter kallet. Eldre resultater er som
+// regel alt konsumert; de klippes til et hode når budsjettet sprenges.
+const toolHistoryBudget = 20000
+
+// toolTrimHead: hvor mye av et klippet verktøyresultat som beholdes.
+const toolTrimHead = 500
+
+// trimToolHistory holder summen av tool-meldinger i samtalen under budsjettet
+// ved å klippe de ELDSTE først. Vanlige turer (1-3 verktøykall) rører den
+// aldri; den finnes for grundig-modus og søketunge turer der historikken
+// ellers vokser kvadratisk med rundetallet.
+func trimToolHistory(full map[string]any, budget int) {
+	msgs, _ := full["messages"].([]any)
+	type toolRef struct {
+		m    map[string]any
+		size int
+	}
+	// Halen (rundens ferske resultater) er fredet: modellen har ikke lest dem
+	// ennå — de skal alltid frem uklippet i neste kall.
+	tail := len(msgs)
+	for tail > 0 {
+		mm, ok := msgs[tail-1].(map[string]any)
+		if !ok || mm["role"] != "tool" {
+			break
+		}
+		tail--
+	}
+	var refs []toolRef
+	total := 0
+	for _, m := range msgs[:tail] {
+		mm, ok := m.(map[string]any)
+		if !ok || mm["role"] != "tool" {
+			continue
+		}
+		c, _ := mm["content"].(string)
+		refs = append(refs, toolRef{mm, len(c)})
+		total += len(c)
+	}
+	for _, r := range refs {
+		if total <= budget {
+			return
+		}
+		if r.size <= toolTrimHead {
+			continue
+		}
+		c, _ := r.m["content"].(string)
+		if ru := []rune(c); len(ru) > toolTrimHead {
+			r.m["content"] = string(ru[:toolTrimHead]) +
+				"\n…[forkortet for plass — innholdet er alt lest og brukt tidligere i turen]"
+		}
+		total -= r.size - len(r.m["content"].(string))
+	}
 }
 
 // recordUsage lagrer forbruket for forespørselen. Uinnlogget (dev) logges

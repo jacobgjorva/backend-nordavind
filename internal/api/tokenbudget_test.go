@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -118,5 +119,38 @@ func TestRecentTurnSeesPreviousAnswer(t *testing.T) {
 	}}
 	if connectIntent(recentTurn(old)) {
 		t.Error("gammel tilkoblingsprat drar verktøyene med i alle senere meldinger")
+	}
+}
+
+// Kvadratisk-vekst-vernet: eldste verktøyresultater klippes når budsjettet
+// sprenges, rundens ferske resultater fredes alltid.
+func TestTrimToolHistory(t *testing.T) {
+	big := strings.Repeat("x", 9000)
+	mk := func(id string) map[string]any {
+		return map[string]any{"role": "tool", "tool_call_id": id, "content": big}
+	}
+	fresh := map[string]any{"role": "tool", "tool_call_id": "fersk", "content": big}
+	full := map[string]any{"messages": []any{
+		map[string]any{"role": "user", "content": "spørsmål"},
+		mk("gammel1"), mk("gammel2"), mk("gammel3"),
+		map[string]any{"role": "assistant", "content": "", "tool_calls": []any{}},
+		fresh,
+	}}
+	trimToolHistory(full, 20000)
+
+	if c, _ := fresh["content"].(string); len(c) != len(big) {
+		t.Fatalf("ferskt resultat ble klippet — modellen har ikke lest det ennå")
+	}
+	msgs := full["messages"].([]any)
+	first := msgs[1].(map[string]any)["content"].(string)
+	if len(first) >= 9000 {
+		t.Fatalf("eldste resultat skulle vært klippet, er fortsatt %d tegn", len(first))
+	}
+	// Uklippet under budsjett: en vanlig tur med to små resultater røres ikke.
+	small := map[string]any{"role": "tool", "content": "42 rader"}
+	full2 := map[string]any{"messages": []any{small, map[string]any{"role": "assistant", "content": "svar"}}}
+	trimToolHistory(full2, 20000)
+	if small["content"] != "42 rader" {
+		t.Fatalf("lite resultat under budsjett ble endret")
 	}
 }
