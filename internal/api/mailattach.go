@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +21,8 @@ type mailAttachment struct {
 	UserID  string
 	Name    string
 	Data    []byte
+	Cols    []string
+	Rows    [][]string
 	Created time.Time
 }
 
@@ -30,7 +33,7 @@ type attachmentStore struct {
 
 const attachmentTTL = 30 * time.Minute
 
-func (st *attachmentStore) put(userID, name string, data []byte) string {
+func (st *attachmentStore) put(userID, name string, data []byte, cols []string, rows [][]string) string {
 	b := make([]byte, 8)
 	rand.Read(b)
 	id := hex.EncodeToString(b)
@@ -44,7 +47,7 @@ func (st *attachmentStore) put(userID, name string, data []byte) string {
 			delete(st.items, k)
 		}
 	}
-	st.items[id] = mailAttachment{UserID: userID, Name: name, Data: data, Created: time.Now()}
+	st.items[id] = mailAttachment{UserID: userID, Name: name, Data: data, Cols: cols, Rows: rows, Created: time.Now()}
 	st.mu.Unlock()
 	return id
 }
@@ -93,6 +96,27 @@ func (s *Server) buildQueryAttachment(ctx context.Context, userID string, dbCtx 
 	if err := f.Write(&buf); err != nil {
 		return "", "", 0, "Kunne ikke bygge Excel-fila."
 	}
-	id := s.mailAttach.put(userID, name, buf.Bytes())
+	id := s.mailAttach.put(userID, name, buf.Bytes(), cols, rows)
 	return id, name, len(rows), ""
+}
+
+// handleMailAttachment: forhåndsvisning (JSON) eller nedlasting (?format=xlsx)
+// av et ventende vedlegg — kun eierens egne, kun innen TTL.
+func (s *Server) handleMailAttachment(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	a, ok := s.mailAttach.get(user.ID, r.PathValue("id"))
+	if !ok {
+		http.Error(w, "vedlegget finnes ikke lenger", http.StatusNotFound)
+		return
+	}
+	if r.URL.Query().Get("format") == "xlsx" {
+		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+a.Name+"\"")
+		w.Write(a.Data)
+		return
+	}
+	writeJSON(w, map[string]any{"name": a.Name, "columns": a.Cols, "rows": a.Rows})
 }
