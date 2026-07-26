@@ -97,6 +97,50 @@ func (s *Server) handleConfirmKnowledge(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleRememberMessage lagrer en chatmelding brukeren eksplisitt vil huske
+// (minnekort-ikonet): destiller til noder der det går, ellers lagres selve
+// meldingen som én lapp — et eksplisitt klikk skal ALLTID gi et minne.
+func (s *Server) handleRememberMessage(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Text   string `json:"text"`
+		ChatID string `json:"chat_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Text) == "" {
+		http.Error(w, "ugyldig request", http.StatusBadRequest)
+		return
+	}
+	text := strings.TrimSpace(req.Text)
+	proposals := s.extractProposals(r.Context(), user.TenantID, text, "")
+	if len(proposals) == 0 {
+		title := text
+		if r := []rune(title); len(r) > 60 {
+			title = string(r[:60]) + "…"
+		}
+		proposals = []extractedNode{{Type: "term", Title: title, Summary: text}}
+	}
+	saved := 0
+	for _, p := range proposals {
+		vec, err := s.embed(r.Context(), p.Title+". "+p.Summary)
+		if err != nil {
+			continue
+		}
+		if err := s.ingestFact(user.TenantID, user.ID, req.ChatID, p.Type, p.Title, p.Summary, vec); err != nil {
+			continue
+		}
+		saved++
+	}
+	if saved == 0 {
+		http.Error(w, "kunne ikke lagre", http.StatusBadGateway)
+		return
+	}
+	s.log.Info("melding lagret til minnet", "noder", saved)
+	writeJSON(w, map[string]any{"saved": saved})
+}
+
 // autoDupThreshold: målt mot ekte aksepterte fakta — distinkte par ligger
 // under 0.58; over 0.75 er det samme faktum i ny form → nyeste erstatter.
 const autoDupThreshold = 0.75
