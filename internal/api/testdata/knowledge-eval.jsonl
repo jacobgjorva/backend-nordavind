@@ -24,3 +24,6 @@
 {"query": "kan du skrive et lite dikt om våren til meg?", "want": [], "empty": true}
 {"query": "hva blir været i Oslo i morgen tidlig?", "want": [], "empty": true}
 {"query": "hvilke rutiner gjelder ved mottak av kjølevarer?", "want": ["kjøl", "4412"]}
+{"query": "hvor finner jeg gjesteparkeringskortet?", "want": ["tavla", "resepsjonen"]}
+{"query": "hvordan lager jeg en kreditnota i ERP?", "want": ["årsakskode"]}
+{"query": "hva er stegene når en kunde klager på en vare?", "want": ["ordrenummer", "bilder"]}
