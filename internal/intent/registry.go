@@ -318,7 +318,7 @@ var Registry = []Intent{
 		// free_chat som egen rad: rådgivning og åpne spørsmål skal kunne VINNE
 		// rutingen — uten denne kan de aldri slå flyt-nøklene på embedding.
 		Key:         FreeChatKey,
-		Description: "Rådgivning, meninger, tekstarbeid og åpne spørsmål om eller rundt plattformen: hva bør vi gjøre, er dette trygt, hjelp meg å skrive eller oppsummere",
+		Description: "Rådgivning, meninger, tekstarbeid, åpne spørsmål — og UTSAGN der brukeren forteller eller lærer bort noe om bedriften (rutiner, roller, regler) uten å spørre etter tall",
 		Examples: []string{
 			"hva synes du vi burde gjøre her?",
 			"er det trygt å dele dataene våre?",
@@ -327,6 +327,9 @@ var Registry = []Intent{
 			"oversett dette til engelsk",
 			"gi meg råd om prisstrategien vår",
 			"hvilke muligheter gir denne plattformen oss?",
+			"i selskapet har vi en produktdirektør vi må prate med før vi lanserer et nytt produkt",
+			"hos oss er det alltid økonomiansvarlig som godkjenner rabatter over ti prosent",
+			"husk at lageret vårt telles siste fredag i hvert kvartal",
 		},
 	},
 	{
