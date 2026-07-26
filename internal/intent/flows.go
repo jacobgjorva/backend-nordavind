@@ -213,6 +213,15 @@ var Flows = map[string]Flow{
 		MaxChars: 300,
 		Fallback: FreeChatKey,
 	},
+	"teach_fact": {
+		// Lære-utsagn («hos oss …», «husk at …»): brukeren FORTELLER noe.
+		// Ingen verktøy — et db-kall kan ikke skje her, uansett hva modellen
+		// vil; husk-tilbudet (governance v2) fanger selve kunnskapen.
+		Tools:    nil,
+		Model:    "mid",
+		MaxChars: 150, // kort, naturlig kvittering
+		Fallback: FreeChatKey,
+	},
 	"smalltalk": {
 		Tools:    nil, // rent samtalesvar — ingen verktøy å misbruke
 		Model:    "light",
@@ -248,6 +257,7 @@ var AskLabels = map[string]string{
 	"impersonate_user":    "se appen som en annen bruker",
 	"knowledge_admin":     "se på bedriftskunnskapen",
 	"upload_document":     "lagre et dokument som kunnskap",
+	"teach_fact":          "lære meg noe om bedriften",
 	"contract_review":     "få en kontrakt gjennomgått",
 	"create_routine":      "sette opp en fast rutine",
 	"edit_routine":        "endre en rutine",

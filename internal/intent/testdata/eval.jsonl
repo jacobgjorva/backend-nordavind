@@ -88,6 +88,9 @@
 {"text": "skriv en hyggelig takkemail til leverandøren", "want": "email"}
 {"text": "svar Advania at vi tar oppdateringen på fredag", "want": "email"}
 {"text": "lag en epost til kunden med en excel-oversikt over ordrene som vedlegg", "want": "email"}
-{"text": "I selskapet har vi en produktdirektør vi må prate med før vi lanserer ett nytt produkt.", "want": "free_chat"}
-{"text": "hos oss skal alle reklamasjoner innom kvalitetsansvarlig før kreditering", "want": "free_chat"}
-{"text": "husk at Marie har ansvaret for tollkoder på import", "want": "free_chat"}
+{"text": "I selskapet har vi en produktdirektør vi må prate med før vi lanserer ett nytt produkt.", "want": "teach_fact"}
+{"text": "hos oss skal alle reklamasjoner innom kvalitetsansvarlig før kreditering", "want": "teach_fact"}
+{"text": "husk at Marie har ansvaret for tollkoder på import", "want": "teach_fact"}
+{"text": "hvor mange nye produkter har vi lansert i år?", "want": "data_question"}
+{"text": "hvem er de største kundene våre på eksport?", "want": "data_question"}
+{"text": "hva synes du om lanseringsplanen vår?", "want": "free_chat"}
