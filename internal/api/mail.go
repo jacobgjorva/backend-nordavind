@@ -120,6 +120,7 @@ func (s *Server) handleMailSend(w http.ResponseWriter, r *http.Request) {
 		Bcc        []mail.Person `json:"bcc"`
 		Subject    string        `json:"subject"`
 		Body       string        `json:"body"`
+		BodyHTML   string        `json:"body_html"`
 		InReplyTo  string        `json:"in_reply_to"`
 		References string        `json:"references"`
 	}
@@ -130,7 +131,7 @@ func (s *Server) handleMailSend(w http.ResponseWriter, r *http.Request) {
 	if !hasSMTP {
 		// Ingen SMTP-konto: send via Microsoft Graph når M365 er koblet —
 		// samme kobling som filer/e-postlesing, null ekstra oppsett.
-		if err := s.sendViaGraph(r.Context(), user.ID, req.To, req.Cc, req.Bcc, req.Subject, req.Body); err != nil {
+		if err := s.sendViaGraph(r.Context(), user.ID, req.To, req.Cc, req.Bcc, req.Subject, req.Body, req.BodyHTML); err != nil {
 			http.Error(w, "sending feilet: "+err.Error(), http.StatusBadGateway)
 			return
 		}
@@ -153,8 +154,16 @@ func (s *Server) handleMailSend(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// mailBody velger HTML når composeren har formatert innhold, ellers ren tekst.
+func mailBody(text, html string) map[string]any {
+	if strings.TrimSpace(html) != "" {
+		return map[string]any{"contentType": "HTML", "content": html}
+	}
+	return map[string]any{"contentType": "Text", "content": text}
+}
+
 // sendViaGraph sender e-posten med brukerens Microsoft 365-konto.
-func (s *Server) sendViaGraph(ctx context.Context, userID string, to, cc, bcc []mail.Person, subject, body string) error {
+func (s *Server) sendViaGraph(ctx context.Context, userID string, to, cc, bcc []mail.Person, subject, body, bodyHTML string) error {
 	token, err := s.msAccessToken(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("Microsoft 365 er ikke koblet til")
@@ -169,7 +178,7 @@ func (s *Server) sendViaGraph(ctx context.Context, userID string, to, cc, bcc []
 	payload := map[string]any{
 		"message": map[string]any{
 			"subject":       subject,
-			"body":          map[string]any{"contentType": "Text", "content": body},
+			"body":          mailBody(body, bodyHTML),
 			"toRecipients":  rcpt(to),
 			"ccRecipients":  rcpt(cc),
 			"bccRecipients": rcpt(bcc),
