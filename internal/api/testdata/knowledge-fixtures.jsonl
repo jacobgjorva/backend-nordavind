@@ -1,0 +1,18 @@
+{"kind": "fact", "title": "Reklamasjonsfrist", "text": "Reklamasjoner fra kunder skal registreres i ERP innen 48 timer etter mottak."}
+{"kind": "fact", "title": "Ordregodkjenning", "text": "Ordrer over 50 000 kr må godkjennes av daglig leder før de bekreftes."}
+{"kind": "fact", "title": "MG-koden", "text": "MG-koden er vårt interne varenummer-prefiks for egenimporterte varer."}
+{"kind": "fact", "title": "Fredagsrapporten", "text": "Fredagsrapporten sendes til styret hver fredag før kl 12 og bygger på ukens salgstall."}
+{"kind": "fact", "title": "Plukk hos Skanlog", "text": "All plukk og pakking gjøres av tredjepartslageret Skanlog; vi sender aldri selv."}
+{"kind": "fact", "title": "Prislisteoppdatering", "text": "Prislisten oppdateres første mandag i hver måned av innkjøpsansvarlig."}
+{"kind": "fact", "title": "Tollkoder", "text": "Marie har ansvaret for tollkoder og fortolling på alle importvarer."}
+{"kind": "fact", "title": "Kreditnota-regel", "text": "Kreditnota krever alltid et referansenummer til opprinnelig faktura."}
+{"kind": "fact", "title": "Lagertelling", "text": "Full lagertelling gjennomføres siste fredag i hvert kvartal."}
+{"kind": "fact", "title": "Grønn linje", "text": "Grønn linje betyr at en vare er tilgjengelig for salg i alle kanaler."}
+{"kind": "fact", "title": "Purrerutine", "text": "Ubetalte fakturaer purres etter 14 dager, andre purring etter 30 dager med gebyr."}
+{"kind": "fact", "title": "Rabatt-tak", "text": "Selgere kan gi inntil 12 prosent rabatt uten godkjenning; alt over krever salgssjef."}
+{"kind": "fact", "title": "Avvikslogg", "text": "Alle kvalitetsavvik loggføres i QA-skjemaet samme dag som de oppdages."}
+{"kind": "fact", "title": "Sesongbestilling", "text": "Sesongvarer bestilles i februar for høsten og i august for våren."}
+{"kind": "fact", "title": "Kundenummer-serier", "text": "Kundenummer som starter på 9 er interne testkunder og skal aldri faktureres."}
+{"kind": "fact", "title": "Frakt-terskel", "text": "Ordrer over 2 500 kr sendes fraktfritt til bedriftskunder i Norge."}
+{"kind": "doc", "title": "Reklamasjonsprosedyre", "filename": "reklamasjonsprosedyre.pdf", "chunks": ["Ved mottak av reklamasjon: takk kunden, be om ordrenummer og bilder av skaden før noe annet gjøres.", "Reklamasjonen registreres i ERP under modulen Retur med årsakskode, og kunden får automatisk bekreftelse.", "Godkjent reklamasjon krediteres innen fem virkedager; avslag skal alltid begrunnes skriftlig til kunden.", "Skadde varer over 1 000 kr i verdi skal alltid returneres fysisk for inspeksjon før kreditering."]}
+{"kind": "doc", "title": "Varemottak", "filename": "varemottak.docx", "chunks": ["Ved varemottak kontrolleres antall kolli mot fraktbrev før sjåføren forlater rampen.", "Avvik i varemottak meldes til innkjøp samme dag med bilde av følgeseddel og pall.", "Temperatursensitive varer settes rett i kjøl og registreres i mottaksloggen med klokkeslett."]}
