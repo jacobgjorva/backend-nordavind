@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS usage_events (
     tenant_id         text NOT NULL DEFAULT '',
     user_id           text NOT NULL DEFAULT '',
     model             text NOT NULL,
+    source            text NOT NULL DEFAULT 'chat',
     prompt_tokens     bigint NOT NULL,
     completion_tokens bigint NOT NULL,
     cost_usd          double precision NOT NULL,
@@ -51,6 +52,8 @@ CREATE TABLE IF NOT EXISTS usage_events (
     created_at        timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_usage_tenant_day ON usage_events (tenant_id, created_at);
+-- Kilde-kolonnen kom etter tabellen (PR #9) — idempotent påfyll for baser fra før.
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'chat';
 
 CREATE TABLE IF NOT EXISTS chats (
     id             text PRIMARY KEY,
