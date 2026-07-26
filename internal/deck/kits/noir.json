@@ -17,7 +17,7 @@
     "#6b8afd", "#e8e97a", "#f2683c", "#c9d96a", "#f4b8c7", "#7de2b8",
     "#f2994a", "#a8e6f0", "#a8a838", "#8b6bb0", "#d8d8d8", "#e04444"
   ],
-  "images": ["bg-1.png", "bg-2.jpg", "bg-3.jpg"],
+  "images": ["bg-1.jpg", "bg-2.jpg", "bg-3.jpg"],
   "layouts": [
     {
       "key": "title",

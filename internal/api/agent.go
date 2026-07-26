@@ -203,6 +203,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// Presentasjonsflyten: kit-katalogen (temaets ferdige slides) i stedet for
 	// widget-skjemaet — modellen velger layout og fyller felter.
 	deckSlug, _ := full["nordavind_deck"].(string)
+	// Bygg-modus avgjøres av tilstanden før første kall: et tomt lerret skal
+	// få en gjennomgangsrunde når utkastet står (se deckReviewed under).
+	deckBuildMode := deckSlug != "" && s.deckIsEmpty(ctx, deckSlug)
 	delete(full, "nordavind_deck")
 	if flowKey == "create_presentation" || deckSlug != "" {
 		injectSystem(full, s.deckSystem(ctx, s.deckTheme(ctx, deckSlug), deckSlug))
@@ -384,6 +387,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// Kode-håndhevet søkeinnsats: «fant ikke» etter bare ett søk godtas aldri —
 	// modellen sendes tilbake for flere vinkler (én gang).
 	searchNudged := false
+	// Presentasjonsutkast: én gjennomgang der modellen retter rekkefølge og
+	// hull med move/set. Kun ved nybygg — redigering går aldri denne veien.
+	deckReviewed := false
 	// Kildekontroll: alt verktøyene returnerer denne turen, ordrett — prosaen
 	// måles mot dette før den vises (grounding.go).
 	var toolResults []string
@@ -614,6 +620,23 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			// glemmer blokka i svaret sitt.
 			if createdWidget != "" && !strings.Contains(content, "```widget") {
 				emit(contentSSE("\n\n```widget\n" + createdWidget + "\n```"))
+			}
+			// Nybygd presentasjon: én gjennomgang før brukeren ser den ferdig.
+			// Modellen får listen slik den faktisk ble, og retter selv.
+			if deckBuildMode && !deckReviewed && deckSlug != "" && round < roundCap {
+				deckReviewed = true
+				msgs, _ := full["messages"].([]any)
+				full["messages"] = append(msgs,
+					map[string]any{"role": "assistant", "content": content},
+					map[string]any{"role": "user", "content": "Se over presentasjonen med kritiske øyne:\n\n" +
+						s.deckState(ctx, deckSlug) +
+						"\nRett det som ikke henger sammen: feil rekkefølge (op=move), " +
+						"slides som mangler eller gjentar hverandre, tynt innhold, " +
+						"samme slide-type for mange ganger på rad. Er alt bra, svarer du bare «Ok»."})
+				delete(full, "tool_choice")
+				step, _ := json.Marshal(map[string]any{"nordavind_step": "Går gjennom presentasjonen"})
+				emit("data: " + string(step))
+				continue
 			}
 			emit("data: [DONE]")
 			return
