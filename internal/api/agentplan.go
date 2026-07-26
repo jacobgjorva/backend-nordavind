@@ -780,6 +780,10 @@ func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (planRun, 
 		"på norsk, ingen innledning, ingen spørsmål tilbake. Avslutt med report: legg de viktigste " +
 		"tallene i stats (med delta når du har forrige kjørings tall), og pek på et steg med table_step " +
 		"hvis radene derfra bør vises — tabellen rendres fra kilden, så du skal aldri skrive av rader."
+	if p := strings.TrimSpace(a.Personality); p != "" {
+		system += " Du har personligheten «" + p + "» — la den farge ordvalget i summary, men aldri " +
+			"tallene, presisjonen eller varselvurderingen."
+	}
 	userMsg := "Oppgave: " + a.Task +
 		"\n\nDette skal vurderes: " + plan.Watch +
 		"\nBrukeren skal varsles når: " + plan.AlertRule

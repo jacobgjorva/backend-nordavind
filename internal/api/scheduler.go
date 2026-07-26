@@ -167,6 +167,16 @@ func (s *Server) runDueAgents(ctx context.Context) {
 // runAgentOnce utfører én agent, poster resultatet i agentens chat, logger
 // kjøringen og planlegger neste.
 func (s *Server) runAgentOnce(ctx context.Context, a store.Agent, now time.Time) {
+	// Marker kjøringen for live-tilstanden (trollet «skriver» i farmen).
+	s.runMu.Lock()
+	s.runActive[a.ID] = true
+	s.runMu.Unlock()
+	defer func() {
+		s.runMu.Lock()
+		delete(s.runActive, a.ID)
+		s.runMu.Unlock()
+	}()
+
 	// Reschedule først, så en feilende agent ikke kjøres i loop.
 	if err := s.store.RescheduleAgent(a, now); err != nil {
 		s.log.Error("kunne ikke omplanlegge agent", "id", a.ID, "err", err)
@@ -218,9 +228,14 @@ func (s *Server) runAgentOnce(ctx context.Context, a store.Agent, now time.Time)
 		return
 	}
 
-	s.store.RecordRun(a.ID, store.AgentRun{Status: "ok", Output: run.output, TokensUsed: run.tokens})
+	// Alert («Funn!» i grafen): KUN plan-kjøringer, der agentens egen
+	// varselregel har avgjort det. Frie kjøringer har ingen pålitelig
+	// funn-signal — et postet resultat kan like gjerne være «ingenting nytt»,
+	// og en falsk bjelle er verre enn en manglende.
+	alert := planned && run.alert
+	s.store.RecordRun(a.ID, store.AgentRun{Status: "ok", Output: run.output, TokensUsed: run.tokens, Alert: alert})
 	s.postToAgentChat(a, run.output)
-	s.log.Info("agent kjørt", "id", a.ID, "navn", a.Name, "tokens", run.tokens, "varsel", run.alert)
+	s.log.Info("agent kjørt", "id", a.ID, "navn", a.Name, "tokens", run.tokens, "varsel", alert)
 
 	if !a.PushEnabled {
 		return

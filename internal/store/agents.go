@@ -14,6 +14,9 @@ import (
 type Agent struct {
 	ID              string `json:"id"`
 	Name            string `json:"name"`
+	Personality     string `json:"personality"`  // brukersatt lynne, farger tolknings-tonen og trollet i farmen
+	Category        string `json:"category"`     // brukersatt kategori - styrer klynge og farge i agent-grafen
+	HasResponse     bool   `json:"has_response"` // siste kjøring ga et resultat brukeren ikke har åpnet ennå
 	Task            string `json:"task"`
 	ConnectionID    string `json:"connection_id"`
 	ScheduleLabel   string `json:"schedule_label"`   // menneskelig, f.eks. "hver dag kl 08:00"
@@ -122,6 +125,10 @@ func (s *Store) migrateAgents() error {
 		`ALTER TABLE agents ADD COLUMN plan_status TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE agents ADD COLUMN plan_error TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE agents ADD COLUMN plan_built_at TIMESTAMP`,
+		`ALTER TABLE agents ADD COLUMN personality TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN category TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN response_seen_at TIMESTAMP`,
+		`ALTER TABLE agent_runs ADD COLUMN alert INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE agents ADD COLUMN last_snapshot TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE agents ADD COLUMN last_snapshot_at TIMESTAMP`,
 	} {
@@ -202,7 +209,8 @@ func (s *Store) ListAgents(userID string) ([]Agent, error) {
 	rows, err := s.db.Query(
 		`SELECT id, name, task, connection_id, schedule_label, interval_seconds,
 		        run_time, daily_token_limit, write_access, enabled, created_at,
-		        next_run_at, last_run_at, chat_id, mission, send_mail, mission_status, plan_status
+		        next_run_at, last_run_at, chat_id, mission, send_mail, mission_status, plan_status,
+		        personality, mission_activity, category
 		 FROM agents WHERE user_id = ? ORDER BY created_at DESC`,
 		userID,
 	)
@@ -218,7 +226,8 @@ func (s *Store) ListAgents(userID string) ([]Agent, error) {
 		if err := rows.Scan(&a.ID, &a.Name, &a.Task, &a.ConnectionID, &a.ScheduleLabel,
 			&a.IntervalSeconds, &a.RunTime, &a.DailyTokenLimit, &write, &enabled,
 			&a.CreatedAt, &a.NextRunAt, &a.LastRunAt, &a.ChatID,
-			&mission, &sendMail, &a.MissionStatus, &a.PlanStatus); err != nil {
+			&mission, &sendMail, &a.MissionStatus, &a.PlanStatus,
+			&a.Personality, &a.MissionActivity, &a.Category); err != nil {
 			return nil, err
 		}
 		a.WriteAccess = write != 0
@@ -227,7 +236,88 @@ func (s *Store) ListAgents(userID string) ([]Agent, error) {
 		a.SendMail = sendMail != 0
 		out = append(out, a)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Ulest svar: siste kjøring med faktisk output som er nyere enn sist
+	// brukeren åpnet agent-chatten. Én spørring for alle agentene.
+	unseen, err := s.db.Query(
+		`SELECT r.agent_id
+		 FROM agent_runs r
+		 JOIN agents a ON a.id = r.agent_id
+		 WHERE a.user_id = ? AND r.status = 'ok' AND r.output != ''
+		 GROUP BY r.agent_id
+		 HAVING MAX(r.started_at) > COALESCE(a.response_seen_at, '1970-01-01')`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer unseen.Close()
+	fresh := map[string]bool{}
+	for unseen.Next() {
+		var id string
+		if err := unseen.Scan(&id); err != nil {
+			return nil, err
+		}
+		fresh[id] = true
+	}
+	for i := range out {
+		out[i].HasResponse = fresh[out[i].ID]
+	}
+	return out, unseen.Err()
+}
+
+// AgentRunEvent er én kjøring i historikk-grafen: når, for hvilken agent,
+// og om den la igjen et resultat.
+type AgentRunEvent struct {
+	AgentID   string    `json:"agent_id"`
+	StartedAt time.Time `json:"started_at"`
+	Status    string    `json:"status"`
+	HasOutput bool      `json:"has_output"`
+	Alert     bool      `json:"alert"`  // «Funn!» — kjøringen fant noe med verdi
+	Output    string    `json:"output"` // meldingen (kappet), til pille-ekspansjonen
+}
+
+// AgentRunsSince returnerer alle kjøringer for brukerens agenter etter et
+// tidspunkt (til trådgrafen), eldste først.
+func (s *Store) AgentRunsSince(userID string, since time.Time) ([]AgentRunEvent, error) {
+	rows, err := s.db.Query(
+		`SELECT r.agent_id, r.started_at, r.status, r.output != '', r.alert,
+		        substr(r.output, 1, 4000)
+		 FROM agent_runs r
+		 JOIN agents a ON a.id = r.agent_id
+		 WHERE a.user_id = ? AND r.started_at >= ?
+		 ORDER BY r.started_at`,
+		userID, since,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AgentRunEvent
+	for rows.Next() {
+		var e AgentRunEvent
+		var hasOut, alert int
+		if err := rows.Scan(&e.AgentID, &e.StartedAt, &e.Status, &hasOut, &alert, &e.Output); err != nil {
+			return nil, err
+		}
+		e.HasOutput = hasOut != 0
+		e.Alert = alert != 0
+		out = append(out, e)
+	}
 	return out, rows.Err()
+}
+
+// MarkAgentResponseSeen registrerer at brukeren har åpnet agentens chat —
+// noden glir da tilbake fra svar-seksjonen i grafen.
+func (s *Store) MarkAgentResponseSeen(agentID, userID string) error {
+	_, err := s.db.Exec(
+		`UPDATE agents SET response_seen_at = ? WHERE id = ? AND user_id = ?`,
+		time.Now(), agentID, userID,
+	)
+	return err
 }
 
 // DueAgents returnerer aktiverte agenter som skal kjøres nå.
@@ -235,7 +325,7 @@ func (s *Store) DueAgents(now time.Time) ([]Agent, error) {
 	rows, err := s.db.Query(
 		`SELECT id, tenant_id, user_id, name, task, connection_id, schedule_label,
 		        interval_seconds, run_time, daily_token_limit, write_access, next_run_at, chat_id, push_enabled,
-		        mission, send_mail, mission_state, mission_status, plan, plan_status, last_snapshot
+		        mission, send_mail, mission_state, mission_status, plan, plan_status, last_snapshot, personality
 		 FROM agents
 		 WHERE enabled = 1 AND mission = 0 AND next_run_at IS NOT NULL AND next_run_at <= ?
 		 ORDER BY next_run_at`,
@@ -254,7 +344,7 @@ func (s *Store) DueAgents(now time.Time) ([]Agent, error) {
 			&a.ConnectionID, &a.ScheduleLabel, &a.IntervalSeconds, &a.RunTime,
 			&a.DailyTokenLimit, &write, &a.NextRunAt, &a.ChatID, &push,
 			&mission, &sendMail, &a.MissionState, &a.MissionStatus,
-			&a.Plan, &a.PlanStatus, &a.LastSnapshot); err != nil {
+			&a.Plan, &a.PlanStatus, &a.LastSnapshot, &a.Personality); err != nil {
 			return nil, err
 		}
 		a.WriteAccess = write != 0
@@ -297,6 +387,43 @@ func (s *Store) ClearAgentPlan(agentID string) error {
 		 WHERE id = ?`, agentID,
 	)
 	return err
+}
+
+// AgentPersona er de brukersatte identitetsfeltene. Nil-peker = ikke endre;
+// tom streng = fjern verdien.
+type AgentPersona struct {
+	Name        string
+	Personality *string
+	Category    *string
+}
+
+// SetAgentPersona setter navn, personlighet og/eller kategori.
+// Chattens tittel følger navnet, som ellers.
+func (s *Store) SetAgentPersona(agentID, userID string, p AgentPersona) error {
+	if err := s.agentOwned(agentID, userID); err != nil {
+		return err
+	}
+	if n := strings.TrimSpace(p.Name); n != "" {
+		if _, err := s.db.Exec(`UPDATE agents SET name=? WHERE id=?`, n, agentID); err != nil {
+			return err
+		}
+		if _, err := s.db.Exec(`UPDATE chats SET title=? WHERE agent_id=?`, n, agentID); err != nil {
+			return err
+		}
+	}
+	if p.Personality != nil {
+		if _, err := s.db.Exec(`UPDATE agents SET personality=? WHERE id=?`,
+			strings.TrimSpace(*p.Personality), agentID); err != nil {
+			return err
+		}
+	}
+	if p.Category != nil {
+		if _, err := s.db.Exec(`UPDATE agents SET category=? WHERE id=?`,
+			strings.TrimSpace(*p.Category), agentID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // SetAgentSnapshot lagrer rådataene fra siste kjøring, så neste kjøring kan se
@@ -459,14 +586,15 @@ type AgentRun struct {
 	Output     string
 	TokensUsed int
 	Error      string
+	Alert      bool // kjøringen fant noe med verdi (agentens egen varselregel)
 }
 
 // RecordRun logger resultatet av en agent-kjøring.
 func (s *Store) RecordRun(agentID string, r AgentRun) error {
 	_, err := s.db.Exec(
-		`INSERT INTO agent_runs (agent_id, status, output, tokens_used, error)
-		 VALUES (?, ?, ?, ?, ?)`,
-		agentID, r.Status, r.Output, r.TokensUsed, r.Error,
+		`INSERT INTO agent_runs (agent_id, status, output, tokens_used, error, alert)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		agentID, r.Status, r.Output, r.TokensUsed, r.Error, boolToInt(r.Alert),
 	)
 	return err
 }
