@@ -186,6 +186,15 @@ func main() {
 
 	failed := false
 	for _, t := range tables {
+		// Kildetabeller som aldri ble opprettet (eldre SQLite-base) er tomme —
+		// målet får dem fra skjemaet uansett.
+		var exists int
+		if err := src.QueryRow(
+			"SELECT count(*) FROM sqlite_master WHERE type='table' AND name = ?", t.name,
+		).Scan(&exists); err == nil && exists == 0 {
+			fmt.Printf("%-22s      0 rader  ok (fantes ikke i kilden)\n", t.name)
+			continue
+		}
 		n, err := copyTable(ctx, src, dst, t)
 		if err != nil {
 			fmt.Printf("%-22s FEIL: %v\n", t.name, err)

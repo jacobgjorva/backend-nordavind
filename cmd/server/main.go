@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/api"
 	"github.com/jacobgjorva/backend-nordavind/internal/config"
@@ -20,9 +21,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(cfg.DBPath), 0o755); err != nil {
-		log.Error("kunne ikke lage datamappe", "err", err)
-		os.Exit(1)
+	// Datamappe gjelder kun SQLite-fil — en Postgres-URL har ingen katalog.
+	if !strings.Contains(cfg.DBPath, "://") {
+		if err := os.MkdirAll(filepath.Dir(cfg.DBPath), 0o755); err != nil {
+			log.Error("kunne ikke lage datamappe", "err", err)
+			os.Exit(1)
+		}
 	}
 	st, err := store.Open(cfg.DBPath)
 	if err != nil {
