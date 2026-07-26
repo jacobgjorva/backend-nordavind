@@ -61,6 +61,7 @@ func (s *Store) migrateChats() error {
 		`ALTER TABLE chats ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat'`,
 		`ALTER TABLE chats ADD COLUMN dashboard_spec TEXT NOT NULL DEFAULT '{"components":[]}'`,
 		`ALTER TABLE chats ADD COLUMN folder_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE chats ADD COLUMN summary TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.db.Exec(col); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column") {
@@ -243,6 +244,35 @@ func (s *Store) ChatMessages(chatID, userID string) ([]ChatMessage, error) {
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// ChatSummary henter det rullerende samtalesammendraget (tomt om intet).
+func (s *Store) ChatSummary(chatID, userID string) (string, error) {
+	if err := s.chatOwned(chatID, userID); err != nil {
+		return "", err
+	}
+	var sum string
+	err := s.db.QueryRow(`SELECT summary FROM chats WHERE id = ?`, chatID).Scan(&sum)
+	return sum, err
+}
+
+// SetChatSummary lagrer det rullerende sammendraget for samtalen.
+func (s *Store) SetChatSummary(chatID, userID, summary string) error {
+	if err := s.chatOwned(chatID, userID); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`UPDATE chats SET summary = ? WHERE id = ?`, summary, chatID)
+	return err
+}
+
+// ChatSize er antall meldinger og samlet tegnvolum — styrer når sammendraget
+// trengs, uten å laste meldingsinnholdet.
+func (s *Store) ChatSize(chatID string) (n, chars int, err error) {
+	err = s.db.QueryRow(
+		`SELECT COUNT(*), COALESCE(SUM(LENGTH(content)), 0) FROM chat_messages WHERE chat_id = ?`,
+		chatID,
+	).Scan(&n, &chars)
+	return n, chars, err
 }
 
 // AppendMessage legger en melding til en samtale brukeren eier.
