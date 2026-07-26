@@ -313,6 +313,10 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 	// prosess/regel-nodene som er koblet til dokumentet sitt — og omvendt.
 	neighbors := s.expandNeighbors(tenantID, fused, byID)
 
+	// Bruks-telling (governance v2): registrer at lappene faktisk ble hentet.
+	used := append(append([]string{}, fused...), neighbors...)
+	go s.store.RecordNoteHits(used)
+
 	var b strings.Builder
 	b.WriteString("Relevant intern kunnskap (bruk der det passer; siter kilden når du bruker et dokument):\n")
 	budget, n := noteBudget, 0

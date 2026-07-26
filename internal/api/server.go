@@ -134,6 +134,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/chat/completions", s.requireAuth(s.handleChatCompletions))
 	mux.HandleFunc("POST /v1/extract", s.requireAuth(s.handleExtract))
 	mux.HandleFunc("POST /v1/corrections", s.requireAuth(s.handleLogCorrection))
+	mux.HandleFunc("POST /v1/knowledge/confirm", s.requireAuth(s.handleConfirmKnowledge))
 	mux.HandleFunc("POST /v1/knowledge/extract", s.requireAuth(s.handleExtractKnowledge))
 	mux.HandleFunc("POST /v1/documents", s.requireAuth(s.handleCreateDocument))
 	mux.HandleFunc("GET /v1/documents", s.requireAuth(s.handleListDocuments))

@@ -53,6 +53,11 @@ func (s *Store) migrateNotes() error {
 	`); err != nil {
 		return err
 	}
+	// Bruks-telling (governance v2): hvor ofte en lapp faktisk hentes —
+	// grunnlaget for falming og selvkuraterende opprydding. Kolonnene legges
+	// til idempotent (feiler stille når de alt finnes).
+	s.db.Exec(`ALTER TABLE knowledge_notes ADD COLUMN hits INTEGER NOT NULL DEFAULT 0`)
+	s.db.Exec(`ALTER TABLE knowledge_notes ADD COLUMN last_hit_at TIMESTAMP`)
 	return s.backfillNotes()
 }
 
@@ -478,4 +483,19 @@ func cosine32(a, b []float32) float64 {
 		return 0
 	}
 	return dot / (math.Sqrt(na) * math.Sqrt(nb))
+}
+
+// RecordNoteHits teller at lappene ble hentet inn i en svar-kontekst —
+// grunnlaget for bruksbasert kuratering. Best effort, aldri i kritisk sti.
+func (s *Store) RecordNoteHits(ids []string) {
+	if len(ids) == 0 {
+		return
+	}
+	ph := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, time.Now())
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	s.db.Exec(`UPDATE knowledge_notes SET hits = hits + 1, last_hit_at = ? WHERE id IN (`+ph+`)`, args...)
 }

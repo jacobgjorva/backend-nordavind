@@ -272,8 +272,12 @@ CREATE TABLE IF NOT EXISTS knowledge_notes (
     user_id     text NOT NULL DEFAULT '',
     embedding   vector(4096),
     fts         tsvector,
+    hits        bigint NOT NULL DEFAULT 0,
+    last_hit_at timestamptz,
     created_at  timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE knowledge_notes ADD COLUMN IF NOT EXISTS hits bigint NOT NULL DEFAULT 0;
+ALTER TABLE knowledge_notes ADD COLUMN IF NOT EXISTS last_hit_at timestamptz;
 CREATE INDEX IF NOT EXISTS idx_notes_tenant ON knowledge_notes (tenant_id, status);
 CREATE INDEX IF NOT EXISTS idx_notes_source ON knowledge_notes (source_id);
 CREATE INDEX IF NOT EXISTS idx_notes_fts ON knowledge_notes USING GIN (fts);
