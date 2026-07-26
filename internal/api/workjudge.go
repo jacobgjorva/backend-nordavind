@@ -54,8 +54,14 @@ func (s *Server) verifyWork(ctx context.Context, task, answer string, toolResult
 				Content string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
+		Usage struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+		} `json:"usage"`
 	}
-	if json.NewDecoder(resp.Body).Decode(&out) != nil || len(out.Choices) == 0 {
+	decodeErr := json.NewDecoder(resp.Body).Decode(&out)
+	s.countLLM(ctx, router.HeavyModel, "workjudge", out.Usage.PromptTokens, out.Usage.CompletionTokens)
+	if decodeErr != nil || len(out.Choices) == 0 {
 		return true, nil
 	}
 	raw := out.Choices[0].Message.Content

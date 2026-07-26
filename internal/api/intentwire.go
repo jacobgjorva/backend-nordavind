@@ -90,13 +90,18 @@ func (s *Server) initIntentEngine() {
 	if s.cfg.IntentMode != "shadow" && s.cfg.IntentMode != "on" {
 		return
 	}
+	countIntent := func(ctx context.Context, model string, in, out int) {
+		s.countLLM(ctx, model, "intent", in, out)
+	}
 	embedder := &intent.ScalewayEmbedder{
 		BaseURL: s.cfg.UpstreamBaseURL, APIKey: s.cfg.UpstreamAPIKey,
 		Model: "qwen3-embedding-8b", Client: s.client,
+		OnUsage: countIntent,
 	}
 	judge := &intent.ScalewayJudge{
 		BaseURL: s.cfg.UpstreamBaseURL, APIKey: s.cfg.UpstreamAPIKey,
 		Model: router.MidModel, Client: s.client,
+		OnUsage: countIntent,
 	}
 	go func() {
 		for attempt := 1; ; attempt++ {

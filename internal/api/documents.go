@@ -72,7 +72,7 @@ const propositionalizeSystem = "Du gjør om en del av et internt bedriftsdokumen
 func (s *Server) propositionalize(ctx context.Context, text string) ([]string, error) {
 	var out []string
 	for _, section := range chunkText(text) {
-		raw, err := s.llmComplete(ctx, propositionalizeSystem, section, 1200)
+		raw, err := s.llmComplete(ctx, "dokument", propositionalizeSystem, section, 1200)
 		if err != nil {
 			return nil, err
 		}
@@ -189,7 +189,7 @@ func (s *Server) handleClassifyDocument(w http.ResponseWriter, r *http.Request) 
 	if len(head) > 1500 {
 		head = head[:1500]
 	}
-	raw, err := s.llmComplete(r.Context(), classifySystem, "Filnavn: "+req.Filename+"\n\n"+head, 3)
+	raw, err := s.llmComplete(r.Context(), "dokument", classifySystem, "Filnavn: "+req.Filename+"\n\n"+head, 3)
 	// Ved feil: foreslå heller lagring enn å miste kunnskap.
 	save := err != nil || strings.Contains(strings.ToLower(raw), "ja")
 	writeJSON(w, map[string]any{"save": save})
@@ -238,7 +238,7 @@ func (s *Server) documentTitleSummary(ctx context.Context, given, filename, text
 	if len(head) > 2000 {
 		head = head[:2000]
 	}
-	raw, err := s.llmComplete(ctx, docSummarySystem, head, 120)
+	raw, err := s.llmComplete(ctx, "dokument", docSummarySystem, head, 120)
 	var parsed struct {
 		Title   string `json:"title"`
 		Summary string `json:"summary"`

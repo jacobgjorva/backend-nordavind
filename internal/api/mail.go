@@ -57,7 +57,8 @@ func (s *Server) handleGetMailAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 // llmComplete kjører ett ikke-streamet LLM-kall og returnerer innholdet.
-func (s *Server) llmComplete(ctx context.Context, system, userMsg string, maxTokens int) (string, error) {
+// source går rett i forbrukstellingen (countLLM) — hver løype navngir seg.
+func (s *Server) llmComplete(ctx context.Context, source, system, userMsg string, maxTokens int) (string, error) {
 	payload := map[string]any{
 		"model": router.MidModel,
 		"messages": []any{
@@ -85,10 +86,15 @@ func (s *Server) llmComplete(ctx context.Context, system, userMsg string, maxTok
 				Content string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
+		Usage struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+		} `json:"usage"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return "", err
 	}
+	s.countLLM(ctx, router.MidModel, source, out.Usage.PromptTokens, out.Usage.CompletionTokens)
 	if len(out.Choices) == 0 {
 		return "", fmt.Errorf("tomt svar")
 	}

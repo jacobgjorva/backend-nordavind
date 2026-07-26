@@ -1,12 +1,18 @@
 package store
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // UsageEvent er én ferdig chat-forespørsel med tokenforbruk og kost.
 type UsageEvent struct {
-	TenantID         string
-	UserID           string
-	Model            string
+	TenantID string
+	UserID   string
+	Model    string
+	// Source: hvilken løype kallet kom fra ("chat", "intent", "faktadommer",
+	// "workjudge", "agent", "rutine", "dokument", "kunnskap", "embedding").
+	Source           string
 	PromptTokens     int
 	CompletionTokens int
 	CostUSD          float64
@@ -41,15 +47,27 @@ func (s *Store) migrateUsage() error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_usage_tenant_day ON usage_events (tenant_id, created_at);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	// Kilde-kolonnen kom etter tabellen: legg til, tåle at den alt finnes.
+	if _, err := s.db.Exec(
+		`ALTER TABLE usage_events ADD COLUMN source TEXT NOT NULL DEFAULT 'chat'`,
+	); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		return err
+	}
+	return nil
 }
 
 func (s *Store) InsertUsage(e UsageEvent) error {
+	if e.Source == "" {
+		e.Source = "chat"
+	}
 	_, err := s.db.Exec(
 		`INSERT INTO usage_events
-		 (tenant_id, user_id, model, prompt_tokens, completion_tokens, cost_usd, searches, duration_ms)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		e.TenantID, e.UserID, e.Model, e.PromptTokens, e.CompletionTokens,
+		 (tenant_id, user_id, model, source, prompt_tokens, completion_tokens, cost_usd, searches, duration_ms)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		e.TenantID, e.UserID, e.Model, e.Source, e.PromptTokens, e.CompletionTokens,
 		e.CostUSD, e.Searches, e.DurationMS,
 	)
 	return err
