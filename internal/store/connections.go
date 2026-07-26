@@ -229,7 +229,7 @@ func (s *Store) SaveConnectionConfig(connID string, tables []TableConfig, links 
 // ConnectionViews returnerer de lagrede custom-spørringene.
 func (s *Store) ConnectionViews(connID string) ([]ViewConfig, error) {
 	rows, err := s.db.Query(
-		`SELECT name, sql_text, description FROM connection_views WHERE connection_id = ? ORDER BY rowid`, connID,
+		`SELECT name, sql_text, description FROM connection_views WHERE connection_id = ? ORDER BY name`, connID,
 	)
 	if err != nil {
 		return nil, err
@@ -270,7 +270,7 @@ func (s *Store) ConnectionConfig(connID string) ([]TableConfig, []LinkConfig, er
 	}
 
 	colRows, err := s.db.Query(
-		`SELECT table_name, column_name, col_type, description FROM connection_columns WHERE connection_id = ? ORDER BY rowid`, connID,
+		`SELECT table_name, column_name, col_type, description FROM connection_columns WHERE connection_id = ? ORDER BY table_name, column_name`, connID,
 	)
 	if err != nil {
 		return nil, nil, err

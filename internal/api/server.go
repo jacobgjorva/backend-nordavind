@@ -32,8 +32,6 @@ type Server struct {
 
 	// Kontinuerlige oppdrags-løkker som kjører akkurat nå (agent-id → aktiv),
 	// så vi ikke starter samme oppdrag to ganger.
-	missionMu      sync.Mutex
-	missionRunning map[string]bool
 
 	// Spinup-jobber som pågår (agent-id → bygger), så samme plan aldri
 	// kompileres to ganger samtidig.
@@ -69,7 +67,6 @@ func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 		rates:    &usdNok{},
 		credsKey: key,
 
-		missionRunning: map[string]bool{},
 		planBuilding:   map[string]bool{},
 		runActive:      map[string]bool{},
 	}
@@ -181,8 +178,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /v1/agents/{id}", s.requireAuth(s.handleSetAgentEnabled))
 	mux.HandleFunc("PUT /v1/agents/{id}", s.requireAuth(s.handleUpdateAgent))
 	mux.HandleFunc("POST /v1/agents/draft", s.requireAuth(s.handleCreateDraftAgent))
-	mux.HandleFunc("POST /v1/agents/{id}/mission", s.requireAuth(s.handleSetMissionPlan))
-	mux.HandleFunc("POST /v1/agents/{id}/mission/approve", s.requireAuth(s.handleApproveMission))
 	mux.HandleFunc("POST /v1/agents", s.requireAuth(s.handleCreateAgent))
 	mux.HandleFunc("DELETE /v1/agents/{id}", s.requireAuth(s.handleDeleteAgent))
 	return s.cors(mux)

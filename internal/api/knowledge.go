@@ -163,20 +163,17 @@ var ftsStopwords = map[string]bool{
 	"veldig": true, "helt": true, "egentlig": true, "gjerne": true, "takk": true,
 }
 
-// ftsQuery bygger et trygt FTS5 MATCH-uttrykk fra fri tekst: plukker ut
-// innholdsord (stoppord filtreres), siterer hver og OR-slår dem. Tåler
-// tegnsetting og fanger eksakte koder/navn embeddings bommer på. Tom streng
-// når meldingen ikke inneholder ett eneste innholdsord.
-func ftsQuery(query string) string {
+// contentTokens plukker innholdsordene fra fri tekst (stoppord filtreres) —
+// grunnlaget for nøkkelordsøket i begge dialekter og enslig-ord-vernet.
+func contentTokens(query string) []string {
 	toks := ftsTokenRe.FindAllString(strings.ToLower(query), -1)
-	parts := make([]string, 0, len(toks))
+	out := make([]string, 0, len(toks))
 	for _, t := range toks {
-		if ftsStopwords[t] {
-			continue
+		if !ftsStopwords[t] {
+			out = append(out, t)
 		}
-		parts = append(parts, `"`+t+`"`)
 	}
-	return strings.Join(parts, " OR ")
+	return out
 }
 
 // knowledgeContext henter den mest relevante interne kunnskapen for spørsmålet
@@ -188,18 +185,10 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 	if len([]rune(strings.TrimSpace(query))) < 12 {
 		return ""
 	}
-	notes, _ := s.store.AcceptedNotes(tenantID)
-	if len(notes) == 0 {
-		return ""
-	}
 	qvec, err := s.embedCached(ctx, query)
 	if err != nil {
 		s.log.Warn("embedding feilet", "err", err)
 		return ""
-	}
-	byID := make(map[string]store.KnowledgeNote, len(notes))
-	for _, n := range notes {
-		byID[n.ID] = n
 	}
 
 	// Vektor-kandidater: cosine over gulvet, rangert (best først).
@@ -208,18 +197,55 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 		score float64
 	}
 	var vec []sc
-	for _, n := range notes {
-		if c := cosine(qvec, n.Embedding); c >= vecFloor {
-			vec = append(vec, sc{n.ID, c})
+	byID := map[string]store.KnowledgeNote{}
+	if s.store.IsPostgres() {
+		// Søket skjer I databasen (pgvector) — kun topp-kandidatene krysser
+		// grensa, uansett hvor stor kunnskapsbasen er.
+		top, sims, err := s.store.TopNotesByEmbedding(tenantID, qvec, candDepth)
+		if err != nil {
+			s.log.Warn("vektorsøk feilet", "err", err)
+			return ""
+		}
+		for i, n := range top {
+			byID[n.ID] = n
+			if sims[i] >= vecFloor {
+				vec = append(vec, sc{n.ID, sims[i]})
+			}
+		}
+	} else {
+		// SQLite: last alle og regn i Go (fint på små baser).
+		notes, _ := s.store.AcceptedNotes(tenantID)
+		if len(notes) == 0 {
+			return ""
+		}
+		for _, n := range notes {
+			byID[n.ID] = n
+			if c := cosine(qvec, n.Embedding); c >= vecFloor {
+				vec = append(vec, sc{n.ID, c})
+			}
+		}
+		sort.Slice(vec, func(i, j int) bool { return vec[i].score > vec[j].score })
+		if len(vec) > candDepth {
+			vec = vec[:candDepth]
 		}
 	}
-	sort.Slice(vec, func(i, j int) bool { return vec[i].score > vec[j].score })
-	if len(vec) > candDepth {
-		vec = vec[:candDepth]
-	}
 
-	// Nøkkelord-kandidater (BM25), allerede rangert av SQLite.
-	fts, _ := s.store.SearchNotesFTS(tenantID, ftsQuery(query), candDepth)
+	// Nøkkelord-kandidater, allerede rangert av databasen.
+	fts, _ := s.store.SearchNotesFTS(tenantID, contentTokens(query), candDepth)
+	// Postgres: FTS-treff utenfor vektor-toppen må hentes inn i kartet.
+	if s.store.IsPostgres() {
+		var missing []string
+		for _, id := range fts {
+			if _, ok := byID[id]; !ok {
+				missing = append(missing, id)
+			}
+		}
+		if extra, err := s.store.NotesByIDs(tenantID, missing); err == nil {
+			for _, n := range extra {
+				byID[n.ID] = n
+			}
+		}
+	}
 
 	// Enslig-ord-vernet: en kandidat UTEN vektor-støtte må treffe minst to
 	// distinkte innholdsord fra spørsmålet. Ett tilfeldig felles ord («våren»)
@@ -352,6 +378,25 @@ func (s *Server) expandNeighbors(tenantID string, fused []string, byID map[strin
 	inFused := map[string]bool{}
 	for _, id := range fused {
 		inFused[id] = true
+	}
+	// Postgres holder bare kandidatene i minnet — hent nabo-lapper som mangler
+	// (kun aksepterte lapper returneres; dok/pending-noder finnes ikke der).
+	if s.store.IsPostgres() {
+		var missing []string
+		for _, e := range edges {
+			for _, cand := range []string{e.FromID, e.ToID} {
+				if !seen[cand] && !inFused[cand] {
+					if _, ok := byID[cand]; !ok {
+						missing = append(missing, cand)
+					}
+				}
+			}
+		}
+		if extra, err := s.store.NotesByIDs(tenantID, missing); err == nil {
+			for _, n := range extra {
+				byID[n.ID] = n
+			}
+		}
 	}
 	var out []string
 	for _, e := range edges {

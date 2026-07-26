@@ -41,7 +41,7 @@ func (s *Store) migrateWidgets() error {
 	// Nye widgets er utkast til brukeren lagrer dem eksplisitt. Widgets som
 	// fantes FØR feltet kom regnes som lagret (engangs, kun når kolonnen lages).
 	if _, err := s.db.Exec(`ALTER TABLE widgets ADD COLUMN saved INTEGER NOT NULL DEFAULT 0`); err == nil {
-		s.db.Exec(`UPDATE widgets SET saved = 1`)
+		s.db.Exec(`UPDATE widgets SET saved = TRUE`)
 	} else if !strings.Contains(err.Error(), "duplicate column") {
 		return err
 	}
@@ -51,7 +51,7 @@ func (s *Store) migrateWidgets() error {
 // MarkWidgetSaved gjør et utkast til en lagret widget (vises i menyen).
 func (s *Store) MarkWidgetSaved(slug, userID string) error {
 	res, err := s.db.Exec(
-		`UPDATE widgets SET saved = 1 WHERE slug = ? AND user_id = ?`, slug, userID,
+		`UPDATE widgets SET saved = TRUE WHERE slug = ? AND user_id = ?`, slug, userID,
 	)
 	if err != nil {
 		return err
@@ -79,7 +79,7 @@ func (s *Store) CreateWidget(tenantID, userID, slug, title string) (Widget, erro
 // ListWidgets returnerer brukerens widgets, nyest først (uten spec).
 func (s *Store) ListWidgets(userID string) ([]Widget, error) {
 	rows, err := s.db.Query(
-		`SELECT id, slug, title, updated_at FROM widgets WHERE user_id = ? AND saved = 1 ORDER BY updated_at DESC`,
+		`SELECT id, slug, title, updated_at FROM widgets WHERE user_id = ? AND saved = TRUE ORDER BY updated_at DESC`,
 		userID,
 	)
 	if err != nil {
@@ -102,12 +102,12 @@ func (s *Store) ListWidgets(userID string) ([]Widget, error) {
 func (s *Store) Widget(slug, userID string) (Widget, error) {
 	var w Widget
 	var spec string
-	var saved int
+	var saved Flag
 	err := s.db.QueryRow(
 		`SELECT id, slug, title, spec, saved, updated_at FROM widgets WHERE slug = ? AND user_id = ?`,
 		slug, userID,
 	).Scan(&w.ID, &w.Slug, &w.Title, &spec, &saved, &w.UpdatedAt)
-	w.Saved = saved != 0
+	w.Saved = bool(saved)
 	if errors.Is(err, sql.ErrNoRows) {
 		return w, ErrNotFound
 	}

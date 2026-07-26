@@ -227,7 +227,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	if editID != "" {
 		if user, ok := ctx.Value(userKey).(store.User); ok {
 			if a, err := s.store.GetAgent(editID, user.ID); err == nil {
-				if !a.CriteriaApproved && !a.Enabled {
+				if !a.Enabled {
 					// Ferskt utkast: avgjør rutine vs engangsoppdrag og start.
 					// (En aktivert rutine er Enabled uten godkjente kriterier —
 					// den skal til vanlig redigering, ikke ny planlegging.)
