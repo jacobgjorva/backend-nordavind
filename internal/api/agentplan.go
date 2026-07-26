@@ -56,6 +56,18 @@ type agentPlan struct {
 
 	Chart     *agentChart `json:"chart,omitempty"`      // valgfri graf
 	ChartSlug string      `json:"chart_slug,omitempty"` // widgeten grafen bor i
+
+	// Mail: satt når oppgaven eksplisitt ber agenten sende e-post. Mottaker og
+	// emne er faste; kroppen skrives av tolkningen hver kjøring, og agenten
+	// sender selv — agenter er unntaket fra chat-regelen om manuell sending.
+	Mail *agentPlanMail `json:"mail,omitempty"`
+}
+
+// agentPlanMail er planens faste mail-oppsett.
+type agentPlanMail struct {
+	ToName  string `json:"to_name,omitempty"`
+	ToEmail string `json:"to_email"`
+	Subject string `json:"subject"`
 }
 
 // upstreamMessage er ett svar fra modellen, normalisert på tvers av
@@ -171,6 +183,17 @@ var savePlanTool = map[string]any{
 					"type":        "string",
 					"description": "når resultatet er verdt å varsle om, med terskler der det gir mening",
 				},
+				"mail": map[string]any{
+					"type": "object",
+					"description": "KUN når oppgaven eksplisitt ber agenten sende e-post: fast mottaker " +
+						"og emne. Kroppen skrives automatisk per kjøring fra ferske data.",
+					"properties": map[string]any{
+						"to_name":  map[string]any{"type": "string"},
+						"to_email": map[string]any{"type": "string", "description": "mottakerens e-postadresse"},
+						"subject":  map[string]any{"type": "string", "description": "fast emnelinje"},
+					},
+					"required": []string{"to_email", "subject"},
+				},
 				"chart": map[string]any{
 					"type": "object",
 					"description": "valgfri graf som vises sammen med hver rapport. Ta den med når " +
@@ -209,6 +232,8 @@ const planSystem = "Du er i SPINUP: du skal ikke levere svaret på oppgaven, du 
 	"- Vurder om en graf hører hjemme i rapporten. Utvikling over tid eller fordeling mellom kategorier " +
 	"forstås raskere som graf enn som tall. Er svaret ett enkelt tall, dropp grafen. Både x og y skal " +
 	"være ekte kolonner fra spørringen — grafen skal aldri ha en umerket akse.\n" +
+	"- Ber oppgaven eksplisitt om at agenten sender e-post: sett mail-feltet (mottaker + fast emne). " +
+	"Kroppen skrives automatisk per kjøring. Ikke lag egne steg for e-post.\n" +
 	"AVSLUTT med save_plan: stegene som skal kjøres hver gang, hva som skal vurderes (watch), når " +
 	"det er verdt å varsle brukeren (alert_rule, med konkrete terskler der det gir mening), og " +
 	"eventuelt chart. " +
@@ -442,6 +467,14 @@ func (s *Server) validatePlan(ctx context.Context, dbCtx *dbToolCtx, rawArgs str
 		}
 	}
 	problems = append(problems, s.validateChart(ctx, dbCtx, plan.Chart)...)
+	if m := plan.Mail; m != nil {
+		if !strings.Contains(m.ToEmail, "@") {
+			problems = append(problems, "Mail-mottakeren mangler gyldig e-postadresse.")
+		}
+		if strings.TrimSpace(m.Subject) == "" {
+			problems = append(problems, "Mail-oppsettet mangler emne.")
+		}
+	}
 	return plan, problems
 }
 
@@ -643,6 +676,11 @@ var reportTool = map[string]any{
 						"required": []string{"label", "value"},
 					},
 				},
+				"mail_body": map[string]any{
+					"type": "string",
+					"description": "KUN når planen har mail-oppsett: e-postkroppen for denne kjøringen, " +
+						"norsk, uten signatur, med de faktiske tallene",
+				},
 				"table_step": map[string]any{
 					"type": "integer",
 					"description": "steg-nummeret hvis radene derfra bør vises som tabell (1 = første steg). " +
@@ -768,8 +806,9 @@ func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (planRun, 
 	}
 
 	// Identiske rådata: ingenting har skjedd. Ingen tolkning, ingen melding,
-	// ingen tokens — agenten tier heller enn å gjenta seg selv.
-	if a.LastSnapshot != "" && pd.snapshot == a.LastSnapshot {
+	// ingen tokens — agenten tier heller enn å gjenta seg selv. UNNTAK: en
+	// mail-plan skal levere e-post hver kjøring uansett.
+	if plan.Mail == nil && a.LastSnapshot != "" && pd.snapshot == a.LastSnapshot {
 		run.unchanged = true
 		return run, nil
 	}
@@ -780,6 +819,10 @@ func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (planRun, 
 		"på norsk, ingen innledning, ingen spørsmål tilbake. Avslutt med report: legg de viktigste " +
 		"tallene i stats (med delta når du har forrige kjørings tall), og pek på et steg med table_step " +
 		"hvis radene derfra bør vises — tabellen rendres fra kilden, så du skal aldri skrive av rader."
+	if plan.Mail != nil {
+		system += " Planen har mail-oppsett: fyll ALLTID mail_body i report med e-postkroppen for " +
+			"denne kjøringen — den sendes automatisk til den faste mottakeren."
+	}
 	if p := strings.TrimSpace(a.Personality); p != "" {
 		system += " Du har personligheten «" + p + "» — la den farge ordvalget i summary, men aldri " +
 			"tallene, presisjonen eller varselvurderingen."
@@ -814,10 +857,20 @@ func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (planRun, 
 			Alert     bool         `json:"alert"`
 			Stats     []reportStat `json:"stats"`
 			TableStep int          `json:"table_step"`
+			MailBody  string       `json:"mail_body"`
 		}
 		if err := json.Unmarshal([]byte(c.args), &rep); err == nil {
 			run.alert = rep.Alert
 			run.output = composeReport(rep.Summary, rep.Stats, rep.TableStep, pd.steps, plan.ChartSlug)
+			// Mail-plan: send e-posten med kroppen tolkningen skrev.
+			if plan.Mail != nil && strings.TrimSpace(rep.MailBody) != "" {
+				if err := s.sendAgentMail(a, plan.Mail.ToName, plan.Mail.ToEmail, plan.Mail.Subject, rep.MailBody); err != nil {
+					s.log.Warn("agent-mail feilet", "id", a.ID, "err", err)
+					run.output += "\n\n(Klarte ikke sende e-posten: " + err.Error() + ")"
+				} else {
+					run.output += "\n\n_E-post sendt til " + plan.Mail.ToEmail + "._"
+				}
+			}
 		}
 		break
 	}
