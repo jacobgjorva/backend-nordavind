@@ -135,3 +135,18 @@ func TestSmallNumberNeverCoveredBySubstring(t *testing.T) {
 		t.Fatalf("14 er et ekte token i kilden, fikk avvik %v", off)
 	}
 }
+
+// Omforsøk etter diktingsdom: sifre inni lange ID-er i verktøydata skal ALDRI
+// dekke et tall som ikke står der selv (syntetiske verdier).
+func TestStrictOffendersRejectSubstringOfLongIDs(t *testing.T) {
+	src := []string{`{"rows":[["order 90102034567890","total 45678.55"]]}`}
+	off := strictOffenders("Du har fødselsnummer 010203 45678.", src)
+	if len(off) == 0 {
+		t.Fatal("tall som bare finnes inni lengre ID-er skulle vært avvik i streng modus")
+	}
+	// Vanlig modus dekker store tall inni ett kildetall — det er poenget med
+	// forskjellen (formateringsvarianter i førstesvar, aldri i omforsøk).
+	if off := offendersAgainst("Ordren er 90102034567890.", src, 3); len(off) != 0 {
+		t.Fatalf("eksakt kildetall skal passere, fikk %v", off)
+	}
+}

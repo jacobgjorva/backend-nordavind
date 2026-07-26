@@ -465,10 +465,17 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 						emit(contentSSE(gate.heldText()))
 					} else {
 						s.log.Warn("faktadommer: dikting stanset", "problemer", strings.Join(problems, "; "))
-						if cont := s.regroundContinuation(ctx, full, trimmed, gate.shownText(), gate.offenders, basis, &promptTokens, &completionTokens); cont != "" {
+						// Midt i en setning: en modell-fortsettelse leser dårlig
+						// («Du er født Jeg vet ikke …») — ta den ærlige broen i
+						// kode direkte. Ved hel setningsgrense får modellen ett
+						// forsøk på en kildefast fortsettelse.
+						shown := gate.shownText()
+						if midSentence(shown) {
+							emit(contentSSE(honestCut(shown)))
+						} else if cont := s.regroundContinuation(ctx, full, trimmed, shown, gate.offenders, basis, &promptTokens, &completionTokens); cont != "" {
 							emit(contentSSE(cont))
 						} else {
-							emit(contentSSE(honestCut(gate.shownText())))
+							emit(contentSSE(honestCut(shown)))
 						}
 					}
 					emit("data: [DONE]")
@@ -513,6 +520,15 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 							emit(contentSSE(final))
 							if lastDBResult != "" {
 								emit(contentSSE("\n\n```table\n" + lastDBResult + "\n```"))
+							}
+							// Kode-garantiene gjelder også her: eksportkort og
+							// widget-blokk skal aldri forsvinne fordi svaret tok
+							// godkjent-stien.
+							if flowKey == "export_excel" && lastDBResult != "" && !strings.Contains(final, "```export") {
+								emit(contentSSE("\n\n```export\n" + lastDBResult + "\n```"))
+							}
+							if createdWidget != "" && !strings.Contains(final, "```widget") {
+								emit(contentSSE("\n\n```widget\n" + createdWidget + "\n```"))
 							}
 							emit("data: [DONE]")
 							return

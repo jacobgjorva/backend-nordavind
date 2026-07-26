@@ -50,20 +50,36 @@ func groundingOffenders(prose string, sources []string) []string {
 	return offendersAgainst(prose, sources, 3)
 }
 
+// strictOffenders brukes på OMFORSØK (etter en diktingsdom): hvert tall må
+// treffe et helt kildetall eksakt. Substring-dekningen er avskrudd — et diktet
+// fødselsnummer ble «dekket» av sifre inni lange ID-er i verktøydataene.
+func strictOffenders(prose string, sources []string) []string {
+	return offendersCore(prose, sources, 1, true)
+}
+
 // offendersAgainst er kjernen: minDigits styrer hvor små tall som sjekkes.
 // Verktøy-turer bruker 3 (telling/formulering slipper), setnings-gaten bruker
 // 1 (en diktet alder er to sifre — alt må kunne spores eller dømmes).
 func offendersAgainst(prose string, sources []string, minDigits int) []string {
+	return offendersCore(prose, sources, minDigits, false)
+}
+
+func offendersCore(prose string, sources []string, minDigits int, exactNums bool) []string {
 	if strings.TrimSpace(prose) == "" || len(sources) == 0 {
 		return nil
 	}
 	src := strings.ToLower(strings.Join(sources, "\n"))
-	srcDigits := normDigits(src)
-	// Tall-tokens i kildene, normalisert: småtall må treffe et HELT tall i
-	// kildene — «24» dekkes ALDRI av at «2024» finnes (substring-fella).
+	// Tall-tokens i kildene, normalisert: dekning krever treff i ETT kildetall
+	// — «24» dekkes ALDRI av at «2024» finnes (substring-fella), og den
+	// sammenklistrede sifferstrengen av HELE kildematerialet dekker ingenting.
 	srcNums := map[string]bool{}
+	var srcNumList []string
 	for _, m := range groundNumRe.FindAllString(src, -1) {
-		srcNums[normDigits(m)] = true
+		d := normDigits(m)
+		if !srcNums[d] {
+			srcNums[d] = true
+			srcNumList = append(srcNumList, d)
+		}
 	}
 
 	var offenders []string
@@ -75,10 +91,18 @@ func offendersAgainst(prose string, sources []string, minDigits int) []string {
 			continue
 		}
 		seen[d] = true
-		// Store tall får også substring-dekning (formateringsvarianter deler
-		// dem forskjellig); småtall kun eksakt token-treff.
-		covered := srcNums[d] ||
-			(len(d) >= 3 && (strings.Contains(srcDigits, d) || strings.Contains(src, d)))
+		// Store tall (3+ sifre) dekkes også av å ligge INNI ett enkelt
+		// kildetall (formateringsvarianter); småtall kun eksakt token-treff.
+		// Aldri råtekst-substring: «24» skal ikke dekkes av teksten «2024».
+		covered := srcNums[d]
+		if !covered && !exactNums && len(d) >= 3 {
+			for _, t := range srcNumList {
+				if strings.Contains(t, d) {
+					covered = true
+					break
+				}
+			}
+		}
 		if !covered {
 			offenders = append(offenders, strings.TrimSpace(m))
 		}
@@ -320,7 +344,7 @@ func (s *Server) regroundAnswer(ctx context.Context, full map[string]any, draft 
 	*promptTokens += usage.PromptTokens
 	*completionTokens += usage.CompletionTokens
 	content = strings.TrimSpace(content)
-	if content == "" || len(groundingOffenders(content, toolResults)) > 0 {
+	if content == "" || len(strictOffenders(content, toolResults)) > 0 {
 		return ""
 	}
 	return content
@@ -366,7 +390,7 @@ func (s *Server) regroundContinuation(ctx context.Context, full map[string]any, 
 	*promptTokens += usage.PromptTokens
 	*completionTokens += usage.CompletionTokens
 	content = strings.TrimRight(content, " \n")
-	if strings.TrimSpace(content) == "" || len(offendersAgainst(content, basis, 1)) > 0 {
+	if strings.TrimSpace(content) == "" || len(strictOffenders(content, basis)) > 0 {
 		return ""
 	}
 	if shown != "" && !strings.HasSuffix(shown, " ") && !strings.HasPrefix(content, " ") &&
@@ -374,6 +398,17 @@ func (s *Server) regroundContinuation(ctx context.Context, full map[string]any, 
 		content = " " + content
 	}
 	return content
+}
+
+// midSentence: det viste prefikset slutter midt i en setning (eller er tomt
+// prat frem mot en påstand) — en modell-fortsettelse leser da dårlig.
+func midSentence(shown string) bool {
+	t := strings.TrimSpace(shown)
+	if t == "" {
+		return false
+	}
+	r := []rune(t)
+	return !strings.ContainsRune(".!?…", r[len(r)-1])
 }
 
 // honestCut er den ærlige nødutgangen når heller ikke fortsettelsen holdt:
