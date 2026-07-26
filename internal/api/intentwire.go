@@ -184,7 +184,15 @@ func flowModel(level string) string {
 func (s *Server) applyIntent(ctx context.Context, user store.User, full map[string]any) (block string, apply func()) {
 	eng := s.intent.get()
 	msg := lastUserText(full)
-	if eng == nil || msg == "" {
+	if msg == "" {
+		return "", nil
+	}
+	// Ren småprat (takk/hilsen/farvel): ferdig svar i kode — momentant, med
+	// personlighet, og uten et eneste modell- eller motorkall.
+	if canned := cannedSmalltalk(msg); canned != "" {
+		return canned, nil
+	}
+	if eng == nil {
 		return "", nil
 	}
 	d := s.intent.resolveCached(ctx, eng, msg, user.Role == "admin")
