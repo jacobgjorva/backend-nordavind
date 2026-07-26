@@ -30,11 +30,12 @@ import (
 )
 
 type fixture struct {
-	Kind     string   `json:"kind"` // fact | doc
+	Kind     string   `json:"kind"` // fact | doc | node (uttrukket node med kant til doc)
 	Title    string   `json:"title"`
 	Text     string   `json:"text"`
 	Filename string   `json:"filename"`
 	Chunks   []string `json:"chunks"`
+	Doc      string   `json:"doc"` // node: filnavnet til dokumentet noden er uttrukket fra
 }
 
 type evalCase struct {
@@ -81,8 +82,10 @@ func main() {
 	cases := readJSONL[evalCase]("internal/api/testdata/knowledge-eval.jsonl")
 
 	// Seed: embed og lagre nøyaktig slik prod-veiene gjør (fakta via
-	// SyncFactNote, dokumenter via CreateDocumentNotes).
-	nFacts, nChunks := 0, 0
+	// SyncFactNote, dokumenter via CreateDocumentNotes, uttrukne noder som
+	// aksepterte lapper med kant til dok-noden — G2/G4-løypa).
+	nFacts, nChunks, nNodes := 0, 0, 0
+	docIDs := map[string]string{} // filnavn → dok-id
 	for i, f := range fixtures {
 		switch f.Kind {
 		case "fact":
@@ -108,14 +111,37 @@ func main() {
 				notes[j] = store.KnowledgeNote{Text: c, Embedding: vecs[j]}
 			}
 			doc := store.DocumentInput{Filename: f.Filename, RawText: strings.Join(f.Chunks, "\n"), Title: f.Title}
-			if _, err := st.CreateDocumentNotes(tenant, doc, notes); err != nil {
+			docID, err := st.CreateDocumentNotes(tenant, doc, notes)
+			if err != nil {
 				fmt.Fprintln(os.Stderr, "seed doc:", err)
 				os.Exit(2)
 			}
+			docIDs[f.Filename] = docID
 			nChunks += len(f.Chunks)
+		case "node":
+			vecs, err := embedder.Embed(ctx, []string{f.Title + ". " + f.Text})
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "embed:", err)
+				os.Exit(2)
+			}
+			id := fmt.Sprintf("eval-node-%d", i)
+			if err := st.SyncFactNote(tenant, id, f.Title, f.Text, vecs[0]); err != nil {
+				fmt.Fprintln(os.Stderr, "seed node:", err)
+				os.Exit(2)
+			}
+			docID, ok := docIDs[f.Doc]
+			if !ok {
+				fmt.Fprintln(os.Stderr, "node-fixture peker på ukjent doc:", f.Doc)
+				os.Exit(2)
+			}
+			if err := st.AddEdge(tenant, store.KnowledgeEdge{FromID: id, ToID: docID, Relation: "definert i"}); err != nil {
+				fmt.Fprintln(os.Stderr, "seed edge:", err)
+				os.Exit(2)
+			}
+			nNodes++
 		}
 	}
-	fmt.Printf("seedet %d fakta + %d dokument-biter\n\n", nFacts, nChunks)
+	fmt.Printf("seedet %d fakta + %d dokument-biter + %d uttrukne noder\n\n", nFacts, nChunks, nNodes)
 
 	hits, chars := 0, 0
 	var times []time.Duration

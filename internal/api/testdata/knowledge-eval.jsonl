@@ -23,3 +23,4 @@
 {"query": "hva er hovedstaden i Australia egentlig?", "want": [], "empty": true}
 {"query": "kan du skrive et lite dikt om våren til meg?", "want": [], "empty": true}
 {"query": "hva blir været i Oslo i morgen tidlig?", "want": [], "empty": true}
+{"query": "hvilke rutiner gjelder ved mottak av kjølevarer?", "want": ["kjøl", "4412"]}

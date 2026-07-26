@@ -278,13 +278,15 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 		return byID[fused[i]].CreatedAt.After(byID[fused[j]].CreatedAt)
 	})
 
+	// Kant-utvidelse (G2): naboene til topptreffene i kunnskapsgrafen tas med
+	// bakerst, innenfor samme budsjett. En dokument-bit drar inn de destillerte
+	// prosess/regel-nodene som er koblet til dokumentet sitt — og omvendt.
+	neighbors := s.expandNeighbors(tenantID, fused, byID)
+
 	var b strings.Builder
 	b.WriteString("Relevant intern kunnskap (bruk der det passer; siter kilden når du bruker et dokument):\n")
 	budget, n := noteBudget, 0
-	for _, id := range fused {
-		if n >= noteMaxN || budget <= 0 {
-			break
-		}
+	write := func(id, prefix string) {
 		note := byID[id]
 		text := note.Text
 		if note.Context != "" {
@@ -294,9 +296,80 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 		if note.SourceType == "document" && note.Title != "" {
 			src = "«" + note.Title + "»"
 		}
-		fmt.Fprintf(&b, "- (fra %s) %s\n", src, text)
+		fmt.Fprintf(&b, "- %s(fra %s) %s\n", prefix, src, text)
 		budget -= len(text)
 		n++
 	}
+	for _, id := range fused {
+		if n >= noteMaxN || budget <= 0 {
+			break
+		}
+		write(id, "")
+	}
+	for _, id := range neighbors {
+		if n >= noteMaxN || budget <= 0 {
+			break
+		}
+		write(id, "(relatert) ")
+	}
 	return b.String()
+}
+
+// expandSeedTop / expandMaxN: hvor mange topptreff som utvides, og maks antall
+// naboer som tas inn. Små med vilje — naboer er tillegg, aldri hovedinnhold.
+const (
+	expandSeedTop = 5
+	expandMaxN    = 5
+)
+
+// expandNeighbors finner 1-hopps grafnaboer til de øverste treffene: for
+// fakta/uttrukne noder er nøkkelen node-id-en (== lapp-id), for dokument-biter
+// dokument-noden (source_id). Returnerer lapp-ID-er som ikke alt er i treffene.
+func (s *Server) expandNeighbors(tenantID string, fused []string, byID map[string]store.KnowledgeNote) []string {
+	seen := map[string]bool{}
+	var keys []string
+	addKey := func(k string) {
+		if k != "" && !seen[k] {
+			seen[k] = true
+			keys = append(keys, k)
+		}
+	}
+	for i, id := range fused {
+		if i >= expandSeedTop {
+			break
+		}
+		note := byID[id]
+		if note.SourceType == "document" {
+			addKey(note.SourceID)
+		} else {
+			addKey(id)
+		}
+	}
+	edges, err := s.store.EdgesTouching(tenantID, keys)
+	if err != nil || len(edges) == 0 {
+		return nil
+	}
+	inFused := map[string]bool{}
+	for _, id := range fused {
+		inFused[id] = true
+	}
+	var out []string
+	for _, e := range edges {
+		for _, cand := range []string{e.FromID, e.ToID} {
+			if seen[cand] || inFused[cand] {
+				continue
+			}
+			// Kun naboer som finnes som aksepterte lapper (byID) tas inn —
+			// dok-noder og pending-noder har ingenting å injisere.
+			if _, ok := byID[cand]; !ok {
+				continue
+			}
+			seen[cand] = true
+			out = append(out, cand)
+			if len(out) >= expandMaxN {
+				return out
+			}
+		}
+	}
+	return out
 }
