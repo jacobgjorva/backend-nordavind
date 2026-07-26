@@ -3,7 +3,7 @@ package api
 import "testing"
 
 func TestCannedSmalltalk(t *testing.T) {
-	for _, m := range []string{"Takk!", "tusen takk", "takk for hjelpen", "Hei", "god morgen", "Takk idag", "takk i dag", "ha det bra", "supert, takk!"} {
+	for _, m := range []string{"Takk!", "tusen takk", "takk for hjelpen", "Hei", "god morgen", "Takk idag", "takk i dag", "ha det bra", "supert, takk!", "wow, takk", "haha takk!", "nice, tusen takk"} {
 		if cannedSmalltalk(m) == "" {
 			t.Errorf("%q skulle fått ferdig svar", m)
 		}

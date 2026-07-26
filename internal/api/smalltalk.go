@@ -11,7 +11,7 @@ import (
 // Fyrer KUN på rene småprat-meldinger (kort, uten spørsmål eller oppgave).
 
 var (
-	thanksRe = regexp.MustCompile(`(?i)^(tusen |mange )?takk( skal du ha| for hjelpen| så mye| i ?dag| for nå)?[!. 🙏😊❤️]*$|^(supert|perfekt|topp|nydelig|flott)[,!. ]*takk[!. ]*$`)
+	thanksRe = regexp.MustCompile(`(?i)^((wow|oi|haha|hehe|nice|kult|fett|sykt|supert|perfekt|topp|nydelig|flott|herlig|utrolig)[,!. ]{0,3})?(tusen |mange )?takk( skal du ha| for hjelpen| så mye| i ?dag| for nå)?[!. 🙏😊❤️]*$`)
 	helloRe  = regexp.MustCompile(`(?i)^(hei+|heisann|hallo+|halla|god (morgen|dag|kveld)|morn|yo)[!. 👋]*$`)
 	byeRe    = regexp.MustCompile(`(?i)^(ha det( bra)?|god helg|god natt|vi snakkes|takk for i dag|det var alt( for nå)?)[!. 👋]*$`)
 )
