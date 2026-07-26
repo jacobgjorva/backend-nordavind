@@ -17,21 +17,34 @@ import (
 // slide-listen — hver endring er en patch på én slide (set_slide), så
 // brukerens egne redigeringer i canvaset overlever neste instruks.
 
+// Felles for begge modusene. Hvilken modus som gjelder velges av KODEN ut fra
+// om lerretet har slides fra før (deckSystem), aldri av modellen selv.
 const deckSystemBase = "Du bygger EN presentasjon for brukeren. " +
 	"IKKE svar med prat eller forklaringer — utfør ved å kalle verktøyene. " +
-	"Én slide om gangen: set_slide med op=add legger til en ny slide bakerst, " +
-	"op=set endrer felt på en slide som finnes (oppgi id), op=remove sletter en, " +
-	"op=move flytter en. set_deck setter tittel, tema og stil på hele presentasjonen. " +
+	"set_slide med op=add legger til en ny slide bakerst, op=set endrer felt på " +
+	"en slide som finnes (oppgi id), op=remove sletter en, op=move flytter en. " +
+	"set_deck setter tittel, tema og stil på hele presentasjonen. " +
 	"Send KUN feltene som skal endres — alt du utelater beholdes som det er. " +
-	"Brukeren kan ha rettet tekst selv i canvaset: aldri bygg presentasjonen på nytt " +
-	"når du blir bedt om å endre én ting. " +
-	"Gjør KUN det brukeren ber om — ikke legg til slides på eget initiativ. " +
 	"Grafer og nøkkeltall henter data LIVE hver gang presentasjonen åpnes: " +
 	"skriv SQL relativ til CURRENT_DATE, aldri hardkodede datoer, og oppgi " +
 	"connection_id fra skjemaet. " +
 	"Vil brukeren endre utseendet, bytter du tema eller setter style-tokens " +
 	"(bg, text, muted, faint, line, grid, sans, mono, palette) — aldri layout. " +
 	"Etter verktøykallene svarer du med maks ett kort ord (f.eks. «Ok»)."
+
+// Tomt lerret: hele utkastet bygges nå, i ett — brukeren skal se en ferdig
+// presentasjon, ikke én tittelslide.
+const deckSystemBuild = "\nLERRETET ER TOMT — bygg HELE presentasjonen nå. " +
+	"Kall set_slide én gang per slide, i rekkefølge, i samme svar: " +
+	"tittelslide først, deretter innholdet, og avslutt med en oppsummering. " +
+	"Sikt på 6-10 slides og varier slide-typene (tekst, kulepunkter, bilde, " +
+	"utsagn, graf) — ikke samme type om og om igjen. Stopp aldri etter én slide."
+
+// Lerretet har innhold: nå er alt redigering av det som står der.
+const deckSystemEdit = "\nPresentasjonen finnes allerede — gjør KUN det brukeren " +
+	"ber om nå, på slidene under. Legg aldri til slides på eget initiativ, og " +
+	"bygg aldri presentasjonen på nytt: brukeren kan ha rettet tekst selv i " +
+	"canvaset, og alt du ikke får beskjed om å endre skal stå urørt."
 
 // deckSystem bygger systemteksten: kit-katalogen (generert fra JSON-filene),
 // hva som ALLEREDE ligger på lerretet, og databaseskjemaet for SQL-en.
@@ -42,6 +55,13 @@ const deckSystemBase = "Du bygger EN presentasjon for brukeren. " +
 func (s *Server) deckSystem(ctx context.Context, theme, slug string) string {
 	var b strings.Builder
 	b.WriteString(deckSystemBase)
+	// Modus velges av tilstanden, ikke av modellen: tomt lerret = bygg alt,
+	// slides fra før = ren redigering.
+	if s.deckIsEmpty(ctx, slug) {
+		b.WriteString(deckSystemBuild)
+	} else {
+		b.WriteString(deckSystemEdit)
+	}
 	b.WriteString("\n\n")
 	b.WriteString(deck.Get(theme).Catalog())
 	b.WriteString("\n" + s.deckState(ctx, slug))
