@@ -96,8 +96,22 @@ func (s *Server) embedCached(ctx context.Context, text string) ([]float32, error
 }
 
 func (s *Server) embed(ctx context.Context, text string) ([]float32, error) {
+	vecs, err := s.embedBatch(ctx, []string{text})
+	if err != nil {
+		return nil, err
+	}
+	return vecs[0], nil
+}
+
+// embedBatch embedder mange tekster i ETT kall (utdragslaget rangerer opptil
+// 60 avsnitt per søk — 60 HTTP-kall ville vært både tregt og dumt). Svar
+// sorteres på index-feltet; API-et garanterer ikke rekkefølge.
+func (s *Server) embedBatch(ctx context.Context, texts []string) ([][]float32, error) {
+	if len(texts) == 0 {
+		return nil, nil
+	}
 	url := strings.TrimSuffix(s.cfg.UpstreamBaseURL, "/") + "/embeddings"
-	body, _ := json.Marshal(map[string]any{"model": embeddingModel, "input": text})
+	body, _ := json.Marshal(map[string]any{"model": embeddingModel, "input": texts})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -111,8 +125,12 @@ func (s *Server) embed(ctx context.Context, text string) ([]float32, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("embeddings: HTTP %d", resp.StatusCode)
+	}
 	var out struct {
 		Data []struct {
+			Index     int       `json:"index"`
 			Embedding []float32 `json:"embedding"`
 		} `json:"data"`
 		Usage struct {
@@ -123,10 +141,17 @@ func (s *Server) embed(ctx context.Context, text string) ([]float32, error) {
 		return nil, err
 	}
 	s.countLLM(ctx, embeddingModel, "embedding", out.Usage.PromptTokens, 0)
-	if len(out.Data) == 0 {
-		return nil, fmt.Errorf("tom embedding")
+	if len(out.Data) != len(texts) {
+		return nil, fmt.Errorf("embeddings: fikk %d vektorer for %d tekster", len(out.Data), len(texts))
 	}
-	return out.Data[0].Embedding, nil
+	vecs := make([][]float32, len(texts))
+	for _, d := range out.Data {
+		if d.Index < 0 || d.Index >= len(vecs) {
+			return nil, fmt.Errorf("embeddings: ugyldig index %d", d.Index)
+		}
+		vecs[d.Index] = d.Embedding
+	}
+	return vecs, nil
 }
 
 func cosine(a, b []float32) float64 {
