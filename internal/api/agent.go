@@ -1102,6 +1102,7 @@ func (s *Server) recordUsage(ctx context.Context, full map[string]any, promptTok
 	model, _ := full["model"].(string)
 	event := store.UsageEvent{
 		Model:            model,
+		Source:           "chat",
 		PromptTokens:     promptTokens,
 		CompletionTokens: completionTokens,
 		CostUSD:          s.pricing.cost(model, promptTokens, completionTokens),

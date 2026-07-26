@@ -115,10 +115,14 @@ func (s *Server) embed(ctx context.Context, text string) ([]float32, error) {
 		Data []struct {
 			Embedding []float32 `json:"embedding"`
 		} `json:"data"`
+		Usage struct {
+			PromptTokens int `json:"prompt_tokens"`
+		} `json:"usage"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, err
 	}
+	s.countLLM(ctx, embeddingModel, "embedding", out.Usage.PromptTokens, 0)
 	if len(out.Data) == 0 {
 		return nil, fmt.Errorf("tom embedding")
 	}

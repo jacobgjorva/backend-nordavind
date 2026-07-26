@@ -67,8 +67,8 @@ func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 		rates:    &usdNok{},
 		credsKey: key,
 
-		planBuilding:   map[string]bool{},
-		runActive:      map[string]bool{},
+		planBuilding: map[string]bool{},
+		runActive:    map[string]bool{},
 	}
 	s.startScheduler(context.Background())
 	s.initIntentEngine()

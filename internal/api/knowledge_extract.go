@@ -217,7 +217,7 @@ func (s *Server) runDocExtraction(tenantID, userID, docID, title, summary, text 
 		if len(titles) > 0 {
 			existing = strings.Join(titles, "; ")
 		}
-		raw, err := s.llmComplete(ctx, docExtractSystem,
+		raw, err := s.llmComplete(ctx, "kunnskap", docExtractSystem,
 			"Eksisterende noder (ikke dupliser): "+existing+"\n\nDokument: "+title+"\n\n"+section, 600)
 		if err != nil {
 			continue

@@ -17,6 +17,9 @@ type ScalewayEmbedder struct {
 	APIKey  string
 	Model   string
 	Client  *http.Client
+	// OnUsage kalles med tokenforbruket for hvert kall (ctx bærer brukeren).
+	// nil = ingen telling. Motoren skal aldri vite HVORDAN det telles.
+	OnUsage func(ctx context.Context, model string, promptTokens, completionTokens int)
 }
 
 func (s *ScalewayEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
@@ -42,9 +45,15 @@ func (s *ScalewayEmbedder) Embed(ctx context.Context, texts []string) ([][]float
 			Index     int       `json:"index"`
 			Embedding []float32 `json:"embedding"`
 		} `json:"data"`
+		Usage struct {
+			PromptTokens int `json:"prompt_tokens"`
+		} `json:"usage"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, err
+	}
+	if s.OnUsage != nil {
+		s.OnUsage(ctx, s.Model, out.Usage.PromptTokens, 0)
 	}
 	if len(out.Data) != len(texts) {
 		return nil, fmt.Errorf("embeddings-kall: fikk %d vektorer for %d tekster", len(out.Data), len(texts))
@@ -67,6 +76,8 @@ type ScalewayJudge struct {
 	APIKey  string
 	Model   string
 	Client  *http.Client
+	// OnUsage: se ScalewayEmbedder.
+	OnUsage func(ctx context.Context, model string, promptTokens, completionTokens int)
 }
 
 func (s *ScalewayJudge) Pick(ctx context.Context, message string, keys []string) (string, error) {
@@ -126,9 +137,16 @@ func (s *ScalewayJudge) Pick(ctx context.Context, message string, keys []string)
 				Content string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
+		Usage struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+		} `json:"usage"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return "", err
+	}
+	if s.OnUsage != nil {
+		s.OnUsage(ctx, s.Model, out.Usage.PromptTokens, out.Usage.CompletionTokens)
 	}
 	if len(out.Choices) == 0 {
 		return "", fmt.Errorf("dommer-kall: tomt svar")
