@@ -207,7 +207,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// få en gjennomgangsrunde når utkastet står (se deckReviewed under).
 	deckBuildMode := deckSlug != "" && s.deckIsEmpty(ctx, deckSlug)
 	delete(full, "nordavind_deck")
-	if flowKey == "create_presentation" || deckSlug != "" {
+	if deckSlug != "" {
 		injectSystem(full, s.deckSystem(ctx, s.deckTheme(ctx, deckSlug), deckSlug))
 	}
 

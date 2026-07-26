@@ -110,14 +110,12 @@ var Flows = map[string]Flow{
 		Sticky:    true,
 	},
 	"create_presentation": {
-		Knowledge: true,
-		// Egne verktøy: presentasjonen bygges slide for slide som patcher, aldri
-		// som én stor spec — brukerens egne canvas-endringer skal overleve.
-		Tools:    []string{ToolSetSlide, ToolSetDeck},
-		Model:    "mid",
-		MaxChars: 120, // canvaset er svaret
-		Fallback:  FreeChatKey,
-		Sticky:    true,
+		// Presentasjoner bygges på lerretet, ikke i chat-tråden: her svarer
+		// koden bare med hvordan man åpner det (deckHint i intentwire.go).
+		// Selve byggingen skjer i presentasjonsflyten med set_slide/set_deck,
+		// som slås på av et åpent lerret — aldri av en vanlig melding.
+		Deterministic: true,
+		Fallback:      FreeChatKey,
 	},
 
 	"export_excel": {

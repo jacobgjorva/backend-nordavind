@@ -267,6 +267,9 @@ func (s *Server) applyIntent(ctx context.Context, user store.User, full map[stri
 		if key == "connect_database" {
 			return credentialBlock(msg), nil
 		}
+		if key == "create_presentation" {
+			return deckHint, nil
+		}
 		if key == "connect_m365" {
 			return s.m365SetupBlock(user), nil
 		}
@@ -282,6 +285,13 @@ func (s *Server) applyIntent(ctx context.Context, user store.User, full map[stri
 		full["model"] = flowModel(flow.Model)
 	}
 }
+
+// deckHint er hele svaret når noen ber om en presentasjon i vanlig chat:
+// lerretet skal aldri sprette opp midt i en samtale, så koden viser veien inn
+// i stedet. Ingen modellkall, ingen prat.
+const deckHint = "Presentasjoner bygges på et eget lerret. Skriv **/presentasjon** i " +
+	"meldingsfeltet (gjerne med hva den skal handle om), så åpner det seg og jeg " +
+	"bygger slidene der."
 
 // m365SetupBlock er det deterministiske oppskrift-steget for connect_m365:
 // koden velger riktig steg ut fra faktisk tilstand — modellen improviserer
