@@ -365,6 +365,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// måles mot dette før den vises (grounding.go).
 	var toolResults []string
 	lastDBResult := ""
+	lastDBSQL, lastDBConn := "", ""
 	// Handlings-verktøy (endrer tilstand: rutine, widget, agent, m365 …) gir
 	// korte kvitteringer med vilje — de skal ALDRI utløse backstop-syntesen.
 	actionTool := false
@@ -535,13 +536,45 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		for _, c := range calls {
 			if c.Name == "mail_compose" {
 				var ma struct {
-					ToEmail string `json:"to_email"`
-					ToName  string `json:"to_name"`
-					Subject string `json:"subject"`
-					Body    string `json:"body"`
+					ToEmail    string `json:"to_email"`
+					ToName     string `json:"to_name"`
+					Subject    string `json:"subject"`
+					Body       string `json:"body"`
+					AttachSQL  string `json:"attach_sql"`
+					AttachConn string `json:"attach_connection_id"`
+					AttachName string `json:"attach_filename"`
 				}
 				_ = json.Unmarshal([]byte(c.Args.String()), &ma)
-				emit(contentSSE(composeBlock(ma.ToName, ma.ToEmail, ma.Subject, ma.Body)))
+				spec := map[string]any{
+					"to":      []map[string]string{},
+					"subject": ma.Subject,
+					"body":    ma.Body,
+				}
+				if strings.TrimSpace(ma.ToEmail) != "" {
+					spec["to"] = []map[string]string{{"name": ma.ToName, "address": ma.ToEmail}}
+				}
+				// Kjørte modellen spørringen FØR kortet (vanlig mønster) og
+				// brukeren ba om vedlegg/oversikt: fest samme spørring
+				// deterministisk i stedet for å kreve attach_sql-disiplin.
+				if strings.TrimSpace(ma.AttachSQL) == "" && lastDBSQL != "" &&
+					attachHintRe.MatchString(lastUserText(full)) {
+					ma.AttachSQL, ma.AttachConn = lastDBSQL, lastDBConn
+				}
+				if strings.TrimSpace(ma.AttachSQL) != "" {
+					if user, ok := ctx.Value(userKey).(store.User); ok {
+						meta, _ := json.Marshal(map[string]any{"nordavind_step": "Bygger Excel-vedlegget"})
+						emit("data: " + string(meta))
+						id, name, nrows, errMsg := s.buildQueryAttachment(ctx, user.ID, dbCtx, ma.AttachConn, ma.AttachSQL, ma.AttachName)
+						if errMsg != "" {
+							// Vedlegget feilet: ærlig beskjed + kort uten vedlegg.
+							emit(contentSSE("Fikk ikke laget Excel-vedlegget (" + errMsg + ") — kortet under er uten vedlegg.\n\n"))
+						} else {
+							spec["attachments"] = []map[string]any{{"id": id, "name": name, "rows": nrows}}
+						}
+					}
+				}
+				sj, _ := json.Marshal(spec)
+				emit(contentSSE("```mailcompose\n" + string(sj) + "\n```"))
 				emit("data: [DONE]")
 				return
 			}
@@ -593,6 +626,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				if strings.HasPrefix(strings.TrimSpace(result), "{") {
 					dbSucceeded = true
 					lastDBResult = result
+					lastDBSQL, lastDBConn = args.SQL, args.ConnectionID
 				}
 				// Send spørringen som metadata så tabellen i svaret kan tilby
 				// live Excel-kobling (frontend fester den til meldingen).
@@ -959,3 +993,6 @@ func emitAfter(emit func(string), d time.Duration, status string) func() {
 
 // gaveUpRe: svar som melder tomt uten reell innsats.
 var gaveUpRe = regexp.MustCompile(`(?i)fant (ikke|ingen)|ingen pålitelig|ikke pålitelig informasjon`)
+
+// attachHintRe: brukeren ba om fil/vedlegg/oversikt i e-posten.
+var attachHintRe = regexp.MustCompile(`(?i)vedlegg|excel|xlsx|regneark|oversikt|rapport|liste|fil\b`)

@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -115,14 +116,15 @@ func (s *Server) handleMailSend(w http.ResponseWriter, r *http.Request) {
 	acc, rec, err := s.mailAccount(user)
 	hasSMTP := err == nil
 	var req struct {
-		To         []mail.Person `json:"to"`
-		Cc         []mail.Person `json:"cc"`
-		Bcc        []mail.Person `json:"bcc"`
-		Subject    string        `json:"subject"`
-		Body       string        `json:"body"`
-		BodyHTML   string        `json:"body_html"`
-		InReplyTo  string        `json:"in_reply_to"`
-		References string        `json:"references"`
+		To          []mail.Person `json:"to"`
+		Cc          []mail.Person `json:"cc"`
+		Bcc         []mail.Person `json:"bcc"`
+		Subject     string        `json:"subject"`
+		Body        string        `json:"body"`
+		BodyHTML    string        `json:"body_html"`
+		Attachments []string      `json:"attachment_ids"`
+		InReplyTo   string        `json:"in_reply_to"`
+		References  string        `json:"references"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "ugyldig request", http.StatusBadRequest)
@@ -131,7 +133,7 @@ func (s *Server) handleMailSend(w http.ResponseWriter, r *http.Request) {
 	if !hasSMTP {
 		// Ingen SMTP-konto: send via Microsoft Graph når M365 er koblet —
 		// samme kobling som filer/e-postlesing, null ekstra oppsett.
-		if err := s.sendViaGraph(r.Context(), user.ID, req.To, req.Cc, req.Bcc, req.Subject, req.Body, req.BodyHTML); err != nil {
+		if err := s.sendViaGraph(r.Context(), user.ID, req.To, req.Cc, req.Bcc, req.Subject, req.Body, req.BodyHTML, req.Attachments); err != nil {
 			http.Error(w, "sending feilet: "+err.Error(), http.StatusBadGateway)
 			return
 		}
@@ -163,7 +165,7 @@ func mailBody(text, html string) map[string]any {
 }
 
 // sendViaGraph sender e-posten med brukerens Microsoft 365-konto.
-func (s *Server) sendViaGraph(ctx context.Context, userID string, to, cc, bcc []mail.Person, subject, body, bodyHTML string) error {
+func (s *Server) sendViaGraph(ctx context.Context, userID string, to, cc, bcc []mail.Person, subject, body, bodyHTML string, attachmentIDs []string) error {
 	token, err := s.msAccessToken(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("Microsoft 365 er ikke koblet til")
@@ -175,14 +177,29 @@ func (s *Server) sendViaGraph(ctx context.Context, userID string, to, cc, bcc []
 		}
 		return out
 	}
+	message := map[string]any{
+		"subject":       subject,
+		"body":          mailBody(body, bodyHTML),
+		"toRecipients":  rcpt(to),
+		"ccRecipients":  rcpt(cc),
+		"bccRecipients": rcpt(bcc),
+	}
+	var atts []map[string]any
+	for _, id := range attachmentIDs {
+		if a, ok := s.mailAttach.get(userID, id); ok {
+			atts = append(atts, map[string]any{
+				"@odata.type":  "#microsoft.graph.fileAttachment",
+				"name":         a.Name,
+				"contentType":  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+				"contentBytes": base64.StdEncoding.EncodeToString(a.Data),
+			})
+		}
+	}
+	if len(atts) > 0 {
+		message["attachments"] = atts
+	}
 	payload := map[string]any{
-		"message": map[string]any{
-			"subject":       subject,
-			"body":          mailBody(body, bodyHTML),
-			"toRecipients":  rcpt(to),
-			"ccRecipients":  rcpt(cc),
-			"bccRecipients": rcpt(bcc),
-		},
+		"message":         message,
 		"saveToSentItems": true,
 	}
 	b, _ := json.Marshal(payload)

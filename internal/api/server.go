@@ -42,6 +42,10 @@ type Server struct {
 
 	// Intent-motoren (INTENT_ENGINE=shadow) — nil til den er bygget.
 	intent intentState
+
+	// Midlertidige e-postvedlegg (Excel fra spørringer) frem til brukeren
+	// klikker Send.
+	mailAttach attachmentStore
 }
 
 func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {

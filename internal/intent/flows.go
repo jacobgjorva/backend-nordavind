@@ -170,7 +170,9 @@ var Flows = map[string]Flow{
 	},
 
 	"email": {
-		Tools:    []string{ToolMailSearch, ToolMailRead, ToolMailCompose},
+		// Databaseverktøyene er med så modellen kan bygge Excel-vedlegg
+		// («send ordrelisten på e-post») — skjemaet følger verktøyet.
+		Tools:    []string{ToolMailSearch, ToolMailRead, ToolMailCompose, ToolQueryDatabase, ToolShowTable},
 		Model:    "mid",
 		MaxChars: 300,
 		Fallback: FreeChatKey,

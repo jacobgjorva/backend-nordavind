@@ -406,14 +406,20 @@ var mailComposeTool = map[string]any{
 		"name": "mail_compose",
 		"description": "Sett opp en e-post for utsending: brukeren får et redigerbart send-kort med " +
 			"mottaker, emne og utkastet ferdig utfylt, og trykker selv Send. Bruk ALLTID denne når " +
-			"brukeren vil sende eller skrive en e-post — sending er tilgjengelig via Microsoft 365.",
+			"brukeren vil sende eller skrive en e-post — sending er tilgjengelig via Microsoft 365. " +
+			"Skal DATA legges ved (Excel-oversikt, rapport, ordreliste): sett attach_sql + " +
+			"attach_connection_id direkte i dette kallet — IKKE kjør query_database eller vis tabellen " +
+			"i chatten først; vedlegget bygges og festes automatisk.",
 		"parameters": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"to_email": map[string]any{"type": "string", "description": "mottakerens e-postadresse (tom hvis ukjent)"},
-				"to_name":  map[string]any{"type": "string", "description": "mottakerens navn"},
-				"subject":  map[string]any{"type": "string", "description": "emne"},
-				"body":     map[string]any{"type": "string", "description": "utkast til meldingstekst"},
+				"to_email":             map[string]any{"type": "string", "description": "mottakerens e-postadresse (tom hvis ukjent)"},
+				"to_name":              map[string]any{"type": "string", "description": "mottakerens navn"},
+				"subject":              map[string]any{"type": "string", "description": "emne"},
+				"body":                 map[string]any{"type": "string", "description": "utkast til meldingstekst"},
+				"attach_sql":           map[string]any{"type": "string", "description": "valgfri: SELECT-spørring — resultatet legges ved som Excel-fil"},
+				"attach_connection_id": map[string]any{"type": "string", "description": "databasen spørringen kjøres mot"},
+				"attach_filename":      map[string]any{"type": "string", "description": "filnavn for vedlegget, f.eks. ordrer-juni"},
 			},
 			"required": []string{"subject", "body"},
 		},

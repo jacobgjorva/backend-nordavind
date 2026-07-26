@@ -310,6 +310,8 @@ var Registry = []Intent{
 			"svar leverandøren at vi godtar tilbudet",
 			"purr på svaret fra kunden per e-post",
 			"har det kommet noe fra leverandøren denne uken?",
+			"send en e-post med ordrelisten som vedlegg",
+			"e-post til kunden med en excel-oversikt vedlagt",
 		},
 	},
 	{

@@ -87,3 +87,4 @@
 {"text": "send meg en oppsummering av innboksen hver morgen", "want": "create_routine"}
 {"text": "skriv en hyggelig takkemail til leverandøren", "want": "email"}
 {"text": "svar Advania at vi tar oppdateringen på fredag", "want": "email"}
+{"text": "lag en epost til kunden med en excel-oversikt over ordrene som vedlegg", "want": "email"}
