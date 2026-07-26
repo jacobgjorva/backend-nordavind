@@ -172,7 +172,7 @@ func (s *Store) CreateChat(tenantID, userID, title string) (Chat, error) {
 // ListChats returnerer brukerens samtaler, nyest oppdatert først.
 func (s *Store) ListChats(userID string) ([]Chat, error) {
 	rows, err := s.db.Query(
-		`SELECT c.id, c.title, c.updated_at, c.agent_id, COALESCE(a.enabled, 0), c.kind, c.folder_id
+		`SELECT c.id, c.title, c.updated_at, c.agent_id, COALESCE(a.enabled, FALSE), c.kind, c.folder_id
 		 FROM chats c LEFT JOIN agents a ON a.id = c.agent_id
 		 WHERE c.user_id = ? ORDER BY c.updated_at DESC LIMIT 100`,
 		userID,
@@ -185,11 +185,11 @@ func (s *Store) ListChats(userID string) ([]Chat, error) {
 	var out []Chat
 	for rows.Next() {
 		var c Chat
-		var enabled int
+		var enabled Flag
 		if err := rows.Scan(&c.ID, &c.Title, &c.UpdatedAt, &c.AgentID, &enabled, &c.Kind, &c.FolderID); err != nil {
 			return nil, err
 		}
-		c.AgentEnabled = enabled != 0
+		c.AgentEnabled = bool(enabled)
 		out = append(out, c)
 	}
 	return out, rows.Err()

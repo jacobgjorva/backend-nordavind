@@ -197,8 +197,18 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	}
 	// Widget-flytene fra intent-ruting trenger samme feltskjema-instruks som
 	// widget-editoren — uten den famler modellen blindt med set_widget.
-	if widgetSlug == "" && (flowKey == "create_widget" || flowKey == "edit_widget" || flowKey == "create_presentation") {
+	if widgetSlug == "" && (flowKey == "create_widget" || flowKey == "edit_widget") {
 		injectSystem(full, s.widgetSystem(ctx))
+	}
+	// Presentasjonsflyten: kit-katalogen (temaets ferdige slides) i stedet for
+	// widget-skjemaet — modellen velger layout og fyller felter.
+	deckSlug, _ := full["nordavind_deck"].(string)
+	// Bygg-modus avgjøres av tilstanden før første kall: et tomt lerret skal
+	// få en gjennomgangsrunde når utkastet står (se deckReviewed under).
+	deckBuildMode := deckSlug != "" && s.deckIsEmpty(ctx, deckSlug)
+	delete(full, "nordavind_deck")
+	if flowKey == "create_presentation" || deckSlug != "" {
+		injectSystem(full, s.deckSystem(ctx, s.deckTheme(ctx, deckSlug), deckSlug))
 	}
 
 	// Connector-agent: hjelper brukeren koble til eksterne kilder via verktøy.
@@ -217,7 +227,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	if editID != "" {
 		if user, ok := ctx.Value(userKey).(store.User); ok {
 			if a, err := s.store.GetAgent(editID, user.ID); err == nil {
-				if !a.CriteriaApproved && !a.Enabled {
+				if !a.Enabled {
 					// Ferskt utkast: avgjør rutine vs engangsoppdrag og start.
 					// (En aktivert rutine er Enabled uten godkjente kriterier —
 					// den skal til vanlig redigering, ikke ny planlegging.)
@@ -234,7 +244,23 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// Bilder tolkes av vision-modellen uten verktøy — web_search/db gir
 	// tomme svar sammen med bilde-input.
 	if !hasImageMessage(full) {
-		if widgetSlug != "" {
+		if deckSlug != "" {
+			// Åpent presentasjons-lerret: KUN slide-verktøyene, uansett hva
+			// ruteren måtte mene om meldingen. tool_choice=required gjør det
+			// umulig å svare med prat i stedet for å gjøre jobben — koden
+			// håndhever det, ikke en formulering i prompten.
+			full["tools"] = deckTools(s.deckTheme(ctx, deckSlug))
+			// Tomt lerret: første kall MÅ være en slide. Ellers holdt modellen
+			// seg for god med å sette tittel via set_deck og stoppe der.
+			if s.deckIsEmpty(ctx, deckSlug) {
+				full["tool_choice"] = map[string]any{
+					"type":     "function",
+					"function": map[string]any{"name": "set_slide"},
+				}
+			} else {
+				full["tool_choice"] = "required"
+			}
+		} else if widgetSlug != "" {
 			// Widget-editor: KUN set_widget. Uten query_database/web_search kan
 			// ikke modellen svare på dataspørsmål — den må skrive SQL-en inn i
 			// widgeten. Skjemaet ligger allerede i system-prompten.
@@ -361,6 +387,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// Kode-håndhevet søkeinnsats: «fant ikke» etter bare ett søk godtas aldri —
 	// modellen sendes tilbake for flere vinkler (én gang).
 	searchNudged := false
+	// Presentasjonsutkast: én gjennomgang der modellen retter rekkefølge og
+	// hull med move/set. Kun ved nybygg — redigering går aldri denne veien.
+	deckReviewed := false
 	// Kildekontroll: alt verktøyene returnerer denne turen, ordrett — prosaen
 	// måles mot dette før den vises (grounding.go).
 	var toolResults []string
@@ -412,7 +441,13 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		if resp.StatusCode != http.StatusOK {
 			s.log.Warn("upstream-runde ikke OK", "status", resp.StatusCode)
 		}
-		calls, usage, content := s.relayRound(resp, emit, streamThis)
+		// Kildekontroll på streamede svar (G1): grunnlaget er samtalen +
+		// verktøydata; gaten holder igjen udekkede påstander til de er sjekket.
+		var gate *sentenceGate
+		if streamThis {
+			gate = newSentenceGate(groundingBasis(full, toolResults))
+		}
+		calls, usage, content := s.relayRound(resp, emit, streamThis, gate)
 		// Tvunget verktøyvalg gjelder kun én runde.
 		delete(full, "tool_choice")
 		resp.Body.Close()
@@ -443,8 +478,40 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				return
 			}
 			if streamThis {
-				// Alt synlig er allerede sendt live. Kun tomhets-backstop og
-				// grense-LOGG igjen (aldri omskriving av noe brukeren har sett).
+				// Slipp en ren hale, eller avgjør skjebnen til det tilbakeholdte:
+				// dommer godkjenner (beregning/telling) → vis; underkjenner →
+				// ett fortsettelses-omforsøk, ellers ærlig klipp. Det viste
+				// prefikset er alltid kildefast og røres aldri.
+				if rel := gate.finish(); rel != "" {
+					emit(contentSSE(rel))
+				}
+				if gate.held {
+					s.log.Warn("kildekontroll (stream): udekkede verdier", "avvik", strings.Join(gate.offenders, ", "))
+					step, _ := json.Marshal(map[string]any{"nordavind_step": "Dobbeltsjekker mot kildene"})
+					emit("data: " + string(step))
+					basis := groundingBasis(full, toolResults)
+					if ok, problems := s.judgeClaims(ctx, lastUserText(full), trimmed, gate.offenders, basis); ok {
+						emit(contentSSE(gate.heldText()))
+					} else {
+						s.log.Warn("faktadommer: dikting stanset", "problemer", strings.Join(problems, "; "))
+						// Midt i en setning: en modell-fortsettelse leser dårlig
+						// («Du er født Jeg vet ikke …») — ta den ærlige broen i
+						// kode direkte. Ved hel setningsgrense får modellen ett
+						// forsøk på en kildefast fortsettelse.
+						shown := gate.shownText()
+						if midSentence(shown) {
+							emit(contentSSE(honestCut(shown)))
+						} else if cont := s.regroundContinuation(ctx, full, trimmed, shown, gate.offenders, basis, &promptTokens, &completionTokens); cont != "" {
+							emit(contentSSE(cont))
+						} else {
+							emit(contentSSE(honestCut(shown)))
+						}
+					}
+					emit("data: [DONE]")
+					return
+				}
+				// Kun tomhets-backstop og grense-LOGG igjen (aldri omskriving
+				// av noe brukeren har sett).
 				switch {
 				case len([]rune(trimmed)) < 3 && usedTool && !actionTool:
 					step, _ := json.Marshal(map[string]any{"nordavind_step": "Oppsummerer funnene"})
@@ -470,22 +537,37 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				emit(contentSSE(backstopGraceful))
 			default:
 				final := content
-				if off := groundingOffenders(final, toolResults); len(off) > 0 {
+				basis := groundingBasis(full, toolResults)
+				if off := groundingOffenders(final, basis); len(off) > 0 {
 					s.log.Warn("kildekontroll: avvik i svar", "avvik", strings.Join(off, ", "))
-					// Rene tallavvik er som regel LOVLIGE beregninger (differanser,
-					// prosent) — de slipper gjennom med kildetabellen vedlagt som
-					// kvittering. Diktede NAVN blokkeres fortsatt hardt.
+					// Rene tallavvik KAN være lovlige beregninger (differanser,
+					// prosent) — men faktadommeren avgjør (G2); godkjent slipper
+					// gjennom med kildetabellen vedlagt som kvittering. Diktede
+					// NAVN blokkeres fortsatt hardt uten dommer.
 					if !hasNameOffender(off) {
-						emit(contentSSE(final))
-						if lastDBResult != "" {
-							emit(contentSSE("\n\n```table\n" + lastDBResult + "\n```"))
+						if ok, problems := s.judgeClaims(ctx, lastUserText(full), final, off, basis); ok {
+							emit(contentSSE(final))
+							if lastDBResult != "" {
+								emit(contentSSE("\n\n```table\n" + lastDBResult + "\n```"))
+							}
+							// Kode-garantiene gjelder også her: eksportkort og
+							// widget-blokk skal aldri forsvinne fordi svaret tok
+							// godkjent-stien.
+							if flowKey == "export_excel" && lastDBResult != "" && !strings.Contains(final, "```export") {
+								emit(contentSSE("\n\n```export\n" + lastDBResult + "\n```"))
+							}
+							if createdWidget != "" && !strings.Contains(final, "```widget") {
+								emit(contentSSE("\n\n```widget\n" + createdWidget + "\n```"))
+							}
+							emit("data: [DONE]")
+							return
+						} else {
+							s.log.Warn("faktadommer: tallavvik underkjent", "problemer", strings.Join(problems, "; "))
 						}
-						emit("data: [DONE]")
-						return
 					}
 					step, _ := json.Marshal(map[string]any{"nordavind_step": "Dobbeltsjekker mot kildene"})
 					emit("data: " + string(step))
-					final = s.regroundAnswer(ctx, full, final, off, toolResults, &promptTokens, &completionTokens)
+					final = s.regroundAnswer(ctx, full, final, off, basis, &promptTokens, &completionTokens)
 					if final == "" {
 						// Omforsøket holdt heller ikke: vis kilden i stedet for
 						// utrygg prosa — tabellen for data, kildehenvisning ellers.
@@ -538,6 +620,23 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			// glemmer blokka i svaret sitt.
 			if createdWidget != "" && !strings.Contains(content, "```widget") {
 				emit(contentSSE("\n\n```widget\n" + createdWidget + "\n```"))
+			}
+			// Nybygd presentasjon: én gjennomgang før brukeren ser den ferdig.
+			// Modellen får listen slik den faktisk ble, og retter selv.
+			if deckBuildMode && !deckReviewed && deckSlug != "" && round < roundCap {
+				deckReviewed = true
+				msgs, _ := full["messages"].([]any)
+				full["messages"] = append(msgs,
+					map[string]any{"role": "assistant", "content": content},
+					map[string]any{"role": "user", "content": "Se over presentasjonen med kritiske øyne:\n\n" +
+						s.deckState(ctx, deckSlug) +
+						"\nRett det som ikke henger sammen: feil rekkefølge (op=move), " +
+						"slides som mangler eller gjentar hverandre, tynt innhold, " +
+						"samme slide-type for mange ganger på rad. Er alt bra, svarer du bare «Ok»."})
+				delete(full, "tool_choice")
+				step, _ := json.Marshal(map[string]any{"nordavind_step": "Går gjennom presentasjonen"})
+				emit("data: " + string(step))
+				continue
 			}
 			emit("data: [DONE]")
 			return
@@ -774,6 +873,23 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					}
 				}
 				emit(`data: {"nordavind_widget_updated":true}`)
+			case "set_slide", "set_deck":
+				// Presentasjon: hver patch lagres med en gang, og canvaset får
+				// beskjed om å hente specen på nytt.
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Bygger presentasjon"})
+				emit("data: " + string(meta))
+				if c.Name == "set_slide" {
+					result, deckSlug = s.runSlideOp(ctx, deckSlug, c.Args.String())
+				} else {
+					result, deckSlug = s.runDeckOp(ctx, deckSlug, c.Args.String())
+				}
+				if createdWidget == "" {
+					if m := widgetSlugRe.FindStringSubmatch(result); m != nil {
+						createdWidget = m[1]
+					}
+				}
+				dm, _ := json.Marshal(map[string]any{"nordavind_deck_updated": deckSlug})
+				emit("data: " + string(dm))
 			default:
 				if q := strings.TrimSpace(args.Query); q != "" {
 					// Fremdriftssteg til tidslinjen i frontend.
@@ -816,6 +932,13 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		})
 		msgs = append(msgs, toolMsgs...)
 		full["messages"] = msgs
+
+		// Tvungen verktøybruk gjelder KUN første runde (presentasjonsflyten):
+		// minst én endring skal skje, men modellen skal kunne stoppe etterpå.
+		// «none» settes derimot bevisst på siste runde og skal stå.
+		if tc, ok := full["tool_choice"]; ok && tc != "none" {
+			delete(full, "tool_choice")
+		}
 
 		if round == roundCap-1 {
 			// Siste runde: tving frem et svar uten flere verktøykall, og be
@@ -912,10 +1035,26 @@ func (s *Server) streamBackstop(ctx context.Context, full map[string]any, emit f
 		emit(contentSSE(backstopGraceful))
 		return
 	}
-	_, usage, content := s.relayRound(resp, emit, true)
+	// Også backstop-syntesen er kildekontrollert — den gjenforteller verktøydata
+	// (som ligger i samtalen på dette tidspunktet) og kan dikte akkurat som
+	// hovedsvaret.
+	gate := newSentenceGate(groundingBasis(full, nil))
+	_, usage, content := s.relayRound(resp, emit, true, gate)
 	resp.Body.Close()
 	*promptTokens += usage.PromptTokens
 	*completionTokens += usage.CompletionTokens
+	if rel := gate.finish(); rel != "" {
+		emit(contentSSE(rel))
+	}
+	if gate.held {
+		if ok, _ := s.judgeClaims(ctx, lastUserText(full), content, gate.offenders, groundingBasis(full, nil)); ok {
+			emit(contentSSE(gate.heldText()))
+		} else {
+			s.log.Warn("faktadommer (backstop): dikting stanset", "avvik", strings.Join(gate.offenders, ", "))
+			emit(contentSSE(honestCut(gate.shownText())))
+		}
+		return
+	}
 	if len([]rune(strings.TrimSpace(content))) < 3 {
 		emit(contentSSE(backstopGraceful))
 	}

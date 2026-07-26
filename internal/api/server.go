@@ -32,8 +32,6 @@ type Server struct {
 
 	// Kontinuerlige oppdrags-løkker som kjører akkurat nå (agent-id → aktiv),
 	// så vi ikke starter samme oppdrag to ganger.
-	missionMu      sync.Mutex
-	missionRunning map[string]bool
 
 	// Spinup-jobber som pågår (agent-id → bygger), så samme plan aldri
 	// kompileres to ganger samtidig.
@@ -69,7 +67,6 @@ func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 		rates:    &usdNok{},
 		credsKey: key,
 
-		missionRunning: map[string]bool{},
 		planBuilding:   map[string]bool{},
 		runActive:      map[string]bool{},
 	}
@@ -152,6 +149,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /v1/agents/{id}/persona", s.requireAuth(s.handleSetAgentPersona))
 	mux.HandleFunc("GET /v1/agents/runs", s.requireAuth(s.handleAgentRuns))
 	mux.HandleFunc("POST /v1/agents/{id}/seen", s.requireAuth(s.handleMarkAgentSeen))
+	mux.HandleFunc("GET /v1/agents/{id}/plan", s.requireAuth(s.handleGetAgentPlan))
+	mux.HandleFunc("PUT /v1/agents/{id}/plan", s.requireAuth(s.handleSaveAgentPlan))
+	mux.HandleFunc("POST /v1/agents/{id}/plan/rebuild", s.requireAuth(s.handleRebuildAgentPlan))
+	mux.HandleFunc("PUT /v1/agents/{id}/schedule", s.requireAuth(s.handleSetAgentSchedule))
 	mux.HandleFunc("GET /v1/agent-connections", s.requireAuth(s.handleAgentConnections))
 	mux.HandleFunc("GET /v1/mail/account", s.requireAuth(s.handleGetMailAccount))
 	mux.HandleFunc("POST /v1/mail/send", s.requireAuth(s.handleMailSend))
@@ -169,12 +170,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/widgets/{slug}/share", s.requireAuth(s.handleShareWidget))
 	mux.HandleFunc("GET /v1/users", s.requireAuth(s.handleListTenantUsers))
 	mux.HandleFunc("GET /v1/widgets/{slug}/query", s.requireAuth(s.handleWidgetQuery))
+	mux.HandleFunc("POST /v1/query", s.requireAuth(s.handleAdhocQuery))
+	mux.HandleFunc("GET /v1/deck/kits", s.requireAuth(s.handleDeckKits))
+	mux.HandleFunc("POST /v1/decks/{slug}/slide", s.requireAuth(s.handleDeckSlide))
+	mux.HandleFunc("POST /v1/decks/{slug}/meta", s.requireAuth(s.handleDeckMeta))
 	mux.HandleFunc("GET /v1/chats/{chatId}/agent", s.requireAuth(s.handleAgentByChat))
 	mux.HandleFunc("PATCH /v1/agents/{id}", s.requireAuth(s.handleSetAgentEnabled))
 	mux.HandleFunc("PUT /v1/agents/{id}", s.requireAuth(s.handleUpdateAgent))
 	mux.HandleFunc("POST /v1/agents/draft", s.requireAuth(s.handleCreateDraftAgent))
-	mux.HandleFunc("POST /v1/agents/{id}/mission", s.requireAuth(s.handleSetMissionPlan))
-	mux.HandleFunc("POST /v1/agents/{id}/mission/approve", s.requireAuth(s.handleApproveMission))
 	mux.HandleFunc("POST /v1/agents", s.requireAuth(s.handleCreateAgent))
 	mux.HandleFunc("DELETE /v1/agents/{id}", s.requireAuth(s.handleDeleteAgent))
 	return s.cors(mux)
@@ -231,7 +234,10 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 						if rd.apply != nil {
 							rd.apply()
 						}
-						if kb != "" {
+						// G3 (docs/KNOWLEDGE.md): kun flyter med Knowledge i
+						// flyt-tabellen får intern kunnskap injisert — web_fact
+						// og smalltalk skal aldri bære interne lapper.
+						if kb != "" && flowWantsKnowledge(full) {
 							injectSystem(full, kb)
 						}
 						if b, err := json.Marshal(full); err == nil {

@@ -160,6 +160,9 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("dokument lagret", "tittel", title, "lapper", len(notes))
+	// G4: destiller dokumentet til strukturerte grafnoder i bakgrunnen —
+	// prosedyrer/regler/termer med kant til dok-noden, pending til godkjenning.
+	go s.runDocExtraction(user.TenantID, user.ID, docID, title, summary, text)
 	writeJSON(w, map[string]any{"id": docID, "title": title, "summary": summary, "chunks": len(notes)})
 }
 

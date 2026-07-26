@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -24,8 +25,11 @@ const (
 )
 
 type Store struct {
-	db *sql.DB
+	db *DB
 }
+
+// IsPostgres: sant når datalaget kjører mot Postgres (pgvector-henting mm.).
+func (s *Store) IsPostgres() bool { return s.db.pg }
 
 type Tenant struct {
 	ID   string `json:"id"`
@@ -39,13 +43,19 @@ type User struct {
 	Role     string `json:"role"`
 }
 
+// Open åpner datalaget: en postgres://-URL gir Postgres (pgvector, tsvector),
+// alt annet tolkes som SQLite-filsti. Skjemaene holdes i synk hver for seg —
+// pgschema.sql er sannheten for Postgres, migrate*-funksjonene for SQLite.
 func Open(path string) (*Store, error) {
+	if strings.HasPrefix(path, "postgres://") || strings.HasPrefix(path, "postgresql://") {
+		return openPostgres(path)
+	}
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1) // SQLite: én skriver
-	s := &Store{db: db}
+	s := &Store{db: &DB{sql: db}}
 	if err := s.migrate(); err != nil {
 		return nil, err
 	}
@@ -203,26 +213,22 @@ func (s *Store) CreateLoginCode(email string) (string, error) {
 
 // RedeemCode validerer koden og bytter den mot en sesjonstoken.
 func (s *Store) RedeemCode(email, code string) (string, User, error) {
-	var rowid int64
-	err := s.db.QueryRow(
-		`SELECT rowid FROM login_codes
-		 WHERE email = ? AND code = ? AND used = 0 AND expires_at > ?
-		 ORDER BY rowid DESC LIMIT 1`,
+	// Atomisk innløsning: UPDATE-en både finner og bruker koden i ett steg —
+	// ingen les-endre-skriv-luke, portabelt uten SQLite-rowid.
+	res, err := s.db.Exec(
+		`UPDATE login_codes SET used = TRUE
+		 WHERE email = ? AND code = ? AND used = FALSE AND expires_at > ?`,
 		email, code, time.Now(),
-	).Scan(&rowid)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", User{}, ErrInvalidCode
-	}
+	)
 	if err != nil {
 		return "", User{}, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return "", User{}, ErrInvalidCode
 	}
 
 	user, err := s.UserByEmail(email)
 	if err != nil {
-		return "", User{}, err
-	}
-
-	if _, err := s.db.Exec(`UPDATE login_codes SET used = 1 WHERE rowid = ?`, rowid); err != nil {
 		return "", User{}, err
 	}
 

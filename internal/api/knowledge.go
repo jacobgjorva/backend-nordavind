@@ -143,16 +143,37 @@ func cosine(a, b []float32) float64 {
 
 var ftsTokenRe = regexp.MustCompile(`\p{L}[\p{L}\p{N}]+`)
 
-// ftsQuery bygger et trygt FTS5 MATCH-uttrykk fra fri tekst: plukker ut ord-
-// tokens (bokstav-initiale), siterer hver og OR-slår dem. Tåler tegnsetting og
-// fanger eksakte koder/navn embeddings bommer på.
-func ftsQuery(query string) string {
+// ftsStopwords: norske funksjonsord som bærer null søke-hensikt. Uten dette
+// filteret OR-matcher «kan du … om … til meg» praktisk talt alle lapper, og
+// irrelevante meldinger får injisert kunnskap (målt i knowledge-eval:
+// 392-995 tegn støy). Innholdsord slipper alltid gjennom.
+var ftsStopwords = map[string]bool{
+	"og": true, "i": true, "på": true, "til": true, "for": true, "med": true,
+	"av": true, "om": true, "er": true, "var": true, "det": true, "den": true,
+	"de": true, "en": true, "et": true, "ei": true, "jeg": true, "du": true,
+	"vi": true, "han": true, "hun": true, "dere": true, "meg": true, "deg": true,
+	"oss": true, "min": true, "din": true, "vår": true, "hva": true, "hvem": true,
+	"hvor": true, "når": true, "hvordan": true, "hvorfor": true, "hvilke": true,
+	"hvilken": true, "kan": true, "skal": true, "vil": true, "må": true,
+	"har": true, "hadde": true, "blir": true, "ble": true, "som": true,
+	"at": true, "ikke": true, "noe": true, "noen": true, "denne": true,
+	"dette": true, "der": true, "her": true, "da": true, "så": true, "seg": true,
+	"sin": true, "sitt": true, "våre": true, "mine": true, "eller": true,
+	"men": true, "også": true, "bare": true, "litt": true, "lite": true,
+	"veldig": true, "helt": true, "egentlig": true, "gjerne": true, "takk": true,
+}
+
+// contentTokens plukker innholdsordene fra fri tekst (stoppord filtreres) —
+// grunnlaget for nøkkelordsøket i begge dialekter og enslig-ord-vernet.
+func contentTokens(query string) []string {
 	toks := ftsTokenRe.FindAllString(strings.ToLower(query), -1)
-	parts := make([]string, 0, len(toks))
+	out := make([]string, 0, len(toks))
 	for _, t := range toks {
-		parts = append(parts, `"`+t+`"`)
+		if !ftsStopwords[t] {
+			out = append(out, t)
+		}
 	}
-	return strings.Join(parts, " OR ")
+	return out
 }
 
 // knowledgeContext henter den mest relevante interne kunnskapen for spørsmålet
@@ -164,18 +185,10 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 	if len([]rune(strings.TrimSpace(query))) < 12 {
 		return ""
 	}
-	notes, _ := s.store.AcceptedNotes(tenantID)
-	if len(notes) == 0 {
-		return ""
-	}
 	qvec, err := s.embedCached(ctx, query)
 	if err != nil {
 		s.log.Warn("embedding feilet", "err", err)
 		return ""
-	}
-	byID := make(map[string]store.KnowledgeNote, len(notes))
-	for _, n := range notes {
-		byID[n.ID] = n
 	}
 
 	// Vektor-kandidater: cosine over gulvet, rangert (best først).
@@ -184,18 +197,88 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 		score float64
 	}
 	var vec []sc
-	for _, n := range notes {
-		if c := cosine(qvec, n.Embedding); c >= vecFloor {
-			vec = append(vec, sc{n.ID, c})
+	byID := map[string]store.KnowledgeNote{}
+	if s.store.IsPostgres() {
+		// Søket skjer I databasen (pgvector) — kun topp-kandidatene krysser
+		// grensa, uansett hvor stor kunnskapsbasen er.
+		top, sims, err := s.store.TopNotesByEmbedding(tenantID, qvec, candDepth)
+		if err != nil {
+			s.log.Warn("vektorsøk feilet", "err", err)
+			return ""
+		}
+		for i, n := range top {
+			byID[n.ID] = n
+			if sims[i] >= vecFloor {
+				vec = append(vec, sc{n.ID, sims[i]})
+			}
+		}
+	} else {
+		// SQLite: last alle og regn i Go (fint på små baser).
+		notes, _ := s.store.AcceptedNotes(tenantID)
+		if len(notes) == 0 {
+			return ""
+		}
+		for _, n := range notes {
+			byID[n.ID] = n
+			if c := cosine(qvec, n.Embedding); c >= vecFloor {
+				vec = append(vec, sc{n.ID, c})
+			}
+		}
+		sort.Slice(vec, func(i, j int) bool { return vec[i].score > vec[j].score })
+		if len(vec) > candDepth {
+			vec = vec[:candDepth]
 		}
 	}
-	sort.Slice(vec, func(i, j int) bool { return vec[i].score > vec[j].score })
-	if len(vec) > candDepth {
-		vec = vec[:candDepth]
+
+	// Nøkkelord-kandidater, allerede rangert av databasen.
+	fts, _ := s.store.SearchNotesFTS(tenantID, contentTokens(query), candDepth)
+	// Postgres: FTS-treff utenfor vektor-toppen må hentes inn i kartet.
+	if s.store.IsPostgres() {
+		var missing []string
+		for _, id := range fts {
+			if _, ok := byID[id]; !ok {
+				missing = append(missing, id)
+			}
+		}
+		if extra, err := s.store.NotesByIDs(tenantID, missing); err == nil {
+			for _, n := range extra {
+				byID[n.ID] = n
+			}
+		}
 	}
 
-	// Nøkkelord-kandidater (BM25), allerede rangert av SQLite.
-	fts, _ := s.store.SearchNotesFTS(tenantID, ftsQuery(query), candDepth)
+	// Enslig-ord-vernet: en kandidat UTEN vektor-støtte må treffe minst to
+	// distinkte innholdsord fra spørsmålet. Ett tilfeldig felles ord («våren»)
+	// er støy, ikke intern kunnskap (målt i knowledge-eval).
+	inVec := map[string]bool{}
+	for _, v := range vec {
+		inVec[v.id] = true
+	}
+	qToks := map[string]bool{}
+	for _, t := range ftsTokenRe.FindAllString(strings.ToLower(query), -1) {
+		if !ftsStopwords[t] {
+			qToks[t] = true
+		}
+	}
+	kept := fts[:0]
+	for _, id := range fts {
+		if inVec[id] {
+			kept = append(kept, id)
+			continue
+		}
+		note := byID[id]
+		text := strings.ToLower(note.Text + " " + note.Context)
+		matches := 0
+		for t := range qToks {
+			if strings.Contains(text, t) {
+				matches++
+			}
+		}
+		if matches >= 2 {
+			kept = append(kept, id)
+		}
+	}
+	fts = kept
 
 	// RRF-fusjon: hver liste bidrar 1/(k + rangering).
 	rrf := map[string]float64{}
@@ -221,13 +304,15 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 		return byID[fused[i]].CreatedAt.After(byID[fused[j]].CreatedAt)
 	})
 
+	// Kant-utvidelse (G2): naboene til topptreffene i kunnskapsgrafen tas med
+	// bakerst, innenfor samme budsjett. En dokument-bit drar inn de destillerte
+	// prosess/regel-nodene som er koblet til dokumentet sitt — og omvendt.
+	neighbors := s.expandNeighbors(tenantID, fused, byID)
+
 	var b strings.Builder
 	b.WriteString("Relevant intern kunnskap (bruk der det passer; siter kilden når du bruker et dokument):\n")
 	budget, n := noteBudget, 0
-	for _, id := range fused {
-		if n >= noteMaxN || budget <= 0 {
-			break
-		}
+	write := func(id, prefix string) {
 		note := byID[id]
 		text := note.Text
 		if note.Context != "" {
@@ -237,9 +322,99 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 		if note.SourceType == "document" && note.Title != "" {
 			src = "«" + note.Title + "»"
 		}
-		fmt.Fprintf(&b, "- (fra %s) %s\n", src, text)
+		fmt.Fprintf(&b, "- %s(fra %s) %s\n", prefix, src, text)
 		budget -= len(text)
 		n++
 	}
+	for _, id := range fused {
+		if n >= noteMaxN || budget <= 0 {
+			break
+		}
+		write(id, "")
+	}
+	for _, id := range neighbors {
+		if n >= noteMaxN || budget <= 0 {
+			break
+		}
+		write(id, "(relatert) ")
+	}
 	return b.String()
+}
+
+// expandSeedTop / expandMaxN: hvor mange topptreff som utvides, og maks antall
+// naboer som tas inn. Små med vilje — naboer er tillegg, aldri hovedinnhold.
+const (
+	expandSeedTop = 5
+	expandMaxN    = 5
+)
+
+// expandNeighbors finner 1-hopps grafnaboer til de øverste treffene: for
+// fakta/uttrukne noder er nøkkelen node-id-en (== lapp-id), for dokument-biter
+// dokument-noden (source_id). Returnerer lapp-ID-er som ikke alt er i treffene.
+func (s *Server) expandNeighbors(tenantID string, fused []string, byID map[string]store.KnowledgeNote) []string {
+	seen := map[string]bool{}
+	var keys []string
+	addKey := func(k string) {
+		if k != "" && !seen[k] {
+			seen[k] = true
+			keys = append(keys, k)
+		}
+	}
+	for i, id := range fused {
+		if i >= expandSeedTop {
+			break
+		}
+		note := byID[id]
+		if note.SourceType == "document" {
+			addKey(note.SourceID)
+		} else {
+			addKey(id)
+		}
+	}
+	edges, err := s.store.EdgesTouching(tenantID, keys)
+	if err != nil || len(edges) == 0 {
+		return nil
+	}
+	inFused := map[string]bool{}
+	for _, id := range fused {
+		inFused[id] = true
+	}
+	// Postgres holder bare kandidatene i minnet — hent nabo-lapper som mangler
+	// (kun aksepterte lapper returneres; dok/pending-noder finnes ikke der).
+	if s.store.IsPostgres() {
+		var missing []string
+		for _, e := range edges {
+			for _, cand := range []string{e.FromID, e.ToID} {
+				if !seen[cand] && !inFused[cand] {
+					if _, ok := byID[cand]; !ok {
+						missing = append(missing, cand)
+					}
+				}
+			}
+		}
+		if extra, err := s.store.NotesByIDs(tenantID, missing); err == nil {
+			for _, n := range extra {
+				byID[n.ID] = n
+			}
+		}
+	}
+	var out []string
+	for _, e := range edges {
+		for _, cand := range []string{e.FromID, e.ToID} {
+			if seen[cand] || inFused[cand] {
+				continue
+			}
+			// Kun naboer som finnes som aksepterte lapper (byID) tas inn —
+			// dok-noder og pending-noder har ingenting å injisere.
+			if _, ok := byID[cand]; !ok {
+				continue
+			}
+			seen[cand] = true
+			out = append(out, cand)
+			if len(out) >= expandMaxN {
+				return out
+			}
+		}
+	}
+	return out
 }

@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -56,6 +59,18 @@ type agentPlan struct {
 
 	Chart     *agentChart `json:"chart,omitempty"`      // valgfri graf
 	ChartSlug string      `json:"chart_slug,omitempty"` // widgeten grafen bor i
+
+	// Mail: satt når oppgaven eksplisitt ber agenten sende e-post. Mottaker og
+	// emne er faste; kroppen skrives av tolkningen hver kjøring, og agenten
+	// sender selv — agenter er unntaket fra chat-regelen om manuell sending.
+	Mail *agentPlanMail `json:"mail,omitempty"`
+}
+
+// agentPlanMail er planens faste mail-oppsett.
+type agentPlanMail struct {
+	ToName  string `json:"to_name,omitempty"`
+	ToEmail string `json:"to_email"`
+	Subject string `json:"subject"`
 }
 
 // upstreamMessage er ett svar fra modellen, normalisert på tvers av
@@ -171,6 +186,17 @@ var savePlanTool = map[string]any{
 					"type":        "string",
 					"description": "når resultatet er verdt å varsle om, med terskler der det gir mening",
 				},
+				"mail": map[string]any{
+					"type": "object",
+					"description": "KUN når oppgaven eksplisitt ber agenten sende e-post: fast mottaker " +
+						"og emne. Kroppen skrives automatisk per kjøring fra ferske data.",
+					"properties": map[string]any{
+						"to_name":  map[string]any{"type": "string"},
+						"to_email": map[string]any{"type": "string", "description": "mottakerens e-postadresse"},
+						"subject":  map[string]any{"type": "string", "description": "fast emnelinje"},
+					},
+					"required": []string{"to_email", "subject"},
+				},
 				"chart": map[string]any{
 					"type": "object",
 					"description": "valgfri graf som vises sammen med hver rapport. Ta den med når " +
@@ -209,10 +235,145 @@ const planSystem = "Du er i SPINUP: du skal ikke levere svaret på oppgaven, du 
 	"- Vurder om en graf hører hjemme i rapporten. Utvikling over tid eller fordeling mellom kategorier " +
 	"forstås raskere som graf enn som tall. Er svaret ett enkelt tall, dropp grafen. Både x og y skal " +
 	"være ekte kolonner fra spørringen — grafen skal aldri ha en umerket akse.\n" +
+	"- Ber oppgaven eksplisitt om at agenten sender e-post: sett mail-feltet (mottaker + fast emne). " +
+	"Kroppen skrives automatisk per kjøring. Ikke lag egne steg for e-post.\n" +
 	"AVSLUTT med save_plan: stegene som skal kjøres hver gang, hva som skal vurderes (watch), når " +
 	"det er verdt å varsle brukeren (alert_rule, med konkrete terskler der det gir mening), og " +
 	"eventuelt chart. " +
 	"Server-siden prøvekjører stegene dine — får du dem i retur med feil, rett dem og lagre på nytt."
+
+// handleGetAgentPlan returnerer agentens kompilerte plan til flyt-visningen.
+func (s *Server) handleGetAgentPlan(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	a, err := s.store.GetAgent(r.PathValue("id"), user.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	var plan agentPlan
+	if strings.TrimSpace(a.Plan) != "" {
+		_ = json.Unmarshal([]byte(a.Plan), &plan)
+	}
+	writeJSON(w, map[string]any{
+		"plan":             plan,
+		"status":           a.PlanStatus,
+		"error":            a.PlanError,
+		"schedule_label":   a.ScheduleLabel,
+		"task":             a.Task,
+		"agent_name":       a.Name,
+		"interval_seconds": a.IntervalSeconds,
+		"run_time":         a.RunTime,
+	})
+}
+
+// handleSaveAgentPlan lagrer en brukerredigert plan. Stegene prøvekjøres
+// først — nøyaktig samme validering som spinup bruker — så en ødelagt
+// spørring aldri kan lagres.
+func (s *Server) handleSaveAgentPlan(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	a, err := s.store.GetAgent(id, user.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		http.Error(w, "ugyldig request", http.StatusBadRequest)
+		return
+	}
+	// Hadde planen en graf som nå er fjernet? Da skal widgeten ryddes bort.
+	var prev agentPlan
+	if strings.TrimSpace(a.Plan) != "" {
+		_ = json.Unmarshal([]byte(a.Plan), &prev)
+	}
+	dbCtx := s.buildDBTool(user.TenantID, user.ID, "")
+	plan, problems := s.validatePlan(r.Context(), dbCtx, string(raw))
+	if len(problems) > 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		writeJSON(w, map[string]any{"problems": problems})
+		return
+	}
+	// Grafen kan ha blitt endret — oppdater widgeten den bor i.
+	a.TenantID = user.TenantID
+	a.UserID = user.ID
+	if plan.Chart == nil && prev.ChartSlug != "" {
+		if err := s.store.DeleteWidget(prev.ChartSlug, user.ID); err != nil {
+			s.log.Warn("kunne ikke slette fjernet agent-graf", "slug", prev.ChartSlug, "err", err)
+		}
+	}
+	s.ensureChartWidget(a, &plan)
+	out, _ := json.Marshal(plan)
+	if err := s.store.SetAgentPlan(id, string(out)); err != nil {
+		http.Error(w, "kunne ikke lagre", http.StatusInternalServerError)
+		return
+	}
+	// Snapshotet gjelder den GAMLE planen — behold det, og neste kjøring kan
+	// feilaktig konkludere «ingen endring». Nullstill så første kjøring etter
+	// en redigering alltid tolkes på nytt.
+	if err := s.store.SetAgentSnapshot(id, ""); err != nil {
+		s.log.Warn("kunne ikke nullstille snapshot", "agent", id, "err", err)
+	}
+	s.log.Info("plan redigert av bruker", "agent", id, "steg", len(plan.Steps))
+	writeJSON(w, map[string]any{"plan": plan})
+}
+
+// handleSetAgentSchedule setter frekvensen fra Start-noden i flyt-visningen.
+func (s *Server) handleSetAgentSchedule(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		IntervalSeconds int    `json:"interval_seconds"`
+		RunTime         string `json:"run_time"`
+		Label           string `json:"schedule_label"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "ugyldig request", http.StatusBadRequest)
+		return
+	}
+	err := s.store.SetAgentSchedule(r.PathValue("id"), user.ID, req.IntervalSeconds, req.RunTime, req.Label)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleRebuildAgentPlan kaster planen og kjører spinup på nytt.
+func (s *Server) handleRebuildAgentPlan(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	if _, err := s.store.GetAgent(id, user.ID); err != nil {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	s.store.ClearAgentPlan(id)
+	s.startPlanBuild(id)
+	w.WriteHeader(http.StatusNoContent)
+}
 
 // planTools gir spinup de samme verktøyene som en kjøring, pluss save_plan.
 func planTools(dbCtx *dbToolCtx) []any {
@@ -249,7 +410,7 @@ func (s *Server) startPlanBuild(agentID string) {
 // buildAgentPlan er spinup: agenten utforsker oppgaven grundig én gang og
 // lagrer en prøvekjørt plan som hver kjøring så følger.
 func (s *Server) buildAgentPlan(ctx context.Context, agentID string) {
-	a, err := s.store.MissionAgent(agentID)
+	a, err := s.store.AgentByID(agentID)
 	if err != nil {
 		s.log.Warn("spinup: fant ikke agenten", "id", agentID, "err", err)
 		return
@@ -442,6 +603,14 @@ func (s *Server) validatePlan(ctx context.Context, dbCtx *dbToolCtx, rawArgs str
 		}
 	}
 	problems = append(problems, s.validateChart(ctx, dbCtx, plan.Chart)...)
+	if m := plan.Mail; m != nil {
+		if !strings.Contains(m.ToEmail, "@") {
+			problems = append(problems, "Mail-mottakeren mangler gyldig e-postadresse.")
+		}
+		if strings.TrimSpace(m.Subject) == "" {
+			problems = append(problems, "Mail-oppsettet mangler emne.")
+		}
+	}
 	return plan, problems
 }
 
@@ -643,6 +812,11 @@ var reportTool = map[string]any{
 						"required": []string{"label", "value"},
 					},
 				},
+				"mail_body": map[string]any{
+					"type": "string",
+					"description": "KUN når planen har mail-oppsett: e-postkroppen for denne kjøringen, " +
+						"norsk, uten signatur, med de faktiske tallene",
+				},
 				"table_step": map[string]any{
 					"type": "integer",
 					"description": "steg-nummeret hvis radene derfra bør vises som tabell (1 = første steg). " +
@@ -768,8 +942,9 @@ func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (planRun, 
 	}
 
 	// Identiske rådata: ingenting har skjedd. Ingen tolkning, ingen melding,
-	// ingen tokens — agenten tier heller enn å gjenta seg selv.
-	if a.LastSnapshot != "" && pd.snapshot == a.LastSnapshot {
+	// ingen tokens — agenten tier heller enn å gjenta seg selv. UNNTAK: en
+	// mail-plan skal levere e-post hver kjøring uansett.
+	if plan.Mail == nil && a.LastSnapshot != "" && pd.snapshot == a.LastSnapshot {
 		run.unchanged = true
 		return run, nil
 	}
@@ -780,6 +955,10 @@ func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (planRun, 
 		"på norsk, ingen innledning, ingen spørsmål tilbake. Avslutt med report: legg de viktigste " +
 		"tallene i stats (med delta når du har forrige kjørings tall), og pek på et steg med table_step " +
 		"hvis radene derfra bør vises — tabellen rendres fra kilden, så du skal aldri skrive av rader."
+	if plan.Mail != nil {
+		system += " Planen har mail-oppsett: fyll ALLTID mail_body i report med e-postkroppen for " +
+			"denne kjøringen — den sendes automatisk til den faste mottakeren."
+	}
 	if p := strings.TrimSpace(a.Personality); p != "" {
 		system += " Du har personligheten «" + p + "» — la den farge ordvalget i summary, men aldri " +
 			"tallene, presisjonen eller varselvurderingen."
@@ -814,10 +993,20 @@ func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (planRun, 
 			Alert     bool         `json:"alert"`
 			Stats     []reportStat `json:"stats"`
 			TableStep int          `json:"table_step"`
+			MailBody  string       `json:"mail_body"`
 		}
 		if err := json.Unmarshal([]byte(c.args), &rep); err == nil {
 			run.alert = rep.Alert
 			run.output = composeReport(rep.Summary, rep.Stats, rep.TableStep, pd.steps, plan.ChartSlug)
+			// Mail-plan: send e-posten med kroppen tolkningen skrev.
+			if plan.Mail != nil && strings.TrimSpace(rep.MailBody) != "" {
+				if err := s.sendAgentMail(a, plan.Mail.ToName, plan.Mail.ToEmail, plan.Mail.Subject, rep.MailBody); err != nil {
+					s.log.Warn("agent-mail feilet", "id", a.ID, "err", err)
+					run.output += "\n\n(Klarte ikke sende e-posten: " + err.Error() + ")"
+				} else {
+					run.output += "\n\n_E-post sendt til " + plan.Mail.ToEmail + "._"
+				}
+			}
 		}
 		break
 	}

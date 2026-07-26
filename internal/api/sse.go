@@ -27,9 +27,11 @@ type roundUsage struct {
 // (aldri videresendt). Upstreams [DONE] svelges — løkka eier avslutningen.
 // relayRound streamer/bufrer én upstream-runde. streamContent=false bufrer
 // svar-innholdet i stedet for å sende det live (til den tvungne siste runden,
-// der vi vil se om svaret ble tynt før vi viser noe). Returnerer verktøykall,
+// der vi vil se om svaret ble tynt før vi viser noe). Med gate != nil går alt
+// synlig innhold gjennom setnings-gaten (kildekontroll på streamede svar) —
+// kalleren eier gate.finish() og det tilbakeholdte. Returnerer verktøykall,
 // tokenbruk og hele det synlige svar-innholdet.
-func (s *Server) relayRound(resp *http.Response, emit func(string), streamContent bool) (map[int]*toolCall, roundUsage, string) {
+func (s *Server) relayRound(resp *http.Response, emit func(string), streamContent bool, gate *sentenceGate) (map[int]*toolCall, roundUsage, string) {
 	calls := map[int]*toolCall{}
 	var usage roundUsage
 	var visible strings.Builder // hele synlige svar-innholdet denne runden
@@ -114,6 +116,13 @@ func (s *Server) relayRound(resp *http.Response, emit func(string), streamConten
 			if !streamContent {
 				continue
 			}
+			// Gatet runde: gaten avgjør hva som er trygt å vise nå.
+			if gate != nil {
+				if rel := gate.feed(safe); rel != "" {
+					emit(contentSSE(rel))
+				}
+				continue
+			}
 			// Uendret innhold: send originallinja (bevarer model o.l.). Ellers
 			// syntetiser en innholds-chunk for den trygge delen.
 			if safe == content && rest == "" {
@@ -130,7 +139,13 @@ func (s *Server) relayRound(resp *http.Response, emit func(string), streamConten
 	if pending.Len() > 0 {
 		visible.WriteString(pending.String())
 		if streamContent {
-			emit(contentSSE(pending.String()))
+			if gate != nil {
+				if rel := gate.feed(pending.String()); rel != "" {
+					emit(contentSSE(rel))
+				}
+			} else {
+				emit(contentSSE(pending.String()))
+			}
 		}
 	}
 	return calls, usage, visible.String()

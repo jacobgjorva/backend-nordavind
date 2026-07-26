@@ -61,7 +61,7 @@ func (s *Store) CreateExportLink(tenantID, userID, title, connectionID, sqlText,
 // ExportLinkByTokenHash slår opp en aktiv (ikke-tilbakekalt) live-lenke.
 func (s *Store) ExportLinkByTokenHash(tokenHash string) (ExportLink, error) {
 	var l ExportLink
-	var revoked int
+	var revoked Flag
 	err := s.db.QueryRow(
 		`SELECT id, tenant_id, user_id, title, connection_id, sql_text, revoked, created_at
 		 FROM export_links WHERE token_hash = ?`,
@@ -73,7 +73,7 @@ func (s *Store) ExportLinkByTokenHash(tokenHash string) (ExportLink, error) {
 	if err != nil {
 		return l, err
 	}
-	l.Revoked = revoked != 0
+	l.Revoked = bool(revoked)
 	if l.Revoked {
 		return l, ErrNotFound
 	}
@@ -99,11 +99,11 @@ func (s *Store) ListExportLinks(userID string) ([]ExportLink, error) {
 	var out []ExportLink
 	for rows.Next() {
 		var l ExportLink
-		var revoked int
+		var revoked Flag
 		if err := rows.Scan(&l.ID, &l.Title, &l.ConnectionID, &revoked, &l.CreatedAt, &l.LastUsedAt); err != nil {
 			return nil, err
 		}
-		l.Revoked = revoked != 0
+		l.Revoked = bool(revoked)
 		out = append(out, l)
 	}
 	return out, rows.Err()
@@ -112,7 +112,7 @@ func (s *Store) ListExportLinks(userID string) ([]ExportLink, error) {
 // RevokeExportLink trekker tilbake en live-lenke (fila slutter å kunne oppdatere).
 func (s *Store) RevokeExportLink(id, userID string) error {
 	res, err := s.db.Exec(
-		`UPDATE export_links SET revoked = 1 WHERE id = ? AND user_id = ?`, id, userID,
+		`UPDATE export_links SET revoked = TRUE WHERE id = ? AND user_id = ?`, id, userID,
 	)
 	if err != nil {
 		return err

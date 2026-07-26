@@ -33,7 +33,7 @@ func (s *Store) migrateEmployees() error {
 func (s *Store) ListEmployees(tenantID string) ([]Employee, error) {
 	rows, err := s.db.Query(
 		`SELECT id, name, role, description, email, created_at
-		 FROM employees WHERE tenant_id = ? ORDER BY name COLLATE NOCASE`,
+		 FROM employees WHERE tenant_id = ? ORDER BY lower(name)`,
 		tenantID,
 	)
 	if err != nil {

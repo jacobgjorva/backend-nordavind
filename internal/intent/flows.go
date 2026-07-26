@@ -24,6 +24,11 @@ type Flow struct {
 	Deterministic bool
 	// Fallback er flyten som tar over ved feil. I v1 alltid "free_chat".
 	Fallback string
+	// Knowledge: intern kunnskap (kunnskapsgrafen) injiseres i denne flyten.
+	// Flyter om verden utenfor bedriften (web_fact) og ren prat (smalltalk)
+	// får aldri interne lapper — det er bare tokens (G3 i docs/KNOWLEDGE.md).
+	Knowledge bool
+
 	// Sticky: flyten forblir aktiv for påfølgende meldinger til den avsluttes
 	// eksplisitt (som widget-redigering i dag).
 	Sticky bool
@@ -43,6 +48,8 @@ const (
 	ToolMailCompose   = "mail_compose"
 	ToolContactPerson = "contact_person"
 	ToolSetWidget     = "set_widget"
+	ToolSetSlide      = "set_slide"
+	ToolSetDeck       = "set_deck"
 	ToolConnectDB     = "connect_database"
 	ToolConnectM365   = "connect_m365"
 	ToolCheckM365     = "check_m365"
@@ -61,6 +68,7 @@ const FreeChatKey = "free_chat"
 // registeret) — aldri spesialtilfelle-logikk utenfor tabellen.
 var Flows = map[string]Flow{
 	FreeChatKey: {
+		Knowledge: true,
 		Tools: []string{ToolWebSearch, ToolFetchURL, ToolQueryDatabase, ToolShowTable,
 			ToolM365Search, ToolM365Read, ToolContactPerson},
 		Model:    "mid",
@@ -86,28 +94,34 @@ var Flows = map[string]Flow{
 	},
 
 	"create_widget": {
-		Tools:    []string{ToolSetWidget},
-		Model:    "mid",
-		MaxChars: 120, // widgeten ER svaret; teksten er kun kvittering
-		Fallback: FreeChatKey,
-		Sticky:   true, // videre meldinger redigerer samme widget
+		Knowledge: true,
+		Tools:     []string{ToolSetWidget},
+		Model:     "mid",
+		MaxChars:  120, // widgeten ER svaret; teksten er kun kvittering
+		Fallback:  FreeChatKey,
+		Sticky:    true, // videre meldinger redigerer samme widget
 	},
 	"edit_widget": {
-		Tools:    []string{ToolSetWidget},
-		Model:    "mid",
-		MaxChars: 120,
-		Fallback: FreeChatKey,
-		Sticky:   true,
+		Knowledge: true,
+		Tools:     []string{ToolSetWidget},
+		Model:     "mid",
+		MaxChars:  120,
+		Fallback:  FreeChatKey,
+		Sticky:    true,
 	},
 	"create_presentation": {
-		Tools:    []string{ToolSetWidget},
+		Knowledge: true,
+		// Egne verktøy: presentasjonen bygges slide for slide som patcher, aldri
+		// som én stor spec — brukerens egne canvas-endringer skal overleve.
+		Tools:    []string{ToolSetSlide, ToolSetDeck},
 		Model:    "mid",
 		MaxChars: 120, // canvaset er svaret
-		Fallback: FreeChatKey,
-		Sticky:   true,
+		Fallback:  FreeChatKey,
+		Sticky:    true,
 	},
 
 	"export_excel": {
+		Knowledge: true,
 		// Modellen henter dataene; eksportkortet appendes GARANTERT i kode
 		// (aldri «vil du at jeg skal eksportere?»).
 		Tools:    []string{ToolQueryDatabase, ToolShowTable},
@@ -117,18 +131,20 @@ var Flows = map[string]Flow{
 	},
 
 	"data_question": {
-		Tools:    []string{ToolQueryDatabase, ToolShowTable},
-		Model:    "mid",
-		MaxChars: 300, // tette tallsvar
-		Fallback: FreeChatKey,
-		Sticky:   true, // oppfølgingsspørsmål («sikker?») skal beholde db-verktøyene
+		Knowledge: true,
+		Tools:     []string{ToolQueryDatabase, ToolShowTable},
+		Model:     "mid",
+		MaxChars:  300, // tette tallsvar
+		Fallback:  FreeChatKey,
+		Sticky:    true, // oppfølgingsspørsmål («sikker?») skal beholde db-verktøyene
 	},
 	"show_table": {
-		Tools:    []string{ToolQueryDatabase, ToolShowTable},
-		Model:    "mid",
-		MaxChars: 150, // tabellen er svaret; maks én ledsagende setning
-		Fallback: FreeChatKey,
-		Sticky:   true,
+		Knowledge: true,
+		Tools:     []string{ToolQueryDatabase, ToolShowTable},
+		Model:     "mid",
+		MaxChars:  150, // tabellen er svaret; maks én ledsagende setning
+		Fallback:  FreeChatKey,
+		Sticky:    true,
 	},
 
 	"usage_stats":      {Deterministic: true, Fallback: FreeChatKey}, // /forbruk-panelet
@@ -149,27 +165,31 @@ var Flows = map[string]Flow{
 	},
 
 	"create_routine": {
-		Tools:    []string{ToolSetupRoutine, ToolListAgents},
-		Model:    "mid",
-		MaxChars: 200, // kvittering + frekvens
-		Fallback: FreeChatKey,
+		Knowledge: true,
+		Tools:     []string{ToolSetupRoutine, ToolListAgents},
+		Model:     "mid",
+		MaxChars:  200, // kvittering + frekvens
+		Fallback:  FreeChatKey,
 	},
 	"edit_routine": {
-		Tools:    []string{ToolUpdateAgent, ToolListAgents},
-		Model:    "mid",
-		MaxChars: 200,
-		Fallback: FreeChatKey,
+		Knowledge: true,
+		Tools:     []string{ToolUpdateAgent, ToolListAgents},
+		Model:     "mid",
+		MaxChars:  200,
+		Fallback:  FreeChatKey,
 	},
 
 	"m365_files": {
-		Tools:    []string{ToolM365Search, ToolM365Read},
-		Model:    "mid",
-		MaxChars: 300,
-		Fallback: FreeChatKey,
-		Sticky:   true, // fildialog: «åpne den», «hva står det?»
+		Knowledge: true,
+		Tools:     []string{ToolM365Search, ToolM365Read},
+		Model:     "mid",
+		MaxChars:  300,
+		Fallback:  FreeChatKey,
+		Sticky:    true, // fildialog: «åpne den», «hva står det?»
 	},
 
 	"email": {
+		Knowledge: true,
 		// Databaseverktøyene er med så modellen kan bygge Excel-vedlegg
 		// («send ordrelisten på e-post») — skjemaet følger verktøyet.
 		Tools:    []string{ToolMailSearch, ToolMailRead, ToolMailCompose, ToolQueryDatabase, ToolShowTable},

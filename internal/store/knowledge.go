@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -80,14 +81,65 @@ func (s *Store) CreateNode(tenantID string, n KnowledgeNode) (KnowledgeNode, err
 	return n, err
 }
 
+// EnsureDocNode oppretter (eller oppdaterer) grafnoden for et opplastet
+// dokument. ID deles med documents.node_id, så uttrukne prosedyre/regel-noder
+// kan kobles til dokumentet sitt med kanter (G4 i docs/KNOWLEDGE.md).
+// Dokumentet er godkjent som helhet ved opplasting → accepted.
+func (s *Store) EnsureDocNode(tenantID, docID, title, summary string, embedding []float32) error {
+	emb, _ := json.Marshal(embedding)
+	_, err := s.db.Exec(
+		`INSERT INTO knowledge_nodes (id, tenant_id, type, title, summary, status, embedding)
+		 VALUES (?, ?, 'dokument', ?, ?, 'accepted', ?)
+		 ON CONFLICT(id) DO UPDATE SET title = excluded.title, summary = excluded.summary,
+		   embedding = excluded.embedding`,
+		docID, tenantID, title, summary, string(emb),
+	)
+	return err
+}
+
 // AddEdge lagrer en relasjon mellom to noder (idempotent).
 func (s *Store) AddEdge(tenantID string, e KnowledgeEdge) error {
 	_, err := s.db.Exec(
-		`INSERT OR IGNORE INTO knowledge_edges (tenant_id, from_id, to_id, relation)
-		 VALUES (?, ?, ?, ?)`,
+		`INSERT INTO knowledge_edges (tenant_id, from_id, to_id, relation)
+		 VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`,
 		tenantID, e.FromID, e.ToID, e.Relation,
 	)
 	return err
+}
+
+// EdgesTouching returnerer alle kanter som berører noen av de gitte nodene
+// (begge retninger) — 1-hopps nabolag for kant-utvidelsen i hentingen (G2).
+func (s *Store) EdgesTouching(tenantID string, ids []string) ([]KnowledgeEdge, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	ph := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, 0, 2*len(ids)+1)
+	args = append(args, tenantID)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	rows, err := s.db.Query(
+		`SELECT from_id, to_id, relation FROM knowledge_edges
+		 WHERE tenant_id = ? AND (from_id IN (`+ph+`) OR to_id IN (`+ph+`))`,
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []KnowledgeEdge
+	for rows.Next() {
+		var e KnowledgeEdge
+		if err := rows.Scan(&e.FromID, &e.ToID, &e.Relation); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }
 
 // AcceptedNodes henter tenantens aksepterte noder med embeddings (for henting).

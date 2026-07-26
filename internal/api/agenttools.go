@@ -181,29 +181,6 @@ func (s *Server) runUpdateAgent(ctx context.Context, a agentToolArgs) string {
 	return "Agent oppdatert."
 }
 
-// runStartMission setter oppdraget (ubegrenset token-tak), godkjenner det og
-// starter den kontinuerlige løkka fra et start_mission-verktøykall.
-func (s *Server) runStartMission(ctx context.Context, agentID, goal, criteria string) string {
-	user, ok := ctx.Value(userKey).(store.User)
-	if !ok {
-		return "Ikke innlogget."
-	}
-	if strings.TrimSpace(agentID) == "" || strings.TrimSpace(goal) == "" {
-		return "Mangler oppdrag."
-	}
-	if strings.TrimSpace(criteria) == "" {
-		criteria = "Oppgaven i målet er utført og resultatet er levert."
-	}
-	if err := s.store.SetMissionPlan(agentID, user.ID, goal, criteria, 0); err != nil {
-		return "Kunne ikke sette oppdraget."
-	}
-	if err := s.store.ApproveMission(agentID, user.ID); err != nil {
-		return "Kunne ikke starte oppdraget."
-	}
-	s.startMissionRunner(context.Background(), agentID)
-	return "startet"
-}
-
 // runSetupRoutine gjør utkast-agenten til en gjentakende rutine: prompt +
 // intervall, aktivert, ingen oppdrags-løkke. Rutiner «fullføres» aldri.
 func (s *Server) runSetupRoutine(ctx context.Context, agentID, rawArgs string) string {
@@ -414,8 +391,6 @@ func (s *Server) runCreateAgent(ctx context.Context, a agentToolArgs) string {
 		IntervalSeconds: a.IntervalSeconds,
 		DailyTokenLimit: a.DailyTokenLimit,
 		WriteAccess:     a.WriteAccess,
-		Mission:         a.Mission,
-		SendMail:        a.SendMail,
 	})
 	if err != nil {
 		s.log.Error("kunne ikke opprette agent", "err", err)

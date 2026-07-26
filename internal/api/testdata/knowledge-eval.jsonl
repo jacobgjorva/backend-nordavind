@@ -1,0 +1,29 @@
+{"query": "hva er fristen for å registrere en reklamasjon?", "want": ["48 timer"]}
+{"query": "hvem må godkjenne store ordrer?", "want": ["50 000", "daglig leder"]}
+{"query": "hva betyr MG-koden på varenummer?", "want": ["egenimporterte"]}
+{"query": "når skal fredagsrapporten ut og til hvem?", "want": ["styret", "kl 12"]}
+{"query": "hvem plukker og pakker ordrene våre?", "want": ["Skanlog"]}
+{"query": "når oppdateres prislisten?", "want": ["første mandag"]}
+{"query": "hvem har ansvar for fortolling?", "want": ["Marie"]}
+{"query": "hva kreves for å lage en kreditnota?", "want": ["referansenummer"]}
+{"query": "hvor ofte teller vi lageret?", "want": ["siste fredag", "kvartal"]}
+{"query": "hva betyr det at en vare har grønn linje?", "want": ["tilgjengelig for salg"]}
+{"query": "når purrer vi ubetalte fakturaer?", "want": ["14 dager"]}
+{"query": "hvor mye rabatt kan en selger gi på egen hånd?", "want": ["12 prosent"]}
+{"query": "hvor skal kvalitetsavvik føres?", "want": ["QA-skjema"]}
+{"query": "når bestiller vi sesongvarer for høsten?", "want": ["februar"]}
+{"query": "kan vi fakturere kunder med kundenummer som starter på 9?", "want": ["testkunder"]}
+{"query": "hva er grensen for fraktfri levering?", "want": ["2 500"]}
+{"query": "hva gjør jeg først når en kunde reklamerer?", "want": ["ordrenummer", "bilder"]}
+{"query": "hvor fort skal en godkjent reklamasjon krediteres?", "want": ["fem virkedager"]}
+{"query": "må skadde varer returneres før kreditering?", "want": ["1 000", "inspeksjon"]}
+{"query": "hva sjekkes ved varemottak før sjåføren drar?", "want": ["kolli", "fraktbrev"]}
+{"query": "hvordan håndterer vi temperatursensitive varer ved mottak?", "want": ["kjøl", "mottaksloggen"]}
+{"query": "hvem melder vi avvik i varemottak til?", "want": ["innkjøp", "samme dag"]}
+{"query": "hva er hovedstaden i Australia egentlig?", "want": [], "empty": true}
+{"query": "kan du skrive et lite dikt om våren til meg?", "want": [], "empty": true}
+{"query": "hva blir været i Oslo i morgen tidlig?", "want": [], "empty": true}
+{"query": "hvilke rutiner gjelder ved mottak av kjølevarer?", "want": ["kjøl", "4412"]}
+{"query": "hvor finner jeg gjesteparkeringskortet?", "want": ["tavla", "resepsjonen"]}
+{"query": "hvordan lager jeg en kreditnota i ERP?", "want": ["årsakskode"]}
+{"query": "hva er stegene når en kunde klager på en vare?", "want": ["ordrenummer", "bilder"]}

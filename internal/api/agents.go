@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -78,8 +77,6 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		RunTime:         strings.TrimSpace(req.RunTime),
 		DailyTokenLimit: req.DailyTokenLimit,
 		WriteAccess:     req.WriteAccess,
-		Mission:         req.Mission,
-		SendMail:        req.SendMail,
 	})
 	if err != nil {
 		s.log.Error("kunne ikke opprette agent", "err", err)
@@ -125,59 +122,6 @@ func (s *Server) handleCreateDraftAgent(w http.ResponseWriter, r *http.Request) 
 	s.log.Info("draft-agent opprettet", "id", agent.ID, "chat", agent.ChatID)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(agent)
-}
-
-// handleSetMissionPlan lagrer mål, fullført-kriterier og token-tak for et
-// oppdrag. Kriteriene må godkjennes (egen rute) før løkka starter.
-func (s *Server) handleSetMissionPlan(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.user(w, r)
-	if !ok {
-		return
-	}
-	var req struct {
-		Goal     string `json:"goal"`
-		Criteria string `json:"criteria"`
-		Budget   int    `json:"budget"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "ugyldig request", http.StatusBadRequest)
-		return
-	}
-	if strings.TrimSpace(req.Goal) == "" || strings.TrimSpace(req.Criteria) == "" {
-		http.Error(w, "mål og kriterier må være satt", http.StatusBadRequest)
-		return
-	}
-	err := s.store.SetMissionPlan(r.PathValue("id"), user.ID,
-		strings.TrimSpace(req.Goal), strings.TrimSpace(req.Criteria), req.Budget)
-	if errors.Is(err, store.ErrNotFound) {
-		http.Error(w, "ikke funnet", http.StatusNotFound)
-		return
-	}
-	if err != nil {
-		http.Error(w, "intern feil", http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// handleApproveMission godkjenner kriteriene og starter den kontinuerlige løkka.
-func (s *Server) handleApproveMission(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.user(w, r)
-	if !ok {
-		return
-	}
-	id := r.PathValue("id")
-	err := s.store.ApproveMission(id, user.ID)
-	if errors.Is(err, store.ErrNotFound) {
-		http.Error(w, "ikke funnet", http.StatusNotFound)
-		return
-	}
-	if err != nil {
-		http.Error(w, "intern feil", http.StatusInternalServerError)
-		return
-	}
-	s.startMissionRunner(context.Background(), id)
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleAgentConnections lister tenantens tilkoblinger (id + navn) som
@@ -295,14 +239,13 @@ func (s *Server) handleSetAgentPersona(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name        string  `json:"name"`
 		Personality *string `json:"personality"` // nil = ikke endre; tom streng = fjern
-		Category    *string `json:"category"`    // nil = ikke endre; tom streng = fjern
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "ugyldig request", http.StatusBadRequest)
 		return
 	}
 	err := s.store.SetAgentPersona(r.PathValue("id"), user.ID, store.AgentPersona{
-		Name: req.Name, Personality: req.Personality, Category: req.Category,
+		Name: req.Name, Personality: req.Personality,
 	})
 	if errors.Is(err, store.ErrNotFound) {
 		http.Error(w, "ikke funnet", http.StatusNotFound)
