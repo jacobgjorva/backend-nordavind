@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -238,6 +241,95 @@ const planSystem = "Du er i SPINUP: du skal ikke levere svaret på oppgaven, du 
 	"det er verdt å varsle brukeren (alert_rule, med konkrete terskler der det gir mening), og " +
 	"eventuelt chart. " +
 	"Server-siden prøvekjører stegene dine — får du dem i retur med feil, rett dem og lagre på nytt."
+
+// handleGetAgentPlan returnerer agentens kompilerte plan til flyt-visningen.
+func (s *Server) handleGetAgentPlan(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	a, err := s.store.GetAgent(r.PathValue("id"), user.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	var plan agentPlan
+	if strings.TrimSpace(a.Plan) != "" {
+		_ = json.Unmarshal([]byte(a.Plan), &plan)
+	}
+	writeJSON(w, map[string]any{
+		"plan":             plan,
+		"status":           a.PlanStatus,
+		"error":            a.PlanError,
+		"schedule_label":   a.ScheduleLabel,
+		"task":             a.Task,
+		"agent_name":       a.Name,
+		"interval_seconds": a.IntervalSeconds,
+	})
+}
+
+// handleSaveAgentPlan lagrer en brukerredigert plan. Stegene prøvekjøres
+// først — nøyaktig samme validering som spinup bruker — så en ødelagt
+// spørring aldri kan lagres.
+func (s *Server) handleSaveAgentPlan(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	a, err := s.store.GetAgent(id, user.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		http.Error(w, "ugyldig request", http.StatusBadRequest)
+		return
+	}
+	dbCtx := s.buildDBTool(user.TenantID, user.ID, "")
+	plan, problems := s.validatePlan(r.Context(), dbCtx, string(raw))
+	if len(problems) > 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		writeJSON(w, map[string]any{"problems": problems})
+		return
+	}
+	// Grafen kan ha blitt endret — oppdater widgeten den bor i.
+	a.TenantID = user.TenantID
+	a.UserID = user.ID
+	s.ensureChartWidget(a, &plan)
+	out, _ := json.Marshal(plan)
+	if err := s.store.SetAgentPlan(id, string(out)); err != nil {
+		http.Error(w, "kunne ikke lagre", http.StatusInternalServerError)
+		return
+	}
+	s.log.Info("plan redigert av bruker", "agent", id, "steg", len(plan.Steps))
+	writeJSON(w, map[string]any{"plan": plan})
+}
+
+// handleRebuildAgentPlan kaster planen og kjører spinup på nytt.
+func (s *Server) handleRebuildAgentPlan(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	if _, err := s.store.GetAgent(id, user.ID); err != nil {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	s.store.ClearAgentPlan(id)
+	s.startPlanBuild(id)
+	w.WriteHeader(http.StatusNoContent)
+}
 
 // planTools gir spinup de samme verktøyene som en kjøring, pluss save_plan.
 func planTools(dbCtx *dbToolCtx) []any {
