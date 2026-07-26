@@ -318,7 +318,7 @@ var Registry = []Intent{
 		// free_chat som egen rad: rådgivning og åpne spørsmål skal kunne VINNE
 		// rutingen — uten denne kan de aldri slå flyt-nøklene på embedding.
 		Key:         FreeChatKey,
-		Description: "Rådgivning, meninger, tekstarbeid, åpne spørsmål — og UTSAGN der brukeren forteller eller lærer bort noe om bedriften (rutiner, roller, regler) uten å spørre etter tall",
+		Description: "Rådgivning, meninger, tekstarbeid og åpne spørsmål: hva bør vi gjøre, er dette trygt, hjelp meg å skrive eller oppsummere",
 		Examples: []string{
 			"hva synes du vi burde gjøre her?",
 			"er det trygt å dele dataene våre?",
@@ -327,9 +327,18 @@ var Registry = []Intent{
 			"oversett dette til engelsk",
 			"gi meg råd om prisstrategien vår",
 			"hvilke muligheter gir denne plattformen oss?",
+		},
+	},
+	{
+		Key:         "teach_fact",
+		Description: "Brukeren FORTELLER eller lærer bort noe om bedriften uten å be om noe: rutiner, roller, regler, «hos oss gjør vi», «husk at» — et utsagn, ikke et spørsmål",
+		Examples: []string{
 			"i selskapet har vi en produktdirektør vi må prate med før vi lanserer et nytt produkt",
 			"hos oss er det alltid økonomiansvarlig som godkjenner rabatter over ti prosent",
 			"husk at lageret vårt telles siste fredag i hvert kvartal",
+			"vi bruker alltid DHL på eksport til Sverige",
+			"merk deg at fakturaer over 50 000 skal attesteres av daglig leder",
+			"internt kaller vi onboarding-løpet for «rampen»",
 		},
 	},
 	{

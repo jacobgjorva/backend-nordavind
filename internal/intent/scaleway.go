@@ -89,7 +89,7 @@ func (s *ScalewayJudge) Pick(ctx context.Context, message string, keys []string)
 		"«varsle meg når kursen …» er en rutine (handling: overvåke), ikke et faktaspørsmål, " +
 		"og «lag en graf over oljeprisen» er en widget (handling: lage graf). " +
 		"Et UTSAGN som bare forteller/lærer bort noe om bedriften («hos oss gjør vi …», «husk at …») " +
-		"ber ikke om noen handling — det er free_chat, aldri paneler eller opplasting.\n")
+		"ber ikke om noen handling — det er teach_fact, aldri paneler, opplasting eller dataflyt.\n")
 	for _, k := range keys {
 		switch {
 		case k == FreeChatKey:
