@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"math"
 	"strings"
 	"time"
 )
@@ -418,4 +419,63 @@ func deleteNotesBySource(tx *Tx, tenantID, sourceID string) error {
 		tenantID, sourceID,
 	)
 	return err
+}
+
+// MostSimilarAcceptedFact finner den mest lignende aksepterte fakta-lappen
+// (dublettvakten, G5): Postgres spør pgvector, SQLite regner cosine i Go.
+// Returnerer ErrNotFound når skuffen er tom.
+func (s *Store) MostSimilarAcceptedFact(tenantID string, vec []float32, excludeID string) (KnowledgeNote, float64, error) {
+	if s.db.pg {
+		q, _ := json.Marshal(vec)
+		var n KnowledgeNote
+		var sim float64
+		err := s.db.QueryRow(
+			`SELECT id, title, text, 1 - (embedding <=> ?::vector)
+			 FROM knowledge_notes
+			 WHERE tenant_id = ? AND status = 'accepted' AND source_type = 'fact'
+			   AND embedding IS NOT NULL AND id != ?
+			 ORDER BY embedding <=> ?::vector LIMIT 1`,
+			string(q), tenantID, excludeID, string(q),
+		).Scan(&n.ID, &n.Title, &n.Text, &sim)
+		if err == sql.ErrNoRows {
+			return n, 0, ErrNotFound
+		}
+		return n, sim, err
+	}
+	notes, err := s.AcceptedNotes(tenantID)
+	if err != nil {
+		return KnowledgeNote{}, 0, err
+	}
+	best := KnowledgeNote{}
+	bestSim := -1.0
+	for _, n := range notes {
+		if n.SourceType != "fact" || n.ID == excludeID || len(n.Embedding) == 0 {
+			continue
+		}
+		if c := cosine32(vec, n.Embedding); c > bestSim {
+			bestSim = c
+			best = n
+		}
+	}
+	if bestSim < 0 {
+		return best, 0, ErrNotFound
+	}
+	return best, bestSim, nil
+}
+
+// cosine32 er cosinelikheten mellom to vektorer (SQLite-stien til vakten).
+func cosine32(a, b []float32) float64 {
+	if len(a) != len(b) || len(a) == 0 {
+		return 0
+	}
+	var dot, na, nb float64
+	for i := range a {
+		dot += float64(a[i]) * float64(b[i])
+		na += float64(a[i]) * float64(a[i])
+		nb += float64(b[i]) * float64(b[i])
+	}
+	if na == 0 || nb == 0 {
+		return 0
+	}
+	return dot / (math.Sqrt(na) * math.Sqrt(nb))
 }
