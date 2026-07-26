@@ -66,6 +66,8 @@ var extractMarkers = []string{
 	"vi ", "vår", "våre", "hos oss", "hos meg", "internt", "rutine", "pleier",
 	"kalles", "betyr", " må ", " skal ", "bruker vi", "vi bruker", "regel",
 	"krav", "policy", "prosedyre", "standarden", "alltid", "aldri",
+	// Eksplisitte notiser: brukeren BER om at noe huskes — skal alltid inn.
+	"husk", "noter", "notér", "merk deg", "lagre dette", "skriv deg bak øret",
 }
 
 // worthExtracting gater uttrekk-kallet: kun substansielle meldinger der
@@ -73,10 +75,16 @@ var extractMarkers = []string{
 // Deterministisk forhåndsfilter = sparer det store flertallet av kallene.
 func worthExtracting(question string) bool {
 	q := strings.TrimSpace(question)
+	low := strings.ToLower(q)
+	// Eksplisitt notis: «husk …»/«noter …» er verdt et kall uansett lengde.
+	for _, p := range []string{"husk", "noter", "notér", "merk deg"} {
+		if strings.HasPrefix(low, p) {
+			return len([]rune(q)) >= 12
+		}
+	}
 	if len([]rune(q)) < 40 {
 		return false
 	}
-	low := strings.ToLower(q)
 	for _, m := range extractMarkers {
 		if strings.Contains(low, m) {
 			return true
@@ -179,7 +187,7 @@ func (s *Server) runExtraction(tenantID, userID, chatID, question, answer string
 // ØNSKET her — dokumentet er allerede godkjent som bedriftskunnskap.
 const docExtractSystem = "Du får en del av et internt bedriftsdokument. Trekk ut den gjenbrukbare " +
 	"STRUKTURERTE kunnskapen: prosedyrer (stegene komprimert, i rekkefølge, i én summary), faste " +
-	"regler og terskler (behold tall ordrett), interne fagtermer med betydning, og ansvar " +
+	"regler og terskler (behold tall ordrett), interne fagtermer med betydning, ferdigheter/skills (hvordan noe gjøres hos oss, stegvis), og ansvar " +
 	"(hvem-gjør-hva). Hopp over ren prosa uten regel- eller prosessverdi, og alt som allerede står i " +
 	"listen over eksisterende noder. Maks 4 per del. Svar KUN med JSON: " +
 	"{\"nodes\":[{\"type\":\"prosess|regel|term|entitet\",\"title\":\"kort navn\",\"summary\":\"presis, selvstendig\"}]}"

@@ -13,7 +13,7 @@ import (
 
 const (
 	maxUploadBytes  = 10 << 20 // 10 MB
-	maxExtractChars = 20000
+	maxExtractChars = 60000
 )
 
 // handleExtract tar imot en fil (multipart) og returnerer ren tekst —
