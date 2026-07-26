@@ -48,6 +48,45 @@ func (s *Server) handleKnowledgeGraph(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"nodes": nodes, "edges": edges})
 }
 
+// handleCreateEdge kobler to noder i graf-editoren.
+func (s *Server) handleCreateEdge(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var e store.KnowledgeEdge
+	if err := json.NewDecoder(r.Body).Decode(&e); err != nil || e.FromID == "" || e.ToID == "" || e.FromID == e.ToID {
+		http.Error(w, "ugyldig kant", http.StatusBadRequest)
+		return
+	}
+	if e.Relation == "" {
+		e.Relation = "relatert til"
+	}
+	if err := s.store.AddEdge(user.TenantID, e); err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDeleteEdge fjerner en kant i graf-editoren.
+func (s *Server) handleDeleteEdge(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var e store.KnowledgeEdge
+	if err := json.NewDecoder(r.Body).Decode(&e); err != nil || e.FromID == "" || e.ToID == "" {
+		http.Error(w, "ugyldig kant", http.StatusBadRequest)
+		return
+	}
+	if err := s.store.DeleteEdge(user.TenantID, e); err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleAcceptNode godkjenner en node (med evt. redigert tekst) og reberegner
 // embedding hvis teksten er endret.
 func (s *Server) handleAcceptNode(w http.ResponseWriter, r *http.Request) {

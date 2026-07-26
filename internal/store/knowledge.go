@@ -19,8 +19,10 @@ type KnowledgeNode struct {
 	ChatID    string    `json:"chat_id,omitempty"`
 	UserID    string    `json:"user_id,omitempty"`
 	UserEmail string    `json:"user_email,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	Embedding []float32 `json:"-"`
+	CreatedAt time.Time  `json:"created_at"`
+	Hits      int        `json:"hits"`                  // retrieval-treff (fra lappen)
+	LastHitAt *time.Time `json:"last_hit_at,omitempty"` // sist hentet
+	Embedding []float32  `json:"-"`
 }
 
 // KnowledgeEdge er en typet relasjon mellom to noder.
@@ -102,6 +104,15 @@ func (s *Store) AddEdge(tenantID string, e KnowledgeEdge) error {
 	_, err := s.db.Exec(
 		`INSERT INTO knowledge_edges (tenant_id, from_id, to_id, relation)
 		 VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+		tenantID, e.FromID, e.ToID, e.Relation,
+	)
+	return err
+}
+
+// DeleteEdge fjerner én kant (graf-editoren).
+func (s *Store) DeleteEdge(tenantID string, e KnowledgeEdge) error {
+	_, err := s.db.Exec(
+		`DELETE FROM knowledge_edges WHERE tenant_id = ? AND from_id = ? AND to_id = ? AND relation = ?`,
 		tenantID, e.FromID, e.ToID, e.Relation,
 	)
 	return err
@@ -321,9 +332,13 @@ func (s *Store) RejectNode(id, tenantID string) error {
 
 // GraphData henter aksepterte noder og kantene mellom dem (til visualisering).
 func (s *Store) GraphData(tenantID string) ([]KnowledgeNode, []KnowledgeEdge, error) {
+	// Bruken (hits) hentes fra retrieval-skuffen — editoren dimmer lapper som
+	// aldri hentes (selvkuraterende kvalitet, governance v2).
 	nodeRows, err := s.db.Query(
-		`SELECT id, type, title, summary FROM knowledge_nodes
-		 WHERE tenant_id = ? AND status = 'accepted' AND type != 'dokument'`,
+		`SELECT n.id, n.type, n.title, n.summary, n.created_at,
+		        COALESCE(kn.hits, 0), kn.last_hit_at
+		 FROM knowledge_nodes n LEFT JOIN knowledge_notes kn ON kn.id = n.id
+		 WHERE n.tenant_id = ? AND n.status = 'accepted' AND n.type != 'dokument'`,
 		tenantID,
 	)
 	if err != nil {
@@ -334,7 +349,7 @@ func (s *Store) GraphData(tenantID string) ([]KnowledgeNode, []KnowledgeEdge, er
 	live := map[string]bool{}
 	for nodeRows.Next() {
 		var n KnowledgeNode
-		if err := nodeRows.Scan(&n.ID, &n.Type, &n.Title, &n.Summary); err != nil {
+		if err := nodeRows.Scan(&n.ID, &n.Type, &n.Title, &n.Summary, &n.CreatedAt, &n.Hits, &n.LastHitAt); err != nil {
 			return nil, nil, err
 		}
 		nodes = append(nodes, n)
