@@ -80,6 +80,22 @@ func (s *Store) CreateNode(tenantID string, n KnowledgeNode) (KnowledgeNode, err
 	return n, err
 }
 
+// EnsureDocNode oppretter (eller oppdaterer) grafnoden for et opplastet
+// dokument. ID deles med documents.node_id, så uttrukne prosedyre/regel-noder
+// kan kobles til dokumentet sitt med kanter (G4 i docs/KNOWLEDGE.md).
+// Dokumentet er godkjent som helhet ved opplasting → accepted.
+func (s *Store) EnsureDocNode(tenantID, docID, title, summary string, embedding []float32) error {
+	emb, _ := json.Marshal(embedding)
+	_, err := s.db.Exec(
+		`INSERT INTO knowledge_nodes (id, tenant_id, type, title, summary, status, embedding)
+		 VALUES (?, ?, 'dokument', ?, ?, 'accepted', ?)
+		 ON CONFLICT(id) DO UPDATE SET title = excluded.title, summary = excluded.summary,
+		   embedding = excluded.embedding`,
+		docID, tenantID, title, summary, string(emb),
+	)
+	return err
+}
+
 // AddEdge lagrer en relasjon mellom to noder (idempotent).
 func (s *Store) AddEdge(tenantID string, e KnowledgeEdge) error {
 	_, err := s.db.Exec(

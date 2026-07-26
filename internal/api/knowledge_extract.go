@@ -173,6 +173,82 @@ func (s *Server) runExtraction(tenantID, userID, chatID, question, answer string
 	}
 }
 
+// docExtractSystem destillerer et dokument til strukturert grafkunnskap (G4 i
+// docs/KNOWLEDGE.md): prosedyrer, regler, termer og ansvar blir noder som
+// kobles til dok-noden. I motsetning til chat-uttrekket er terskler og tall
+// ØNSKET her — dokumentet er allerede godkjent som bedriftskunnskap.
+const docExtractSystem = "Du får en del av et internt bedriftsdokument. Trekk ut den gjenbrukbare " +
+	"STRUKTURERTE kunnskapen: prosedyrer (stegene komprimert, i rekkefølge, i én summary), faste " +
+	"regler og terskler (behold tall ordrett), interne fagtermer med betydning, og ansvar " +
+	"(hvem-gjør-hva). Hopp over ren prosa uten regel- eller prosessverdi, og alt som allerede står i " +
+	"listen over eksisterende noder. Maks 4 per del. Svar KUN med JSON: " +
+	"{\"nodes\":[{\"type\":\"prosess|regel|term|entitet\",\"title\":\"kort navn\",\"summary\":\"presis, selvstendig\"}]}"
+
+// runDocExtraction kjøres i bakgrunnen etter dokumentopplasting: oppretter
+// dok-noden i grafen og destillerer dokumentet seksjon for seksjon til
+// pending-noder med kant til dokumentet. Godkjenning skjer i admin-panelet på
+// de FÅ uttrukne nodene — aldri per råbit.
+func (s *Server) runDocExtraction(tenantID, userID, docID, title, summary, text string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	docVec, err := s.embed(ctx, title+". "+summary)
+	if err != nil {
+		s.log.Warn("dok-uttrekk: embedding feilet", "err", err)
+		return
+	}
+	if err := s.store.EnsureDocNode(tenantID, docID, title, summary, docVec); err != nil {
+		s.log.Warn("dok-uttrekk: dok-node feilet", "err", err)
+		return
+	}
+
+	created := 0
+	for _, section := range chunkText(text) {
+		titles, _ := s.store.NodeTitles(tenantID)
+		existing := "(ingen ennå)"
+		if len(titles) > 0 {
+			existing = strings.Join(titles, "; ")
+		}
+		raw, err := s.llmComplete(ctx, docExtractSystem,
+			"Eksisterende noder (ikke dupliser): "+existing+"\n\nDokument: "+title+"\n\n"+section, 600)
+		if err != nil {
+			continue
+		}
+		var parsed struct {
+			Nodes []extractedNode `json:"nodes"`
+		}
+		if json.Unmarshal([]byte(extractJSON(raw)), &parsed) != nil {
+			continue
+		}
+		for _, n := range parsed.Nodes {
+			n.Title = strings.TrimSpace(n.Title)
+			n.Summary = strings.TrimSpace(n.Summary)
+			if n.Title == "" || n.Summary == "" {
+				continue
+			}
+			if _, err := s.store.NodeByTitle(tenantID, n.Title); err == nil {
+				continue
+			}
+			vec, err := s.embed(ctx, n.Title+". "+n.Summary)
+			if err != nil {
+				continue
+			}
+			node, err := s.store.CreateNode(tenantID, store.KnowledgeNode{
+				Type: n.Type, Title: n.Title, Summary: n.Summary,
+				Status: "pending", UserID: userID, Embedding: vec,
+			})
+			if err != nil {
+				continue
+			}
+			s.store.AddEdge(tenantID, store.KnowledgeEdge{
+				FromID: node.ID, ToID: docID, Relation: "definert i",
+			})
+			created++
+		}
+	}
+	s.log.Info("dok-uttrekk ferdig", "dokument", title, "noder", created)
+}
+
 // extractJSON plukker ut det ytterste JSON-objektet fra et modell-svar.
 func extractJSON(s string) string {
 	i := strings.Index(s, "{")

@@ -98,6 +98,15 @@ func (s *Store) DeleteDocument(tenantID, id string) error {
 	if err := deleteNotesBySource(tx, tenantID, id); err != nil {
 		return err
 	}
+	// Rydd grafen: dok-noden og kantene dens forsvinner med dokumentet.
+	// Uttrukne prosedyre/regel-noder består — de er godkjent kunnskap i seg
+	// selv og eies ikke av kilden.
+	if _, err := tx.Exec(`DELETE FROM knowledge_nodes WHERE id = ? AND tenant_id = ?`, id, tenantID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM knowledge_edges WHERE tenant_id = ? AND (from_id = ? OR to_id = ?)`, tenantID, id, id); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
