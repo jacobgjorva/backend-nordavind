@@ -295,14 +295,13 @@ func (s *Server) handleSetAgentPersona(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name        string  `json:"name"`
 		Personality *string `json:"personality"` // nil = ikke endre; tom streng = fjern
-		Category    *string `json:"category"`    // nil = ikke endre; tom streng = fjern
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "ugyldig request", http.StatusBadRequest)
 		return
 	}
 	err := s.store.SetAgentPersona(r.PathValue("id"), user.ID, store.AgentPersona{
-		Name: req.Name, Personality: req.Personality, Category: req.Category,
+		Name: req.Name, Personality: req.Personality,
 	})
 	if errors.Is(err, store.ErrNotFound) {
 		http.Error(w, "ikke funnet", http.StatusNotFound)
