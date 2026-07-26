@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
@@ -246,6 +248,28 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"agents": out})
+}
+
+// handleAgentRuns returnerer kjøringshistorikken til trådgrafen.
+// ?hours styrer vinduet (default 24, maks 168).
+func (s *Server) handleAgentRuns(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	hours := 24
+	if h, err := strconv.Atoi(r.URL.Query().Get("hours")); err == nil && h > 0 && h <= 168 {
+		hours = h
+	}
+	runs, err := s.store.AgentRunsSince(user.ID, time.Now().Add(-time.Duration(hours)*time.Hour))
+	if err != nil {
+		http.Error(w, "intern feil", http.StatusInternalServerError)
+		return
+	}
+	if runs == nil {
+		runs = []store.AgentRunEvent{}
+	}
+	writeJSON(w, map[string]any{"runs": runs})
 }
 
 // handleSetAgentPersona setter navn og/eller personlighet fra farmen.

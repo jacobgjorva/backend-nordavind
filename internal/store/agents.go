@@ -268,6 +268,43 @@ func (s *Store) ListAgents(userID string) ([]Agent, error) {
 	return out, unseen.Err()
 }
 
+// AgentRunEvent er én kjøring i historikk-grafen: når, for hvilken agent,
+// og om den la igjen et resultat.
+type AgentRunEvent struct {
+	AgentID   string    `json:"agent_id"`
+	StartedAt time.Time `json:"started_at"`
+	Status    string    `json:"status"`
+	HasOutput bool      `json:"has_output"`
+}
+
+// AgentRunsSince returnerer alle kjøringer for brukerens agenter etter et
+// tidspunkt (til trådgrafen), eldste først.
+func (s *Store) AgentRunsSince(userID string, since time.Time) ([]AgentRunEvent, error) {
+	rows, err := s.db.Query(
+		`SELECT r.agent_id, r.started_at, r.status, r.output != ''
+		 FROM agent_runs r
+		 JOIN agents a ON a.id = r.agent_id
+		 WHERE a.user_id = ? AND r.started_at >= ?
+		 ORDER BY r.started_at`,
+		userID, since,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AgentRunEvent
+	for rows.Next() {
+		var e AgentRunEvent
+		var hasOut int
+		if err := rows.Scan(&e.AgentID, &e.StartedAt, &e.Status, &hasOut); err != nil {
+			return nil, err
+		}
+		e.HasOutput = hasOut != 0
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 // MarkAgentResponseSeen registrerer at brukeren har åpnet agentens chat —
 // noden glir da tilbake fra svar-seksjonen i grafen.
 func (s *Store) MarkAgentResponseSeen(agentID, userID string) error {
