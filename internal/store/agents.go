@@ -359,6 +359,25 @@ func (s *Store) DueAgents(now time.Time) ([]Agent, error) {
 
 // SetPlanStatus setter plan-tilstanden (building/ready/broken) og en evt. årsak.
 // Tømmer ikke selve planen — en «broken» plan beholdes til den er bygget på nytt.
+// StuckPlanAgents er agenter der spinup ble avbrutt (typisk av en omstart
+// midt i byggingen) — status «building» uten at noen jobber lenger.
+func (s *Store) StuckPlanAgents() ([]string, error) {
+	rows, err := s.db.Query(`SELECT id FROM agents WHERE plan_status = 'building'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (s *Store) SetPlanStatus(agentID, status, reason string) error {
 	_, err := s.db.Exec(
 		`UPDATE agents SET plan_status = ?, plan_error = ? WHERE id = ?`,

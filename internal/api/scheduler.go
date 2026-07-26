@@ -38,6 +38,17 @@ func (s *Server) startScheduler(ctx context.Context) {
 	// Gjenoppta kontinuerlige oppdrag som var i gang (også etter omstart).
 	s.resumeMissions(ctx)
 
+	// Spinup-jobber som ble avbrutt av en omstart står som «building» uten at
+	// noen jobber — nullstill og bygg dem på nytt, ellers henger de for alltid.
+	if ids, err := s.store.StuckPlanAgents(); err == nil {
+		for _, id := range ids {
+			s.log.Info("gjenopptar avbrutt spinup", "agent", id)
+			s.store.SetPlanStatus(id, "", "")
+			s.store.SetMissionActivity(id, "")
+			s.startPlanBuild(id)
+		}
+	}
+
 	// Live OneDrive-eksporter: push ferske tall inn i arbeidsbøkene fast.
 	pushTicker := time.NewTicker(15 * time.Minute)
 	go func() {
