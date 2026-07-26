@@ -12,20 +12,20 @@ import (
 // oppgave mot en tilkobling på en fast frekvens.
 // Standard er kun lesetilgang; skrivetilgang må settes eksplisitt.
 type Agent struct {
-	ID              string     `json:"id"`
-	Name            string     `json:"name"`
-	Personality     string     `json:"personality"` // brukersatt lynne, farger tolknings-tonen og trollet i farmen
-	Category        string     `json:"category"` // brukersatt kategori - styrer klynge og farge i agent-grafen
-	HasResponse     bool       `json:"has_response"` // siste kjøring ga et resultat brukeren ikke har åpnet ennå
-	Task            string     `json:"task"`
-	ConnectionID    string     `json:"connection_id"`
-	ScheduleLabel   string     `json:"schedule_label"`   // menneskelig, f.eks. "hver dag kl 08:00"
-	IntervalSeconds int        `json:"interval_seconds"` // hvor ofte den kjøres
-	RunTime         string     `json:"run_time"`         // HH:MM for dag/uke-intervaller
-	DailyTokenLimit int        `json:"daily_token_limit"`
-	WriteAccess     bool       `json:"write_access"`
-	Enabled         bool       `json:"enabled"`
-	PushEnabled     bool       `json:"push_enabled"`
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Personality     string `json:"personality"`  // brukersatt lynne, farger tolknings-tonen og trollet i farmen
+	Category        string `json:"category"`     // brukersatt kategori - styrer klynge og farge i agent-grafen
+	HasResponse     bool   `json:"has_response"` // siste kjøring ga et resultat brukeren ikke har åpnet ennå
+	Task            string `json:"task"`
+	ConnectionID    string `json:"connection_id"`
+	ScheduleLabel   string `json:"schedule_label"`   // menneskelig, f.eks. "hver dag kl 08:00"
+	IntervalSeconds int    `json:"interval_seconds"` // hvor ofte den kjøres
+	RunTime         string `json:"run_time"`         // HH:MM for dag/uke-intervaller
+	DailyTokenLimit int    `json:"daily_token_limit"`
+	WriteAccess     bool   `json:"write_access"`
+	Enabled         bool   `json:"enabled"`
+	PushEnabled     bool   `json:"push_enabled"`
 
 	// Oppdrags-modus: agenten jobber mot et mål over flere kjøringer og gir seg
 	// først når det er nådd.
@@ -41,9 +41,9 @@ type Agent struct {
 	// Kompilert plan: spinup finner én gang ut HVORDAN oppgaven løses best, og
 	// lagrer stegene her. Hver kjøring utfører planen deterministisk i stedet
 	// for å lete på nytt.
-	Plan        string     `json:"plan"`         // JSON: steps + watch + alert_rule
-	PlanStatus  string     `json:"plan_status"`  // "" | building | ready | broken
-	PlanError   string     `json:"plan_error"`   // hvorfor planen ikke ble bygget/er ødelagt
+	Plan        string     `json:"plan"`        // JSON: steps + watch + alert_rule
+	PlanStatus  string     `json:"plan_status"` // "" | building | ready | broken
+	PlanError   string     `json:"plan_error"`  // hvorfor planen ikke ble bygget/er ødelagt
 	PlanBuiltAt *time.Time `json:"plan_built_at,omitempty"`
 
 	// Minne mellom kjøringer: rådataene forrige kjøring hentet. Er de identiske
@@ -51,10 +51,10 @@ type Agent struct {
 	// varsel. Snapshotet eksponeres ikke til klienten (kan være stort).
 	LastSnapshot string `json:"-"`
 
-	CreatedAt time.Time `json:"created_at"`
-	ChatID          string     `json:"chat_id"`
-	NextRunAt       *time.Time `json:"next_run_at,omitempty"`
-	LastRunAt       *time.Time `json:"last_run_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	ChatID    string     `json:"chat_id"`
+	NextRunAt *time.Time `json:"next_run_at,omitempty"`
+	LastRunAt *time.Time `json:"last_run_at,omitempty"`
 
 	// Internt for scheduleren (ikke eksponert i JSON til klient).
 	TenantID string `json:"-"`
@@ -128,6 +128,7 @@ func (s *Store) migrateAgents() error {
 		`ALTER TABLE agents ADD COLUMN personality TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE agents ADD COLUMN category TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE agents ADD COLUMN response_seen_at TIMESTAMP`,
+		`ALTER TABLE agent_runs ADD COLUMN alert INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE agents ADD COLUMN last_snapshot TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE agents ADD COLUMN last_snapshot_at TIMESTAMP`,
 	} {
@@ -275,13 +276,16 @@ type AgentRunEvent struct {
 	StartedAt time.Time `json:"started_at"`
 	Status    string    `json:"status"`
 	HasOutput bool      `json:"has_output"`
+	Alert     bool      `json:"alert"`  // «Funn!» — kjøringen fant noe med verdi
+	Output    string    `json:"output"` // meldingen (kappet), til pille-ekspansjonen
 }
 
 // AgentRunsSince returnerer alle kjøringer for brukerens agenter etter et
 // tidspunkt (til trådgrafen), eldste først.
 func (s *Store) AgentRunsSince(userID string, since time.Time) ([]AgentRunEvent, error) {
 	rows, err := s.db.Query(
-		`SELECT r.agent_id, r.started_at, r.status, r.output != ''
+		`SELECT r.agent_id, r.started_at, r.status, r.output != '', r.alert,
+		        substr(r.output, 1, 4000)
 		 FROM agent_runs r
 		 JOIN agents a ON a.id = r.agent_id
 		 WHERE a.user_id = ? AND r.started_at >= ?
@@ -295,11 +299,12 @@ func (s *Store) AgentRunsSince(userID string, since time.Time) ([]AgentRunEvent,
 	var out []AgentRunEvent
 	for rows.Next() {
 		var e AgentRunEvent
-		var hasOut int
-		if err := rows.Scan(&e.AgentID, &e.StartedAt, &e.Status, &hasOut); err != nil {
+		var hasOut, alert int
+		if err := rows.Scan(&e.AgentID, &e.StartedAt, &e.Status, &hasOut, &alert, &e.Output); err != nil {
 			return nil, err
 		}
 		e.HasOutput = hasOut != 0
+		e.Alert = alert != 0
 		out = append(out, e)
 	}
 	return out, rows.Err()
@@ -581,14 +586,15 @@ type AgentRun struct {
 	Output     string
 	TokensUsed int
 	Error      string
+	Alert      bool // kjøringen fant noe med verdi (agentens egen varselregel)
 }
 
 // RecordRun logger resultatet av en agent-kjøring.
 func (s *Store) RecordRun(agentID string, r AgentRun) error {
 	_, err := s.db.Exec(
-		`INSERT INTO agent_runs (agent_id, status, output, tokens_used, error)
-		 VALUES (?, ?, ?, ?, ?)`,
-		agentID, r.Status, r.Output, r.TokensUsed, r.Error,
+		`INSERT INTO agent_runs (agent_id, status, output, tokens_used, error, alert)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		agentID, r.Status, r.Output, r.TokensUsed, r.Error, boolToInt(r.Alert),
 	)
 	return err
 }

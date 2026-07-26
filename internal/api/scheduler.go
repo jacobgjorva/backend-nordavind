@@ -229,9 +229,15 @@ func (s *Server) runAgentOnce(ctx context.Context, a store.Agent, now time.Time)
 		return
 	}
 
-	s.store.RecordRun(a.ID, store.AgentRun{Status: "ok", Output: run.output, TokensUsed: run.tokens})
+	// Alert («Funn!» i grafen): plan-kjøringer bruker agentens egen varselregel;
+	// frie kjøringer regner et postet resultat som funn.
+	alert := run.alert
+	if !planned {
+		alert = strings.TrimSpace(run.output) != ""
+	}
+	s.store.RecordRun(a.ID, store.AgentRun{Status: "ok", Output: run.output, TokensUsed: run.tokens, Alert: alert})
 	s.postToAgentChat(a, run.output)
-	s.log.Info("agent kjørt", "id", a.ID, "navn", a.Name, "tokens", run.tokens, "varsel", run.alert)
+	s.log.Info("agent kjørt", "id", a.ID, "navn", a.Name, "tokens", run.tokens, "varsel", alert)
 
 	if !a.PushEnabled {
 		return
