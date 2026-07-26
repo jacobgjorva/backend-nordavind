@@ -61,6 +61,41 @@ kundebase summerer til 30-50 s.
   (historikk-vask, stamme-dedup), full sim + eval som port, og latensbudsjett
   i flow-sim (ttft-krav per meldingstype).
 
+## Dikting uten verktøybruk, 26. juli 2026
+
+Observert i dokument-chat: modellen påsto brukerens alder («da var du 24 år»)
+uten noe grunnlag, og «korrigerte» brukerens eget utsagn. Konfrontert innrømmet
+den at den ikke visste. Uakseptabelt: modellen skal aldri finne på fakta.
+
+Hullene (målt mot koden i grounding.go/agent.go):
+
+1. **Kildekontrollen kjører kun i verktøy-turer.** `groundingOffenders` får
+   `toolResults` som eneste kilde; uten verktøykall er `sources` tom og ALT
+   passerer. Rene samtale-turer (som alders-turen) er helt usjekket.
+2. **Småtall-unntaket.** Tall under tre sifre sjekkes aldri (telling-unntak).
+   Aldre, prosenter og antall under 100 kan altså diktes fritt selv i
+   verktøy-turer.
+3. **Strukturelt (klasse A uten verktøy):** ingenting håndhever «si at du
+   ikke vet» når grunnlag mangler — modellen belønnes ikke for å avstå.
+
+## Plan mot dikting (G1-G3, bygges etter godkjenning)
+
+- **G1 — Kildekontroll alltid på**: grunnlaget for en tur = verktøydata +
+  dokumentkontekst + samtalehistorikk (brukerens egne utsagn er legitim
+  kilde). Tekst-sjekken kjører på hvert svar, ikke bare verktøy-turer.
+- **G2 — Fakta-dommer for udekkede påstander**: svar med konkrete påstander
+  (tall, datoer, egennavn) som ikke kan spores i grunnlaget går til dommeren
+  (MidModel): har påstanden dekning? Underkjent → ett omforsøk med eksplisitt
+  beskjed om å si at den ikke vet. Dekker småtall (24 år) uten å røre
+  telle-unntaket i den raske tekst-sjekken.
+- **G3 — Port**: nye sim-caser for fabrikkering (alder/fødselsår, diktede
+  dokumentdetaljer, «korrigering» av brukerens egne utsagn). Grønn sim før
+  deploy; hver reelle bom blir ny sim-linje, aldri ny logikk (rituale fra
+  intent-motoren).
+
+Kost: ett ekstra dommer-kall på påstandstunge svar uten kildedekning —
+kvalitet over tokens er avtalt prinsipp.
+
 ## Måltall etter P1-P2 (forslag)
 
 Første tegn: smalltalk < 1 s, vanlig svar < 1,5 s, dataspørsmål < 3 s +

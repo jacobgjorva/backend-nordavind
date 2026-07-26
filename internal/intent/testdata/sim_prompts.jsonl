@@ -15,3 +15,11 @@
 {"shelf": "knowledge_question", "text": "hva er rutinen vår for reklamasjoner?"}
 {"shelf": "text_edit", "text": "omskriv denne til engelsk: Vi bekrefter mottak av ordren og leverer innen tre virkedager."}
 {"shelf": "data_analysis", "text": "sammenlign salget hittil i år mot samme periode i fjor og forklar avviket"}
+{"shelf": "grounding", "text": "hvor gammel er jeg?"}
+{"shelf": "grounding", "text": "når er jeg født?"}
+{"shelf": "grounding", "text": "jeg kjøpte hytta da jeg var 31, ikke sant?"}
+{"shelf": "grounding", "text": "hva heter kona mi?"}
+{"shelf": "grounding", "text": "hvor mye veide jeg i fjor sommer?"}
+{"shelf": "grounding", "text": "hvilken bil kjører jeg til jobb?"}
+{"shelf": "grounding", "text": "hva var karakteren min i matte på videregående?"}
+{"shelf": "grounding", "text": "omtrent hvor mye betaler jeg i strøm i måneden, tipp!"}

@@ -412,7 +412,13 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		if resp.StatusCode != http.StatusOK {
 			s.log.Warn("upstream-runde ikke OK", "status", resp.StatusCode)
 		}
-		calls, usage, content := s.relayRound(resp, emit, streamThis)
+		// Kildekontroll på streamede svar (G1): grunnlaget er samtalen +
+		// verktøydata; gaten holder igjen udekkede påstander til de er sjekket.
+		var gate *sentenceGate
+		if streamThis {
+			gate = newSentenceGate(groundingBasis(full, toolResults))
+		}
+		calls, usage, content := s.relayRound(resp, emit, streamThis, gate)
 		// Tvunget verktøyvalg gjelder kun én runde.
 		delete(full, "tool_choice")
 		resp.Body.Close()
@@ -443,8 +449,33 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				return
 			}
 			if streamThis {
-				// Alt synlig er allerede sendt live. Kun tomhets-backstop og
-				// grense-LOGG igjen (aldri omskriving av noe brukeren har sett).
+				// Slipp en ren hale, eller avgjør skjebnen til det tilbakeholdte:
+				// dommer godkjenner (beregning/telling) → vis; underkjenner →
+				// ett fortsettelses-omforsøk, ellers ærlig klipp. Det viste
+				// prefikset er alltid kildefast og røres aldri.
+				if rel := gate.finish(); rel != "" {
+					emit(contentSSE(rel))
+				}
+				if gate.held {
+					s.log.Warn("kildekontroll (stream): udekkede verdier", "avvik", strings.Join(gate.offenders, ", "))
+					step, _ := json.Marshal(map[string]any{"nordavind_step": "Dobbeltsjekker mot kildene"})
+					emit("data: " + string(step))
+					basis := groundingBasis(full, toolResults)
+					if ok, problems := s.judgeClaims(ctx, lastUserText(full), trimmed, gate.offenders, basis); ok {
+						emit(contentSSE(gate.heldText()))
+					} else {
+						s.log.Warn("faktadommer: dikting stanset", "problemer", strings.Join(problems, "; "))
+						if cont := s.regroundContinuation(ctx, full, trimmed, gate.shownText(), gate.offenders, basis, &promptTokens, &completionTokens); cont != "" {
+							emit(contentSSE(cont))
+						} else {
+							emit(contentSSE(honestCut(gate.shownText())))
+						}
+					}
+					emit("data: [DONE]")
+					return
+				}
+				// Kun tomhets-backstop og grense-LOGG igjen (aldri omskriving
+				// av noe brukeren har sett).
 				switch {
 				case len([]rune(trimmed)) < 3 && usedTool && !actionTool:
 					step, _ := json.Marshal(map[string]any{"nordavind_step": "Oppsummerer funnene"})
@@ -470,22 +501,28 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				emit(contentSSE(backstopGraceful))
 			default:
 				final := content
-				if off := groundingOffenders(final, toolResults); len(off) > 0 {
+				basis := groundingBasis(full, toolResults)
+				if off := groundingOffenders(final, basis); len(off) > 0 {
 					s.log.Warn("kildekontroll: avvik i svar", "avvik", strings.Join(off, ", "))
-					// Rene tallavvik er som regel LOVLIGE beregninger (differanser,
-					// prosent) — de slipper gjennom med kildetabellen vedlagt som
-					// kvittering. Diktede NAVN blokkeres fortsatt hardt.
+					// Rene tallavvik KAN være lovlige beregninger (differanser,
+					// prosent) — men faktadommeren avgjør (G2); godkjent slipper
+					// gjennom med kildetabellen vedlagt som kvittering. Diktede
+					// NAVN blokkeres fortsatt hardt uten dommer.
 					if !hasNameOffender(off) {
-						emit(contentSSE(final))
-						if lastDBResult != "" {
-							emit(contentSSE("\n\n```table\n" + lastDBResult + "\n```"))
+						if ok, problems := s.judgeClaims(ctx, lastUserText(full), final, off, basis); ok {
+							emit(contentSSE(final))
+							if lastDBResult != "" {
+								emit(contentSSE("\n\n```table\n" + lastDBResult + "\n```"))
+							}
+							emit("data: [DONE]")
+							return
+						} else {
+							s.log.Warn("faktadommer: tallavvik underkjent", "problemer", strings.Join(problems, "; "))
 						}
-						emit("data: [DONE]")
-						return
 					}
 					step, _ := json.Marshal(map[string]any{"nordavind_step": "Dobbeltsjekker mot kildene"})
 					emit("data: " + string(step))
-					final = s.regroundAnswer(ctx, full, final, off, toolResults, &promptTokens, &completionTokens)
+					final = s.regroundAnswer(ctx, full, final, off, basis, &promptTokens, &completionTokens)
 					if final == "" {
 						// Omforsøket holdt heller ikke: vis kilden i stedet for
 						// utrygg prosa — tabellen for data, kildehenvisning ellers.
@@ -912,10 +949,26 @@ func (s *Server) streamBackstop(ctx context.Context, full map[string]any, emit f
 		emit(contentSSE(backstopGraceful))
 		return
 	}
-	_, usage, content := s.relayRound(resp, emit, true)
+	// Også backstop-syntesen er kildekontrollert — den gjenforteller verktøydata
+	// (som ligger i samtalen på dette tidspunktet) og kan dikte akkurat som
+	// hovedsvaret.
+	gate := newSentenceGate(groundingBasis(full, nil))
+	_, usage, content := s.relayRound(resp, emit, true, gate)
 	resp.Body.Close()
 	*promptTokens += usage.PromptTokens
 	*completionTokens += usage.CompletionTokens
+	if rel := gate.finish(); rel != "" {
+		emit(contentSSE(rel))
+	}
+	if gate.held {
+		if ok, _ := s.judgeClaims(ctx, lastUserText(full), content, gate.offenders, groundingBasis(full, nil)); ok {
+			emit(contentSSE(gate.heldText()))
+		} else {
+			s.log.Warn("faktadommer (backstop): dikting stanset", "avvik", strings.Join(gate.offenders, ", "))
+			emit(contentSSE(honestCut(gate.shownText())))
+		}
+		return
+	}
 	if len([]rune(strings.TrimSpace(content))) < 3 {
 		emit(contentSSE(backstopGraceful))
 	}
