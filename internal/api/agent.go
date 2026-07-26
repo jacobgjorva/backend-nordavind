@@ -242,6 +242,24 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// forespørselen sendes videre til upstream.
 	setup, _ := full["nordavind_agent_setup"].(bool)
 	delete(full, "nordavind_agent_setup")
+	// Samtale-identitet + klipp-flagg fra frontend: når historikken er kuttet
+	// mot tegnbudsjettet, injiseres det rullerende sammendraget som kontekst.
+	// Feltene skal aldri videre upstream.
+	chatID, _ := full["nordavind_chat"].(string)
+	clipped, _ := full["nordavind_clipped"].(bool)
+	delete(full, "nordavind_chat")
+	delete(full, "nordavind_clipped")
+	// Klientvern: stol aldri på at klienten holdt budsjettet — monstermeldinger
+	// i historikken klippes uansett (siste brukermelding fredes).
+	trimChatHistory(full)
+	if chatID != "" && clipped {
+		if user, ok := ctx.Value(userKey).(store.User); ok {
+			if sum, err := s.store.ChatSummary(chatID, user.ID); err == nil && strings.TrimSpace(sum) != "" {
+				injectSystem(full, "Tidligere i samtalen (sammendrag — bruk som bakgrunnskontekst, "+
+					"ikke som verktøydata): "+sum)
+			}
+		}
+	}
 	// Flyt-kontrakten (intent-modus): leses ut her, skal aldri videre upstream.
 	flowKey, _ := full[flowKeyField].(string)
 	answerLimit := answerCharLimit(full)
@@ -1090,6 +1108,43 @@ func trimToolHistory(full map[string]any, budget int) {
 				"\n…[forkortet for plass — innholdet er alt lest og brukt tidligere i turen]"
 		}
 		total -= r.size - len(r.m["content"].(string))
+	}
+}
+
+// chatMsgCharCap: hardt tak per historikk-melding fra klienten. Frontends
+// budsjett klipper normalt lenge før dette — taket verner mot gamle klienter
+// og tredjeparter som sender hele dokumenter i hver melding.
+const chatMsgCharCap = 20000
+
+// trimChatHistory klipper enkeltmeldinger i klient-historikken over taket
+// (hode + hale, midten ut). Siste brukermelding fredes alltid — det er den
+// aktive turen, og vedlegg der er med vilje.
+func trimChatHistory(full map[string]any) {
+	msgs, _ := full["messages"].([]any)
+	lastUser := -1
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if mm, ok := msgs[i].(map[string]any); ok && mm["role"] == "user" {
+			lastUser = i
+			break
+		}
+	}
+	for i, m := range msgs {
+		if i == lastUser {
+			continue
+		}
+		mm, ok := m.(map[string]any)
+		if !ok || (mm["role"] != "user" && mm["role"] != "assistant") {
+			continue
+		}
+		c, ok := mm["content"].(string)
+		if !ok {
+			continue
+		}
+		if r := []rune(c); len(r) > chatMsgCharCap {
+			half := chatMsgCharCap / 2
+			mm["content"] = string(r[:half]) +
+				"\n…[midten av meldingen utelatt for plass]…\n" + string(r[len(r)-half:])
+		}
 	}
 }
 
