@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/search"
@@ -257,13 +258,19 @@ func extractXLSX(raw []byte, maxChars int) string {
 	return b.String()
 }
 
+// recentMailRe: tidsspørringer som skal gi nyeste-først-liste, ikke relevans-søk.
+var recentMailRe = regexp.MustCompile(`(?i)^(siste|nyeste|i dag|denne uken|recent)\b`)
+
 var mailSearchTool = map[string]any{
 	"type": "function",
 	"function": map[string]any{
 		"name": "mail_search",
 		"description": "Søk i brukerens e-post (Outlook via Microsoft 365). Bruk for spørsmål om mottatt " +
 			"eller sendt e-post («har jeg fått svar fra …», «hva skrev …»). Returnerer avsender, emne, dato, " +
-			"utdrag og id. Ingen treff: utvid søket SELV (avsendernavn alene, færre ord) før du melder tomt.",
+			"utdrag og id. For «siste/nyeste e-post» eller oversikt over innboksen: bruk query='*' — det " +
+			"lister de nyeste sortert på dato (relevans-søk er IKKE datosortert). Svar-status (besvart/ubesvart) " +
+			"finnes ikke i dataene — si det ærlig hvis brukeren spør, og vis heller de nyeste mottatte. " +
+			"Ingen treff: utvid søket SELV (avsendernavn alene, færre ord) før du melder tomt.",
 		"parameters": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -295,8 +302,14 @@ func (s *Server) runMailSearch(ctx context.Context, userID, query string) string
 	if err != nil {
 		return "Microsoft 365 er ikke koblet til."
 	}
-	u := "https://graph.microsoft.com/v1.0/me/messages?$search=%22" + url.QueryEscape(strings.TrimSpace(query)) +
+	query = strings.TrimSpace(query)
+	// «Siste/nyeste»-spørsmål og oversikter: Graph tillater ikke datosortering
+	// kombinert med $search — list innboksen nyeste først i stedet.
+	u := "https://graph.microsoft.com/v1.0/me/messages?$search=%22" + url.QueryEscape(query) +
 		"%22&$top=8&$select=id,subject,from,receivedDateTime,bodyPreview"
+	if query == "*" || query == "" || recentMailRe.MatchString(query) {
+		u = "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$orderby=receivedDateTime%20desc&$top=10&$select=id,subject,from,receivedDateTime,bodyPreview"
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return "Intern feil."
