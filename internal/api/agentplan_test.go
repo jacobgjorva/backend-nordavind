@@ -209,3 +209,19 @@ func TestPlanQueryFailed(t *testing.T) {
 		t.Error("tomt svar ble regnet som suksess")
 	}
 }
+
+// En mail-plan uten gyldig mottaker eller emne skal avvises før lagring.
+func TestValidatePlanMailKreverMottakerOgEmne(t *testing.T) {
+	s := &Server{}
+	args, _ := json.Marshal(map[string]any{
+		"watch":      "salg",
+		"alert_rule": "nytt salg",
+		"steps":      []map[string]any{{"kind": "web", "label": "søk", "query": "x"}},
+		"mail":       map[string]any{"to_email": "ikke-en-adresse", "subject": ""},
+	})
+	_, problems := s.validatePlan(context.Background(), nil, string(args))
+	joined := strings.Join(problems, " ")
+	if !strings.Contains(joined, "e-postadresse") || !strings.Contains(joined, "emne") {
+		t.Fatalf("mail-validering fanget ikke feilene: %v", problems)
+	}
+}

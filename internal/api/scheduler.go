@@ -322,7 +322,7 @@ func (s *Server) executeAgent(ctx context.Context, a store.Agent) (string, int, 
 	ctx, cancel := context.WithTimeout(ctx, agentHTTPTimeoutSeconds*time.Second)
 	defer cancel()
 
-	tools := []any{webSearchTool}
+	tools := []any{webSearchTool, agentSendMailTool}
 	// Gi agenten samme DB-kontekst som interaktiv chat: ALLE eierens
 	// koblinger, ikke bare den bundne. resolveConn auto-ruter til riktig
 	// database ut fra tabellene spørringen nevner, så agenten finner alltid
@@ -336,7 +336,9 @@ func (s *Server) executeAgent(ctx context.Context, a store.Agent) (string, int, 
 		"oppgaven ÉN gang nå. Ignorer ord som «hvert minutt/daglig» i oppgaven; det styrer bare " +
 		"hvor ofte du kjøres. Si ALDRI at du ikke kan kjøre automatisk, planlagt eller kontinuerlig — " +
 		"bare lever resultatet direkte. Kort, konkret svar på norsk, ingen innledning eller spørsmål tilbake. " +
-		"Kun lesing — databasen er skrivebeskyttet, du kan aldri endre data."
+		"Kun lesing — databasen er skrivebeskyttet, du kan aldri endre data. " +
+		"Ber oppgaven eksplisitt om at det sendes e-post: send den selv med send_mail — du har " +
+		"fullmakt. Ellers skal du ALDRI sende e-post."
 	if dbCtx != nil {
 		system += " Du har tilgang til bedriftens database via verktøyet query_database — " +
 			"bruk det når oppgaven krever data derfra, aldri si at du mangler tilgang."
@@ -439,12 +441,23 @@ func (s *Server) executeAgent(ctx context.Context, a store.Agent) (string, int, 
 				Query        string `json:"query"`
 				ConnectionID string `json:"connection_id"`
 				SQL          string `json:"sql"`
+				ToName       string `json:"to_name"`
+				ToEmail      string `json:"to_email"`
+				Subject      string `json:"subject"`
+				Body         string `json:"body"`
 			}
 			_ = json.Unmarshal([]byte(c.args), &args)
 			var result string
-			if c.name == "query_database" {
+			switch c.name {
+			case "query_database":
 				result = s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL)
-			} else {
+			case "send_mail":
+				if err := s.sendAgentMail(a, args.ToName, args.ToEmail, args.Subject, args.Body); err != nil {
+					result = "Kunne ikke sende: " + err.Error()
+				} else {
+					result = "Sendt til " + args.ToEmail
+				}
+			default:
 				result, _ = s.runWebSearch(ctx, args.Query)
 			}
 			toolMsgs = append(toolMsgs, map[string]any{
@@ -457,6 +470,27 @@ func (s *Server) executeAgent(ctx context.Context, a store.Agent) (string, int, 
 		messages = append(messages, toolMsgs...)
 	}
 	return "", totalTokens, fmt.Errorf("nådde maks antall verktøyrunder uten svar")
+}
+
+// agentSendMailTool: agenter er UNNTAKET fra chat-regelen om at brukeren selv
+// må sende mail — en planlagt agent har stående fullmakt og sender selv.
+var agentSendMailTool = map[string]any{
+	"type": "function",
+	"function": map[string]any{
+		"name": "send_mail",
+		"description": "Send en e-post på brukerens vegne. Bruk KUN når oppgaven eksplisitt ber om " +
+			"e-post, og til mottakeren oppgaven nevner.",
+		"parameters": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"to_name":  map[string]any{"type": "string", "description": "mottakerens navn"},
+				"to_email": map[string]any{"type": "string", "description": "mottakerens e-postadresse"},
+				"subject":  map[string]any{"type": "string"},
+				"body":     map[string]any{"type": "string", "description": "meldingen, norsk, uten signatur"},
+			},
+			"required": []string{"to_email", "subject", "body"},
+		},
+	},
 }
 
 // missionTools bygger verktøysettet for en oppdrags-agent. send_mail tas kun med
