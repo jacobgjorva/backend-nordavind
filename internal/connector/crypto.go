@@ -22,6 +22,12 @@ func LoadKey(dbPath string) ([]byte, error) {
 		}
 		return key, nil
 	}
+	// Postgres-drift har ingen db-katalog å legge nøkkelfila i — da MÅ nøkkelen
+	// komme via SECRET_KEY (innholdet i secret.key). Å dikte en filbane ville
+	// generert en NY nøkkel og gjort alle lagrede credentials udekrypterbare.
+	if strings.Contains(dbPath, "://") {
+		return nil, errors.New("database-URL uten SECRET_KEY i miljøet — sett SECRET_KEY til innholdet i secret.key")
+	}
 	path := filepath.Join(filepath.Dir(dbPath), "secret.key")
 	if data, err := os.ReadFile(path); err == nil {
 		key, err := hex.DecodeString(strings.TrimSpace(string(data)))

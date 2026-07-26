@@ -232,7 +232,7 @@ func (s *Store) ListAgents(userID string) ([]Agent, error) {
 		 FROM agent_runs r
 		 JOIN agents a ON a.id = r.agent_id
 		 WHERE a.user_id = ? AND r.status = 'ok' AND r.output != ''
-		 GROUP BY r.agent_id
+		 GROUP BY r.agent_id, a.response_seen_at
 		 HAVING MAX(r.started_at) > COALESCE(a.response_seen_at, '1970-01-01')`,
 		userID,
 	)

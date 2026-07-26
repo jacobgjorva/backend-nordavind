@@ -66,6 +66,21 @@ eksakt søk uten indeks i C, og ved 1 000-10 000 rader er det få millisekunder
 - **F4 — Prod-cut-over** på nordavind-1 etter grønt lokalt løp av F1-F3 mot
   en lokal Postgres.
 
+## Status 26. juli kveld
+
+F1 GRØNN: skjema + pg-migrate verifisert mot ekte lokaldata (alle 32 tabeller,
+radantall likt, stikkprøver ok). F2 GRØNN: dialektlag (rebind ?→$n i db.go),
+portable upserts/literaler (TRUE/FALSE, ON CONFLICT), Flag-skanner for
+boolske kolonner, FTS/vektor dialektdelt (tsvector+pgvector i Postgres,
+FTS5+Go-cosine i SQLite), mission-dødkoden fjernet (jf. migrerings-notatet).
+Røyk-testet mot Docker-Postgres: alle endepunkter 200, ekte chat- og
+dataspørsmål besvart. knowledge-eval mot Postgres: 100 %, p95 185 ms.
+Funn underveis (alle fikset): COALESCE(bool, 0)-typefeil, GROUP BY-krav i
+unseen-spørringen, COLLATE NOCASE → lower(), og VIKTIGST: SECRET_KEY MÅ
+settes i miljøet ved Postgres-drift (nøkkelfila lå ved siden av SQLite-fila;
+uten env ville en NY nøkkel gjort alle credentials udekrypterbare — koden
+nekter nå eksplisitt). Gjenstår: F4 prod-cut-over på nordavind-1.
+
 ## Estimat
 
 F2 er hoveddelen. Ingen frontend-endringer. Én kort, varslet nedetid.
