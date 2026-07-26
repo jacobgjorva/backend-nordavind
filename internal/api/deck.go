@@ -98,6 +98,24 @@ func (s *Server) deckState(ctx context.Context, slug string) string {
 	return b.String()
 }
 
+// deckIsEmpty sier om presentasjonen ennå ikke har en eneste slide.
+func (s *Server) deckIsEmpty(ctx context.Context, slug string) bool {
+	if strings.TrimSpace(slug) == "" {
+		return true
+	}
+	user, ok := ctx.Value(userKey).(store.User)
+	if !ok {
+		return true
+	}
+	w, err := s.store.Widget(slug, user.ID)
+	if err != nil {
+		return true
+	}
+	var spec map[string]any
+	json.Unmarshal([]byte(w.Spec), &spec)
+	return len(slidesOf(spec)) == 0
+}
+
 // preview kutter en tekst til en kort én-linjes forhåndsvisning.
 func preview(s string, n int) string {
 	s = strings.ReplaceAll(strings.TrimSpace(s), "\n", " ")

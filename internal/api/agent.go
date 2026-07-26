@@ -247,7 +247,16 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			// umulig å svare med prat i stedet for å gjøre jobben — koden
 			// håndhever det, ikke en formulering i prompten.
 			full["tools"] = deckTools(s.deckTheme(ctx, deckSlug))
-			full["tool_choice"] = "required"
+			// Tomt lerret: første kall MÅ være en slide. Ellers holdt modellen
+			// seg for god med å sette tittel via set_deck og stoppe der.
+			if s.deckIsEmpty(ctx, deckSlug) {
+				full["tool_choice"] = map[string]any{
+					"type":     "function",
+					"function": map[string]any{"name": "set_slide"},
+				}
+			} else {
+				full["tool_choice"] = "required"
+			}
 		} else if widgetSlug != "" {
 			// Widget-editor: KUN set_widget. Uten query_database/web_search kan
 			// ikke modellen svare på dataspørsmål — den må skrive SQL-en inn i
@@ -903,7 +912,8 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 
 		// Tvungen verktøybruk gjelder KUN første runde (presentasjonsflyten):
 		// minst én endring skal skje, men modellen skal kunne stoppe etterpå.
-		if tc, _ := full["tool_choice"].(string); tc == "required" {
+		// «none» settes derimot bevisst på siste runde og skal stå.
+		if tc, ok := full["tool_choice"]; ok && tc != "none" {
 			delete(full, "tool_choice")
 		}
 
