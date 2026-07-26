@@ -88,6 +88,19 @@ resten var transient API-svikt, ikke feilklassifisering.
 - Fri chat er alltid trygt utfall: den har alle verktøy, så en «bom» til
   fri chat koster kvalitet, aldri funksjonalitet.
 
+## Porter (fast regel, avtalt med Jacob 2026-07-26)
+
+Endringer i en flyt slippes ikke uten grønn port for den flyten:
+
+- Intent-ruting: `go run ./cmd/intent-eval` grønn (accuracy ≥ 90 %, p95-krav).
+- E-postflyten (mail_search/mail_read/mail_compose): sim-suiten i
+  `testdata/sim-email.md` kjøres og skal være grønn (referanse: 93 %).
+- Grounding/kildekontroll: enhetstestene i `internal/api/grounding_gate_test.go`
+  (kjøres alltid) + grounding-probene i `sim_prompts.jsonl` ved flytendringer.
+
+Flow-sim koster penger per kjøring: kjør porten for flyten som er endret,
+ikke hele suiten, og aldri gjentatte runder uten avtale.
+
 ## Status og neste steg
 
 Motoren står med: direct-hurtigsti (score ≥ 0.60, margin ≥ 0.08) →
