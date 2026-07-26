@@ -205,7 +205,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	deckSlug, _ := full["nordavind_deck"].(string)
 	delete(full, "nordavind_deck")
 	if flowKey == "create_presentation" || deckSlug != "" {
-		injectSystem(full, s.deckSystem(ctx, s.deckTheme(ctx, deckSlug)))
+		injectSystem(full, s.deckSystem(ctx, s.deckTheme(ctx, deckSlug), deckSlug))
 	}
 
 	// Connector-agent: hjelper brukeren koble til eksterne kilder via verktøy.
@@ -242,9 +242,12 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// tomme svar sammen med bilde-input.
 	if !hasImageMessage(full) {
 		if deckSlug != "" {
-			// Åpent presentasjons-canvas: KUN slide-verktøyene, uansett hva
-			// ruteren måtte mene om meldingen.
+			// Åpent presentasjons-lerret: KUN slide-verktøyene, uansett hva
+			// ruteren måtte mene om meldingen. tool_choice=required gjør det
+			// umulig å svare med prat i stedet for å gjøre jobben — koden
+			// håndhever det, ikke en formulering i prompten.
 			full["tools"] = deckTools(s.deckTheme(ctx, deckSlug))
+			full["tool_choice"] = "required"
 		} else if widgetSlug != "" {
 			// Widget-editor: KUN set_widget. Uten query_database/web_search kan
 			// ikke modellen svare på dataspørsmål — den må skrive SQL-en inn i
@@ -897,6 +900,12 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		})
 		msgs = append(msgs, toolMsgs...)
 		full["messages"] = msgs
+
+		// Tvungen verktøybruk gjelder KUN første runde (presentasjonsflyten):
+		// minst én endring skal skje, men modellen skal kunne stoppe etterpå.
+		if tc, _ := full["tool_choice"].(string); tc == "required" {
+			delete(full, "tool_choice")
+		}
 
 		if round == roundCap-1 {
 			// Siste runde: tving frem et svar uten flere verktøykall, og be

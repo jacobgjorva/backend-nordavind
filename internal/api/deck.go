@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -32,13 +33,18 @@ const deckSystemBase = "Du bygger EN presentasjon for brukeren. " +
 	"(bg, text, muted, faint, line, grid, sans, mono, palette) — aldri layout. " +
 	"Etter verktøykallene svarer du med maks ett kort ord (f.eks. «Ok»)."
 
-// deckSystem bygger systemteksten: kit-katalogen (generert fra JSON-filene)
-// pluss databaseskjemaet for SQL-en i grafene.
-func (s *Server) deckSystem(ctx context.Context, theme string) string {
+// deckSystem bygger systemteksten: kit-katalogen (generert fra JSON-filene),
+// hva som ALLEREDE ligger på lerretet, og databaseskjemaet for SQL-en.
+//
+// Lerret-tilstanden hentes fra lagret spec, aldri fra chat-historikken:
+// instruksene lever ikke i tråden, og brukerens egne rettinger i canvaset
+// skal telle like mye som modellens egne.
+func (s *Server) deckSystem(ctx context.Context, theme, slug string) string {
 	var b strings.Builder
 	b.WriteString(deckSystemBase)
 	b.WriteString("\n\n")
 	b.WriteString(deck.Get(theme).Catalog())
+	b.WriteString("\n" + s.deckState(ctx, slug))
 	if len(deck.Names()) > 1 {
 		b.WriteString("Andre temaer: " + strings.Join(deck.Names(), ", ") + "\n")
 	}
@@ -46,6 +52,59 @@ func (s *Server) deckSystem(ctx context.Context, theme string) string {
 		b.WriteString("\nDatabaseskjema:\n" + dbCtx.schema)
 	}
 	return b.String()
+}
+
+// deckState er lerretet slik det står nå: én linje per slide med id, layout
+// og en kort forhåndsvisning av tekstfeltene. Kort med vilje — modellen
+// trenger å vite hva som finnes og hvilken id den skal patche, ikke lese hele
+// presentasjonen på nytt hver tur.
+func (s *Server) deckState(ctx context.Context, slug string) string {
+	if strings.TrimSpace(slug) == "" {
+		return "Lerretet er tomt: ingen slides ennå."
+	}
+	user, ok := ctx.Value(userKey).(store.User)
+	if !ok {
+		return ""
+	}
+	w, err := s.store.Widget(slug, user.ID)
+	if err != nil {
+		return ""
+	}
+	var spec map[string]any
+	json.Unmarshal([]byte(w.Spec), &spec)
+	slides := slidesOf(spec)
+	if len(slides) == 0 {
+		return "Lerretet er tomt: ingen slides ennå."
+	}
+	var b strings.Builder
+	b.WriteString("Slidene som ligger på lerretet nå (bruk id-en når du endrer):\n")
+	for i, sl := range slides {
+		id, _ := sl["id"].(string)
+		layout, _ := sl["layout"].(string)
+		fmt.Fprintf(&b, "%d. id=%s layout=%s", i+1, id, layout)
+		for _, f := range []string{"title", "content"} {
+			if v, _ := sl[f].(string); v != "" {
+				fmt.Fprintf(&b, " %s=%q", f, preview(v, 60))
+			}
+		}
+		if _, ok := sl["widget"]; ok {
+			b.WriteString(" (har graf)")
+		}
+		if wl, ok := sl["widgets"].([]any); ok {
+			fmt.Fprintf(&b, " (har %d visualiseringer)", len(wl))
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// preview kutter en tekst til en kort én-linjes forhåndsvisning.
+func preview(s string, n int) string {
+	s = strings.ReplaceAll(strings.TrimSpace(s), "\n", " ")
+	if r := []rune(s); len(r) > n {
+		return string(r[:n]) + "…"
+	}
+	return s
 }
 
 // deckTheme gir temaet en åpen presentasjon bruker (standardtemaet ellers),
