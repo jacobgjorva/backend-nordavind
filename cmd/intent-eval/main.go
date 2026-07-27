@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/config"
@@ -88,6 +89,10 @@ func main() {
 	var lat []time.Duration
 	methods := map[string]int{}
 	var misses []string
+	// Uklart måles for seg: den forrige oppklaringsmekanismen døde usett
+	// fordi ingenting talte den. Falske positive er den viktige halvdelen —
+	// en assistent som spør i stedet for å svare er verre enn ingen.
+	var unclearWant, unclearHit, unclearFalse int
 	for _, c := range cases {
 		d := engine.Resolve(context.Background(), c.Text, true)
 		lat = append(lat, d.Elapsed)
@@ -99,6 +104,14 @@ func main() {
 			return k
 		}
 		ok := norm(d.Key) == norm(c.Want)
+		if c.Want == intent.UnclearKey {
+			unclearWant++
+			if ok {
+				unclearHit++
+			}
+		} else if d.Key == intent.UnclearKey {
+			unclearFalse++
+		}
 		if ok {
 			hits++
 		} else {
@@ -115,8 +128,18 @@ func main() {
 	p50 := lat[len(lat)/2]
 	p95 := lat[int(float64(len(lat))*0.95)-1]
 
-	fmt.Printf("Accuracy: %d/%d (%.0f %%)   metoder: direct=%d judge=%d none=%d\n",
-		hits, len(cases), 100*acc, methods[intent.MethodDirect], methods[intent.MethodJudge], methods[intent.MethodNone])
+	var mkeys []string
+	for m := range methods {
+		mkeys = append(mkeys, m)
+	}
+	sort.Strings(mkeys)
+	var mparts []string
+	for _, m := range mkeys {
+		mparts = append(mparts, fmt.Sprintf("%s=%d", m, methods[m]))
+	}
+	fmt.Printf("Accuracy: %d/%d (%.0f %%)   metoder: %s\n",
+		hits, len(cases), 100*acc, strings.Join(mparts, " "))
+	fmt.Printf("Uklart:   %d/%d truffet, %d falskt utløst\n", unclearHit, unclearWant, unclearFalse)
 	fmt.Printf("Latens:   p50 %dms, p95 %dms\n", p50.Milliseconds(), p95.Milliseconds())
 	if len(misses) > 0 {
 		fmt.Println("\nBom:")
