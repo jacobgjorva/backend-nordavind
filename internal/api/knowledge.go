@@ -10,9 +10,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )

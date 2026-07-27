@@ -1060,13 +1060,10 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		if round == roundCap-1 {
 			// Siste runde: tving frem et svar uten flere verktøykall, og be
 			// modellen tydelig om å svare NÅ fra det den har funnet — ikke tomt.
-			full["tool_choice"] = "none"
 			injectSystem(full, backstopNudge)
-			// TOKEN: med tool_choice=none kan katalogen aldri brukes — da skal
-			// den heller ikke betales for. Verktøysettet er ~3k tokens på hver
-			// eneste runde, og siste runde er ren syntese fra det som alt er
-			// hentet (samme grep som streamBackstop og regroundAnswer gjør).
-			delete(full, "tools")
+			// TOKEN: uten verktøybruk i turen fjernes katalogen (~3k tokens).
+			// HAR turen brukt verktøy, må den bli stående — se disableTools.
+			disableTools(full)
 		}
 	}
 	// Løkka gikk tom for runder uten et rent svar (modellen ville søke videre).
@@ -1234,8 +1231,7 @@ const backstopGraceful = "Klarte ikke hente et svar nå — prøv igjen."
 // tomt, sendes en kort, vennlig linje. Bruker ser aldri en blank boble.
 func (s *Server) streamBackstop(ctx context.Context, full map[string]any, emit func(string), promptTokens, completionTokens *int) {
 	injectSystem(full, backstopNudge)
-	full["tool_choice"] = "none"
-	delete(full, "tools")
+	disableTools(full)
 	body, err := json.Marshal(full)
 	if err != nil {
 		emit(contentSSE(backstopGraceful))
