@@ -38,6 +38,10 @@ type Column struct {
 type Table struct {
 	Name    string   `json:"name"`
 	Columns []Column `json:"columns"`
+	// Rows er et ESTIMAT fra databasens egen statistikk (gratis, ingen
+	// skanning). Uten det skriver modellen fritekstsøk over millioner av
+	// rader og spørringen timer ut — den må vite hva som er stort.
+	Rows int64 `json:"rows,omitempty"`
 }
 
 // Link er en oppdaget eller manuelt definert join-nøkkel.
@@ -87,6 +91,43 @@ func Open(ctx context.Context, c Creds) (*sql.DB, error) {
 }
 
 // Introspect leser tabeller, kolonner og fremmednøkler fra databasen.
+// rowCounts henter tabellstørrelser fra databasens statistikk. Estimater er
+// gode nok — poenget er å skille «tusen rader» fra «ti millioner».
+func rowCounts(ctx context.Context, db *sql.DB, driver string) map[string]int64 {
+	var q string
+	switch driver {
+	case "postgres":
+		q = `SELECT relname, reltuples::bigint FROM pg_class c
+		     JOIN pg_namespace n ON n.oid = c.relnamespace
+		     WHERE n.nspname = 'public' AND c.relkind = 'r'`
+	case "mysql":
+		q = `SELECT table_name, table_rows FROM information_schema.tables
+		     WHERE table_schema = DATABASE()`
+	case "mssql":
+		q = `SELECT t.name, SUM(p.rows) FROM sys.tables t
+		     JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0,1)
+		     GROUP BY t.name`
+	default:
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	rows, err := db.QueryContext(ctx, q)
+	if err != nil {
+		return nil // statistikk er en bonus, aldri et krav
+	}
+	defer rows.Close()
+	out := map[string]int64{}
+	for rows.Next() {
+		var name string
+		var n sql.NullInt64
+		if err := rows.Scan(&name, &n); err == nil && n.Valid {
+			out[strings.ToLower(name)] = n.Int64
+		}
+	}
+	return out
+}
+
 func Introspect(ctx context.Context, db *sql.DB, c Creds) ([]Table, []Link, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
@@ -161,9 +202,12 @@ func Introspect(ctx context.Context, db *sql.DB, c Creds) ([]Table, []Link, erro
 		}
 	}
 
+	counts := rowCounts(ctx, db, c.Driver)
 	tables := make([]Table, 0, len(order))
 	for _, name := range order {
-		tables = append(tables, *byName[name])
+		t := *byName[name]
+		t.Rows = counts[strings.ToLower(t.Name)]
+		tables = append(tables, t)
 	}
 	return tables, links, nil
 }

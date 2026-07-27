@@ -535,6 +535,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// Designlerret: compose har kjørt denne turen, så flater som venter på en
 	// spørring skal få den i én fokusert runde (dataFollowup).
 	composed, dataAsked, dataFilled := false, false, false
+	// Spørringer kjørt i denne turen — vern mot at modellen gjentar en tung
+	// spørring som allerede timet ut.
+	ranQueries := map[string]bool{}
 	// Kildekontroll: alt verktøyene returnerer denne turen, ordrett — prosaen
 	// måles mot dette før den vises (grounding.go).
 	var toolResults []string
@@ -870,7 +873,18 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Spør databasen"})
 				emit("data: " + string(meta))
 				stopWait := emitAfter(emit, 4*time.Second, "Venter på svar fra databasen")
-				result = s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL)
+				// Samme spørring to ganger i én tur er alltid feil: enten
+				// virket den (og svaret ligger i historikken), eller så timet
+				// den ut — og da koster gjentakelsen 30 sekunder til.
+				key := args.ConnectionID + "|" + strings.Join(strings.Fields(args.SQL), " ")
+				if ranQueries[key] {
+					result = "Du har allerede kjørt nøyaktig denne spørringen i denne turen. " +
+						"Skriv en ANNEN spørring (lettere eller mot andre kolonner), " +
+						"eller svar brukeren med det du har."
+				} else {
+					ranQueries[key] = true
+					result = s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL)
+				}
 				stopWait()
 				dbAttempted = true
 				if strings.HasPrefix(strings.TrimSpace(result), "{") {

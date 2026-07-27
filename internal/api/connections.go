@@ -190,12 +190,19 @@ func (s *Server) handleSaveConnectionConfig(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	colTypes := map[string]map[string]string{}
+	estRows := map[string]int64{}
 	for _, t := range live {
 		m := map[string]string{}
 		for _, c := range t.Columns {
 			m[c.Name] = c.Type
 		}
 		colTypes[t.Name] = m
+		estRows[t.Name] = t.Rows
+	}
+	// Størrelsen følger med kurateringen: modellen skal se hvilke tabeller
+	// som er store FØR den skriver spørringen, ikke etter en timeout.
+	for i := range req.Tables {
+		req.Tables[i].Rows = estRows[req.Tables[i].Name]
 	}
 
 	if err := s.store.SaveConnectionConfig(id, req.Tables, req.Links, req.Views, colTypes); err != nil {

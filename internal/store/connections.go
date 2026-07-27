@@ -22,6 +22,10 @@ type TableConfig struct {
 	// Full kolonneliste (navn + type) lagret ved siste introspeksjon —
 	// dette er skjemaet AI-en får se.
 	ColumnList []ColumnInfo `json:"-"`
+	// Rows er databasens eget estimat. Modellen MÅ vite hva som er stort:
+	// uten det skrives fritekstsøk over millioner av rader, og spørringen
+	// timer ut i stedet for å svare.
+	Rows int64 `json:"rows,omitempty"`
 }
 
 // ColumnInfo er navn/type/beskrivelse for ett felt, slik AI-en ser det.
@@ -160,6 +164,8 @@ func (s *Store) DeleteConnection(tenantID, id string) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
+	// Radestimat kom etter tabellen — idempotent påfyll for eldre baser.
+	s.db.Exec(`ALTER TABLE connection_tables ADD COLUMN est_rows BIGINT NOT NULL DEFAULT 0`)
 	for _, t := range []string{"connection_tables", "connection_columns", "connection_access", "connection_links"} {
 		if _, err := tx.Exec(`DELETE FROM `+t+` WHERE connection_id = ?`, id); err != nil {
 			return err
@@ -185,8 +191,8 @@ func (s *Store) SaveConnectionConfig(connID string, tables []TableConfig, links 
 	}
 	for _, t := range tables {
 		if _, err := tx.Exec(
-			`INSERT INTO connection_tables (connection_id, name, description) VALUES (?, ?, ?)`,
-			connID, t.Name, t.Description,
+			`INSERT INTO connection_tables (connection_id, name, description, est_rows) VALUES (?, ?, ?, ?)`,
+			connID, t.Name, t.Description, t.Rows,
 		); err != nil {
 			return err
 		}
@@ -249,7 +255,7 @@ func (s *Store) ConnectionViews(connID string) ([]ViewConfig, error) {
 // ConnectionConfig returnerer lagret kuratering for en tilkobling.
 func (s *Store) ConnectionConfig(connID string) ([]TableConfig, []LinkConfig, error) {
 	rows, err := s.db.Query(
-		`SELECT name, description FROM connection_tables WHERE connection_id = ? ORDER BY name`, connID,
+		`SELECT name, description, est_rows FROM connection_tables WHERE connection_id = ? ORDER BY name`, connID,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -259,7 +265,7 @@ func (s *Store) ConnectionConfig(connID string) ([]TableConfig, []LinkConfig, er
 	var tables []*TableConfig
 	for rows.Next() {
 		t := &TableConfig{Columns: map[string]string{}, UserIDs: []string{}}
-		if err := rows.Scan(&t.Name, &t.Description); err != nil {
+		if err := rows.Scan(&t.Name, &t.Description, &t.Rows); err != nil {
 			return nil, nil, err
 		}
 		byName[t.Name] = t
