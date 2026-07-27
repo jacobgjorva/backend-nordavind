@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -346,6 +347,14 @@ func cellString(v any) string {
 		s = string(x)
 	case time.Time:
 		s = x.Format("2006-01-02 15:04:05")
+	case float64:
+		// fmt.Sprint gir eksponentnotasjon på store tall — en omsetning på
+		// 1,03 mrd ble vist som «1.0260736703026224e+09» i tabellen.
+		// 'f' med -1 presisjon gir alle sifre uten å legge til falske
+		// desimaler, så tallet forblir ordrett sporbart for kildekontrollen.
+		s = strconv.FormatFloat(x, 'f', -1, 64)
+	case float32:
+		s = strconv.FormatFloat(float64(x), 'f', -1, 32)
 	default:
 		s = fmt.Sprint(x)
 	}
