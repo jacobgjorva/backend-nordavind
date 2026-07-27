@@ -1344,8 +1344,17 @@ func (s *Server) runWebSearchFor(ctx context.Context, query, intentText string) 
 		return cached, refs
 	}
 	results, err := s.search.Search(ctx, query)
-	if err != nil || len(results) == 0 {
+	if err != nil {
 		s.log.Warn("websøk feilet", "query", query, "err", err)
+	}
+	// Wikipedia som ekstra kilde ved siden av motortreffene. Prod-IP-en er
+	// blokkert av nesten alle motorer (målt: kun mojeek svarer, og den
+	// rate-limiter etter ~10 søk), så uten dette står turen ofte helt uten
+	// kilder. Wikipedia blokkerer oss ikke. Irrelevante artikler rangeres
+	// bort av utdragsmotoren — derfor ingen «passer dette?»-detektor.
+	results = mergeSources(results, s.search.WikiSearch(ctx, query))
+	if len(results) == 0 {
+		s.log.Warn("websøk uten treff", "query", query)
 		return "Søket ga ingen resultater.", nil
 	}
 	// Sosiale medier bakerst FØR kuttet — ellers presser et YouTube/Reddit-

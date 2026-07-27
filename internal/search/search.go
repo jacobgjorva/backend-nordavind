@@ -18,6 +18,8 @@ type Client struct {
 	http     *http.Client
 	searxURL string // tom = hopp rett til DDG (lokal dev uten SearXNG)
 	ddgURL   string // overstyres kun i test
+	wikiNO   string // Wikipedia bokmål (overstyres kun i test)
+	wikiEN   string // Wikipedia engelsk — fallback når bokmål er tomt
 	// Downed kalles med motornavn SearXNG melder som døde/blokkerte —
 	// blokkeringsovervåking uten at denne pakken kjenner loggeren.
 	Downed func(engines []string)
@@ -30,6 +32,8 @@ func NewClient(searxURL string) *Client {
 		http:     &http.Client{Timeout: 8 * time.Second},
 		searxURL: strings.TrimSuffix(searxURL, "/"),
 		ddgURL:   "https://html.duckduckgo.com/html/",
+		wikiNO:   "https://no.wikipedia.org/w/api.php",
+		wikiEN:   "https://en.wikipedia.org/w/api.php",
 	}
 }
 
