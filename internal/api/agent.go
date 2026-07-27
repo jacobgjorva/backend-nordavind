@@ -456,6 +456,28 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			"eller databasefeil er UTDATERTE — ignorer dem, kjør spørringen og svar med ferske tall.")
 	}
 
+	// Verktøyavhengige regler: legges på NÅR vi vet hva turen faktisk har.
+	// Uten dette ville modellen fått databaseregler uten database og
+	// OneDrive-regler uten M365 — ren kontekst-kostnad på hver melding.
+	if tools, ok := full["tools"].([]any); ok && len(tools) > 0 {
+		var opts systemOpts
+		opts.tools = true
+		for _, t := range tools {
+			switch toolName(t) {
+			case "web_search":
+				opts.search = true
+			case "query_database":
+				opts.db = true
+				opts.table = tableIntent(lastUserText(full))
+			case "m365_search", "m365_read":
+				opts.m365 = true
+			}
+		}
+		if extra := moduleRules(opts); extra != "" {
+			injectSystem(full, extra)
+		}
+	}
+
 	// Husets stemme: kun vanlig chat. Widget-, design- og agent-flytene har
 	// egne, strengere kontrakter der prat er feil.
 	//

@@ -40,7 +40,30 @@ func (s *Server) logPayloadShape(round int, full map[string]any, total int) {
 			tool += n
 		}
 	}
-	toolsRaw, _ := json.Marshal(full["tools"])
+	// Tell TEGN, ikke JSON: Go escaper æøå som \uXXXX, og da ville regnskapet
+	// vist seks tegn der modellen ser ett token-fragment.
+	toolChars := 0
+	if list, ok := full["tools"].([]any); ok {
+		for _, t := range list {
+			toolChars += len([]rune(flatten(t)))
+		}
+	}
+	toolsRaw := []byte(strings.Repeat("x", toolChars))
+	if round == 0 && system > 0 {
+		for _, m := range msgs {
+			if mm, ok := m.(map[string]any); ok && mm["role"] == "system" {
+				txt := contentString(mm["content"])
+				for i, del := range strings.Split(txt, "\n\n") {
+					head := del
+					if len([]rune(head)) > 60 {
+						head = string([]rune(head)[:60])
+					}
+					s.log.Info("system-del", "nr", i, "tegn", len([]rune(del)),
+						"start", strings.ReplaceAll(head, "\n", " "))
+				}
+			}
+		}
+	}
 	s.log.Info("kontekst-regnskap",
 		"runde", round,
 		"totalt_tegn", total,
@@ -50,6 +73,28 @@ func (s *Server) logPayloadShape(round int, full map[string]any, total int) {
 		"verktøysvar", tool,
 		"verktøyskjema", len(toolsRaw),
 		"meldinger", len(msgs))
+}
+
+// flatten trekker ut all tekst fra en verktøydefinisjon.
+func flatten(v any) string {
+	switch t := v.(type) {
+	case string:
+		return t
+	case map[string]any:
+		var b strings.Builder
+		for k, x := range t {
+			b.WriteString(k)
+			b.WriteString(flatten(x))
+		}
+		return b.String()
+	case []any:
+		var b strings.Builder
+		for _, x := range t {
+			b.WriteString(flatten(x))
+		}
+		return b.String()
+	}
+	return ""
 }
 
 // contentString håndterer både ren tekst og deler (tekst + bilde).
