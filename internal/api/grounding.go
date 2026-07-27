@@ -290,7 +290,7 @@ func (s *Server) regroundAnswer(ctx context.Context, full map[string]any, draft 
 		map[string]any{"role": "user", "content": "RETTELSE: svaret ditt inneholdt verdier som IKKE finnes i verktøydataene: " +
 			strings.Join(offenders, ", ") + ". Skriv svaret på nytt og bruk KUN tall og navn som står ordrett i verktøyresultatene."})
 	fixed["messages"] = msgs
-	delete(fixed, "tools")
+	disableTools(fixed)
 
 	body, err := jsonMarshal(fixed)
 	if err != nil {
@@ -336,7 +336,7 @@ func (s *Server) regroundContinuation(ctx context.Context, full map[string]any, 
 			"». Fortsett NATURLIG akkurat derfra (ikke gjenta noe av det viste), uten de udekkede påstandene. " +
 			"Mangler du grunnlag for noe, si ærlig at du ikke vet."})
 	fixed["messages"] = msgs
-	delete(fixed, "tools")
+	disableTools(fixed)
 
 	body, err := jsonMarshal(fixed)
 	if err != nil {
