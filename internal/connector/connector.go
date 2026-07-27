@@ -235,7 +235,9 @@ func stripFnFrom(q string) string {
 	}
 }
 
-const maxRows = 100
+// MaxRows er radgrensen alle spørringer kappes på. Eksportert fordi api-laget
+// må kunne SI FRA når et resultat traff taket — brukeren tror ellers hun så alt.
+const MaxRows = 100
 
 // ReferencedTables plukker ut tabellnavnene en spørring refererer til.
 func ReferencedTables(query string) []string {
@@ -311,7 +313,7 @@ func SafeQueryViewsN(ctx context.Context, db *sql.DB, driver, query string, allo
 // SafeQuery kjører kun én SELECT-setning mot tillatte tabeller, med standard
 // radgrense (100 — dimensjonert for LLM-kontekst).
 func SafeQuery(ctx context.Context, db *sql.DB, driver, query string, allowed []string) ([]string, [][]string, error) {
-	return SafeQueryN(ctx, db, driver, query, allowed, maxRows)
+	return SafeQueryN(ctx, db, driver, query, allowed, MaxRows)
 }
 
 // SafeQueryN er SafeQuery med eksplisitt radgrense — widgets og eksport trenger
@@ -321,7 +323,7 @@ func SafeQuery(ctx context.Context, db *sql.DB, driver, query string, allowed []
 // dialekter som støtter det (SQL Server bruker TOP og hopper over).
 func SafeQueryN(ctx context.Context, db *sql.DB, driver, query string, allowed []string, rowCap int) ([]string, [][]string, error) {
 	if rowCap <= 0 {
-		rowCap = maxRows
+		rowCap = MaxRows
 	}
 	q := strings.TrimSpace(commentRe.ReplaceAllString(query, " "))
 	q = strings.TrimSuffix(q, ";")

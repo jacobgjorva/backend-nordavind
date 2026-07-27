@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jacobgjorva/backend-nordavind/internal/connector"
 	"github.com/jacobgjorva/backend-nordavind/internal/intent"
 	"github.com/jacobgjorva/backend-nordavind/internal/search"
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
@@ -534,9 +535,8 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 
 	// Momentan kvittering: verktøyflyter melder fra i KODE før modellen har
 	// startet — vises der «Tenker»-teksten står, ikke i selve svaret.
-	if ack := flowAcks[flowKey]; ack != "" {
-		meta, _ := json.Marshal(map[string]any{"nordavind_step": ack})
-		emit("data: " + string(meta))
+	if ack := flowAcks[flowKey]; ack.text != "" {
+		narr.say(ack.text, ack.kind)
 	}
 
 	start := time.Now()
@@ -555,6 +555,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	var attempts []dbAttempt
 	// Benektelsesporten kjøres høyst én gang per tur.
 	denialChecked := false
+	// Observasjonen koden gjorde om datagrunnlaget, levert som én setning
+	// etter svaret. (insight.go)
+	var pending insight
 	// Kode-håndhevet søkeinnsats: «fant ikke» etter bare ett søk godtas aldri —
 	// modellen sendes tilbake for flere vinkler (én gang).
 	searchNudged := false
@@ -774,8 +777,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					if !hasNameOffender(off) {
 						if ok, problems := s.judgeClaims(ctx, lastUserText(full), final, off, basis); ok {
 							emit(contentSSE(final))
-							if lastDBResult != "" {
+							narr.deliverInsight(emit, pending, final, answerLimit, tableShown)
+							// Tabell-garantien: bare hvis den ikke alt er vist.
+							if lastDBResult != "" && !tableShown {
 								emit(contentSSE("\n\n```table\n" + lastDBResult + "\n```"))
+								tableShown = true
 							}
 							// Kode-garantiene gjelder også her: eksportkort og
 							// widget-blokk skal aldri forsvinne fordi svaret tok
@@ -799,7 +805,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 						// Omforsøket holdt heller ikke: vis kilden i stedet for
 						// utrygg prosa — tabellen for data, kildehenvisning ellers.
 						if lastDBResult != "" {
-							emit(contentSSE("Her er de faktiske dataene:\n```table\n" + lastDBResult + "\n```"))
+							if !tableShown {
+								emit(contentSSE("Her er de faktiske dataene:\n```table\n" + lastDBResult + "\n```"))
+								tableShown = true
+							}
+							narr.deliverInsight(emit, pending, "", answerLimit, tableShown)
 						} else {
 							emit(contentSSE("Jeg fikk ikke formulert dette kildefast — se kildene over for detaljene."))
 						}
@@ -837,6 +847,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					continue
 				}
 				emit(contentSSE(final))
+				narr.deliverInsight(emit, pending, final, answerLimit, tableShown)
 			}
 			// Eksportflyt: eksportkortet leveres ALLTID i kode — brukeren ba
 			// om eksport, da skal valget stå der uten oppfølgingsspørsmål.
@@ -958,6 +969,23 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					if att.ok() {
 						lastDBResult = att.text
 						lastDBSQL, lastDBConn = args.SQL, args.ConnectionID
+						lastCols, lastRows = att.cols, att.rows
+						// Observer resultatet mens radene er ferske. Siste
+						// vellykkede spørring vinner — det er den svaret
+						// bygger på. (insight.go)
+						// pending SKAL alltid speile siste vellykkede spørring,
+						// også når den ikke ga noen observasjon. Uten
+						// nullstillingen overlevde en observasjon fra en
+						// utforskende spørring tidligere i turen og ble limt på
+						// et svar om noe helt annet («Dataene stopper 1. juni»
+						// på «margindata finnes ikke»).
+						o, ok := observe(att.cols, att.rows, args.SQL,
+							lastUserText(full), connector.MaxRows, time.Now())
+						if ok {
+							pending = o
+						} else {
+							pending = insight{}
+						}
 					}
 				}
 				stopWait()
@@ -973,19 +1001,14 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					}})
 					emit("data: " + string(qm))
 				}
-				// Husk siste resultat (til show_table) og rendr tabellen
-				// deterministisk med en gang når brukeren ba om tabell.
-				var qr struct {
-					Columns []string   `json:"columns"`
-					Rows    [][]string `json:"rows"`
-				}
-				if json.Unmarshal([]byte(result), &qr) == nil && len(qr.Columns) > 0 {
-					lastCols, lastRows = qr.Columns, qr.Rows
-					if wantsTable && !tableShown && len(qr.Rows) > 0 {
-						emit(contentSSE(tableBlock(qr.Columns, qr.Rows)))
-						tableShown = true
-						result += "\n\n(Tabellen er allerede vist til brukeren — IKKE gjengi radene i tekst, legg til maks én kort setning.)"
-					}
+				// Rendr tabellen deterministisk med en gang når brukeren ba om
+				// den. Radene tas fra att, ikke fra en ny JSON-parsing av
+				// result — det siste kjørte også på ikke-JSON svar som
+				// «du har allerede kjørt denne spørringen».
+				if wantsTable && !tableShown && len(lastRows) > 0 {
+					emit(contentSSE(tableBlock(lastCols, lastRows)))
+					tableShown = true
+					result += "\n\n(Tabellen er allerede vist til brukeren — IKKE gjengi radene i tekst, legg til maks én kort setning.)"
 				}
 			case "show_table":
 				narr.before(c.Name, c.Args.String())
@@ -1548,13 +1571,17 @@ func flowNeedsDB(flowKey string) bool {
 
 // flowAcks: momentane kvitteringer per verktøyflyt — sendes av koden før
 // modellen starter, så selv trege spørringer FØLES umiddelbare.
-var flowAcks = map[string]string{
-	"data_question":  "Sjekker tallene nå.",
-	"show_table":     "Henter radene.",
-	"web_fact":       "Søker det opp.",
-	"m365_files":     "Ser i filene dine.",
-	"create_routine": "Setter opp rutinen.",
-	"edit_routine":   "Justerer rutinen.",
+// flowAcks er kvitteringen som går på t=0, før modellen har rukket å velge
+// verktøy. Den skal FORBEREDE, ikke gjenta det neste steg sier: «Sjekker
+// tallene nå.» rett før «Spør Kunder om orders.» var to setninger om samme
+// handling. Går gjennom narratoren, så dedupen og turtelleren eier den.
+var flowAcks = map[string]struct{ text, kind string }{
+	"data_question":  {"Ett øyeblikk, jeg går til tallene.", kindDB},
+	"show_table":     {"Ett øyeblikk.", kindTable},
+	"web_fact":       {"Ett øyeblikk, jeg slår opp.", kindWeb},
+	"m365_files":     {"Ett øyeblikk, jeg ser i filene dine.", kindFile},
+	"create_routine": {"Ett øyeblikk, jeg rigger dette.", kindAgent},
+	"edit_routine":   {"Ett øyeblikk, jeg justerer.", kindAgent},
 }
 
 // emitAfter sender en steg-status hvis operasjonen fortsatt pågår etter d.
