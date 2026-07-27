@@ -1,4 +1,44 @@
-# Overlevering: assistentkvalitet (2026-07-27)
+# Overlevering: assistentkvalitet (2026-07-27, oppdatert kveld)
+
+## Status etter kveldsrunden
+
+v_Sales-saken er LØST — rotårsaken var tre hull, alle tettet og deployet:
+ExpandViews ødela SQL med alias («FROM v_Sales_query s» → syntaksfeil),
+subjektintegritet manglet (alle Moestue-spørringer timet ut, andre lyktes →
+dbSucceeded global sann → modellen diktet «0 kroner»; nå svarer koden ærlig om
+akkurat subjektet), og fabrikkerte ENTITETSNAVN passerte kildekontrollen som
+bare målte tall («**Eplemost 1L**» fantes ikke; nå går egennavn og fremhevede
+fraser samme løype som tall). Panelgulv (panelScore 0.70, engine.go) hindrer at
+deterministiske skjemaer kaprer svaret på vage fraser («er ute etter startup
+navn» åpnet databasetilkoblingen). Operational-tilkoblingen er slettet fra
+appen på Jacobs ordre (basen urørt); slettingen avdekket og fikset
+forelder-før-barn-FK-bugen + at connection_views aldri ble ryddet.
+
+TESTMILJØET SPEILER NÅ PROD: Mjødhallen AS (fiktiv norrøn drikkevaredistributør,
+scripts/mjodhallen_seed.py, deterministisk seed 42) ligger i egen Neon-database
+`mjodhallen` og er registrert både i prod («Mjødhallen ERP», eneste tilkobling)
+og lokalt. Utsnittet v_salg_query (årsfilter ≥2024) ERSTATTER basen v_salg —
+prod-mønsteret. Alle målte felleklasser er kodet inn i dataene (fuzzy-par,
+&-navn, konstant kolonne, NULL-tung, hval 45 %, sesong, join-fanout, død
+tabell). Suite: scratchpad/mjod.json (10 scenarier). Runde 2: 8/10 gode.
+
+## NESTE STORE KLASSE: flerkilde-integritet
+
+Med to tilkoblinger lokalt (Kunder + Mjødhallen) blander modellen selskapene:
+«din største kunde» ble Kunder-basens Brüdog i stedet for Mjødhallens Valhall,
+og «salg i 2022» hentet 403 mill. fra feil kilde (Mjødhallen-utsnittet dekker
+kun ≥2024). Prod har i dag ÉN tilkobling, så ingen akutt eksponering — men
+kunder får flere kilder. Designspørsmål: hva betyr «vi» når flere kilder har
+overlappende skjema; bør spørsmål uten klar kilde kreve at modellen navngir
+kilden i svaret; skal resolveConn nekte å svare på tvers. Kjør suiten med
+BEGGE tilkoblinger aktive for å reprodusere (mjod.json scenario 7 og 10).
+
+Mindre funn som gjenstår: modellen re-spør ikke med korrigert navn etter
+fuzzy-hintet når begge fuzzy-spørringene var dbEmpty (scenario 9 ender i ærlig
+tabell, ikke i nytt forsøk); død-tabell-recency (kampanjer fra 2024 presentert
+som «siste» — insStale krever datokolonne i resultatet); «Her er de faktiske
+dataene:»-fallbacken viser tabell uten ledsagende forklaring.
+
 
 Alt under er merget til `main` og deployet til prod (app.nordawind.com), med
 mindre annet står. Branch `assistant-quality` peker på samme commit som `main`.
