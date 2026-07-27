@@ -69,10 +69,56 @@ func TestNarratorOffOutsidePlainChat(t *testing.T) {
 
 func TestNarratorNoRepeats(t *testing.T) {
 	n, steps := capture(true)
-	n.before("show_table", `{}`)
-	n.before("show_table", `{}`)
+	n.say("Setter opp tabellen.", kindTable)
+	n.say("Setter opp tabellen.", kindTable)
 	if len(*steps) != 1 {
-		t.Fatalf("samme steg to ganger skal svelges: %v", *steps)
+		t.Fatalf("identisk tekst to ganger skal svelges: %v", *steps)
+	}
+}
+
+// Samme verktøy to ganger på rad skal ikke lese likt — variantene roterer.
+func TestNarratorVariesPhrasing(t *testing.T) {
+	n, steps := capture(true)
+	n.before("show_table", `{}`)
+	n.before("show_table", `{}`)
+	if len(*steps) != 2 {
+		t.Fatalf("ventet to ulike steg, fikk %v", *steps)
+	}
+	if (*steps)[0] == (*steps)[1] {
+		t.Errorf("gjentatt kall ga samme ordlyd: %q", (*steps)[0])
+	}
+}
+
+// Hver variant i registeret skal være en hel setning — ingen halve strenger
+// eller manglende punktum som avslører at en variant er slurvet inn.
+func TestNarrationVariantsAreWellFormed(t *testing.T) {
+	check := func(tool, phase, s string) {
+		if strings.TrimSpace(s) == "" {
+			t.Errorf("%s/%s: tom tekst", tool, phase)
+			return
+		}
+		if !strings.HasSuffix(s, ".") && !strings.HasSuffix(s, "?") {
+			t.Errorf("%s/%s: mangler punktum: %q", tool, phase, s)
+		}
+		if r := []rune(s); r[0] != []rune(strings.ToUpper(string(r[0])))[0] {
+			t.Errorf("%s/%s: starter ikke med stor bokstav: %q", tool, phase, s)
+		}
+	}
+	for tool, step := range narration {
+		for _, slow := range step.slow {
+			check(tool, "slow", slow)
+		}
+		// Roter gjennom nok steg til at alle varianter er innom.
+		for i := 0; i < 12; i++ {
+			n, _ := capture(true)
+			n.turn = i
+			if step.before != nil {
+				check(tool, "before", step.before(n, narrArgs{Query: "test", URL: "https://x.no/a", Name: "fil.xlsx"}))
+			}
+			if step.after != nil {
+				check(tool, "after", step.after(n, narrRes{ok: true, rows: i * 400, hits: i}))
+			}
+		}
 	}
 }
 

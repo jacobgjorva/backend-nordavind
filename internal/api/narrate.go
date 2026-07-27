@@ -49,7 +49,7 @@ type narrStep struct {
 	// for ukjente verdier, så nye typer er trygge å legge til.
 	kind   string
 	before func(n *narrator, a narrArgs) string
-	slow   string // vises hvis kallet varer lenger enn slowAfter
+	slow   []string // vises hvis kallet varer lenger enn slowAfter (roteres)
 	after  func(n *narrator, r narrRes) string
 }
 
@@ -139,7 +139,7 @@ func (n *narrator) slow(tool string) func() {
 		return func() {}
 	}
 	step, ok := narration[tool]
-	if !ok || step.slow == "" {
+	if !ok || len(step.slow) == 0 {
 		return func() {}
 	}
 	done := make(chan struct{})
@@ -147,7 +147,7 @@ func (n *narrator) slow(tool string) func() {
 		select {
 		case <-done:
 		case <-time.After(slowAfter):
-			n.say(step.slow, step.kind)
+			n.say(n.pick(step.slow...), step.kind)
 		}
 	}()
 	return func() { close(done) }
@@ -180,38 +180,72 @@ func (n *narrator) afterHits(tool string, hits int) {
 }
 
 // narration er registeret. Én oppføring per verktøy.
+//
+// Hver formulering har flere varianter: n.pick roterer deterministisk på
+// stegtelleren, så to like kall etter hverandre aldri leser likt. Miksen er
+// bevisst ujevn — noen varianter er helt nøkterne, så de tørre kommentarene
+// treffer når de kommer i stedet for å bli maniert.
 var narration = map[string]narrStep{
 	"query_database": {
 		kind: kindDB,
 		before: func(n *narrator, a narrArgs) string {
-			base := "Spør databasen"
+			who := "databasen"
 			if name := n.connName(a.ConnectionID); name != "" {
-				base = "Spør " + name
+				who = name
 			}
-			if what := describeSQL(a.SQL); what != "" {
-				return base + " om " + what + "."
+			what := describeSQL(a.SQL)
+			if what == "" {
+				return n.pick("Spør "+who+".", "Tar en tur innom "+who+".", "Henter fra "+who+".")
 			}
-			return base + "."
+			return n.pick(
+				"Spør "+who+" om "+what+".",
+				"Ber "+who+" om "+what+".",
+				"Henter "+what+" fra "+who+".",
+			)
 		},
-		slow: "Basen tenker fortsatt. Jeg venter.",
+		slow: []string{
+			"Basen tenker fortsatt. Jeg venter.",
+			"Fortsatt stille fra databasen.",
+			"Basen tar seg god tid i dag.",
+			"Ingenting ennå. Databasen er visst opptatt med noe viktigere.",
+		},
 		after: func(n *narrator, r narrRes) string {
 			if !r.ok {
-				return "Basen svarte ikke som forventet. Prøver en annen vei."
+				return n.pick(
+					"Basen svarte ikke som forventet. Prøver en annen vei.",
+					"Det svaret var ikke til å bli klok på. Ny vinkel.",
+				)
 			}
 			switch r.rows {
 			case 0:
-				return "Null rader tilbake. Enten er det tomt der inne, eller så stilte jeg feil spørsmål."
+				return n.pick(
+					"Null rader. Enten er det tomt der inne, eller så stilte jeg feil spørsmål.",
+					"Ingen treff. Databasen står ved sin sannhet: ingenting.",
+					"Tomt. Det var lite hjelpsomt.",
+					"Null rader tilbake. Jeg prøver en annen vei.",
+				)
 			case 1:
-				return "Én rad. Kort og greit."
+				return n.pick("Én rad. Kort og greit.", "Nøyaktig én rad. Konsist.", "Én rad tilbake.")
 			}
-			return fmt.Sprintf("%s rader tilbake. Ser på tallene.", nf(r.rows))
+			if r.rows >= 1000 {
+				return n.pick(
+					fmt.Sprintf("%s rader. Litt av en bunke.", nf(r.rows)),
+					fmt.Sprintf("%s rader tilbake. Her var det materiale.", nf(r.rows)),
+					fmt.Sprintf("%s rader. Går gjennom dem.", nf(r.rows)),
+				)
+			}
+			return n.pick(
+				fmt.Sprintf("%s rader tilbake. Ser på tallene.", nf(r.rows)),
+				fmt.Sprintf("%s rader. Leser dem nå.", nf(r.rows)),
+				fmt.Sprintf("Fikk %s rader. Går gjennom dem.", nf(r.rows)),
+			)
 		},
 	},
 
 	"show_table": {
 		kind: kindTable,
 		before: func(n *narrator, a narrArgs) string {
-			return "Setter opp tabellen."
+			return n.pick("Setter opp tabellen.", "Stiller opp radene.", "Rigger tabellen.")
 		},
 	},
 
@@ -219,16 +253,36 @@ var narration = map[string]narrStep{
 		kind: kindWeb,
 		before: func(n *narrator, a narrArgs) string {
 			if q := strings.TrimSpace(a.Query); q != "" {
-				return n.pick("Søker på "+quote(q)+".", "Leter etter "+quote(q)+".")
+				return n.pick(
+					"Søker på "+quote(q)+".",
+					"Leter etter "+quote(q)+".",
+					"Ser hva nettet vet om "+quote(q)+".",
+					"Googler "+quote(q)+", i mangel av et bedre verb.",
+				)
 			}
-			return "Søker."
+			return n.pick("Søker.", "Leter på nettet.")
 		},
-		slow: "Nettet er tregt akkurat nå. Leter videre.",
+		slow: []string{
+			"Nettet er tregt akkurat nå. Leter videre.",
+			"Fortsatt på jakt.",
+			"Dette tar lengre tid enn det burde. Står på.",
+		},
 		after: func(n *narrator, r narrRes) string {
 			if r.hits == 0 {
-				return "Ingenting brukbart der. Prøver en annen vinkel."
+				return n.pick(
+					"Ingenting brukbart der. Prøver en annen vinkel.",
+					"Blankt. Internett skuffer i dag.",
+					"Null treff. Formulerer meg om.",
+				)
 			}
-			return fmt.Sprintf("%s kilder å gå gjennom.", nf(r.hits))
+			if r.hits == 1 {
+				return n.pick("Én kilde. Det får holde.", "Bare én treffer. Leser den.")
+			}
+			return n.pick(
+				fmt.Sprintf("%s kilder å gå gjennom.", nf(r.hits)),
+				fmt.Sprintf("%s treff. Siler ut det som duger.", nf(r.hits)),
+				fmt.Sprintf("Fant %s kilder. Leser.", nf(r.hits)),
+			)
 		},
 	},
 
@@ -236,16 +290,28 @@ var narration = map[string]narrStep{
 		kind: kindLink,
 		before: func(n *narrator, a narrArgs) string {
 			if h := host(a.URL); h != "" {
-				return "Åpner " + h + "."
+				return n.pick("Åpner "+h+".", "Tar en titt på "+h+".", "Leser "+h+".")
 			}
-			return "Åpner siden."
+			return n.pick("Åpner siden.", "Leser siden.")
 		},
-		slow: "Siden bruker lang tid på å laste.",
+		slow: []string{
+			"Siden bruker lang tid på å laste.",
+			"Fortsatt lasting. Tålmodighet.",
+			"Denne siden har tydeligvis mye på hjertet.",
+		},
 		after: func(n *narrator, r narrRes) string {
 			if len([]rune(r.raw)) < 200 {
-				return "Tynn side. Lite å hente der."
+				return n.pick(
+					"Tynn side. Lite å hente der.",
+					"Mye layout, lite innhold.",
+					"Nesten ingenting der. Videre.",
+				)
 			}
-			return "Lest. Plukker ut det som betyr noe."
+			return n.pick(
+				"Lest. Plukker ut det som betyr noe.",
+				"Gjennomlest. Siler ut poenget.",
+				"Lest ferdig. Tar med meg det brukbare.",
+			)
 		},
 	},
 
@@ -253,24 +319,41 @@ var narration = map[string]narrStep{
 		kind: kindMail,
 		before: func(n *narrator, a narrArgs) string {
 			if q := strings.TrimSpace(a.Query); q != "" {
-				return "Leter i innboksen etter " + quote(q) + "."
+				return n.pick(
+					"Leter i innboksen etter "+quote(q)+".",
+					"Graver i e-posten etter "+quote(q)+".",
+					"Søker opp "+quote(q)+" i innboksen.",
+				)
 			}
-			return "Leter i innboksen."
+			return n.pick("Leter i innboksen.", "Ser gjennom e-posten.")
 		},
-		slow: "Innboksen tar sin tid.",
+		slow: []string{
+			"Innboksen tar sin tid.",
+			"Fortsatt på leting i e-posten.",
+			"Det er tydeligvis mye der inne.",
+		},
 		after: func(n *narrator, r narrRes) string {
 			if r.hits == 0 {
-				return "Ingen e-post matcher. Den finnes kanskje under et annet navn."
+				return n.pick(
+					"Ingen e-post matcher. Den finnes kanskje under et annet navn.",
+					"Ingenting i innboksen. Enten er den slettet, eller så het den noe helt annet.",
+					"Null treff i e-posten.",
+				)
 			}
-			return fmt.Sprintf("%s e-poster å se på.", nf(r.hits))
+			return n.pick(
+				fmt.Sprintf("%s e-poster å se på.", nf(r.hits)),
+				fmt.Sprintf("%s treff i innboksen.", nf(r.hits)),
+			)
 		},
 	},
 
 	"mail_read": {
-		kind:   kindMail,
-		before: func(n *narrator, a narrArgs) string { return "Leser e-posten." },
+		kind: kindMail,
+		before: func(n *narrator, a narrArgs) string {
+			return n.pick("Leser e-posten.", "Åpner meldingen.", "Ser hva den sier.")
+		},
 		after: func(n *narrator, r narrRes) string {
-			return "Lest. Ser hva som står der."
+			return n.pick("Lest. Ser hva som står der.", "Gjennomlest.", "Lest ferdig.")
 		},
 	},
 
@@ -278,16 +361,31 @@ var narration = map[string]narrStep{
 		kind: kindFile,
 		before: func(n *narrator, a narrArgs) string {
 			if q := strings.TrimSpace(a.Query); q != "" {
-				return "Leter i OneDrive etter " + quote(q) + "."
+				return n.pick(
+					"Leter i OneDrive etter "+quote(q)+".",
+					"Søker opp "+quote(q)+" i filene dine.",
+					"Ser om "+quote(q)+" ligger i OneDrive.",
+				)
 			}
-			return "Leter i OneDrive."
+			return n.pick("Leter i OneDrive.", "Ser gjennom filene dine.")
 		},
-		slow: "OneDrive svarer sakte.",
+		slow: []string{
+			"OneDrive svarer sakte.",
+			"Fortsatt på leting i filene.",
+			"Microsoft tar seg god tid.",
+		},
 		after: func(n *narrator, r narrRes) string {
 			if r.hits == 0 {
-				return "Ingen filer matcher søket."
+				return n.pick(
+					"Ingen filer matcher søket.",
+					"Ingenting i OneDrive. Den ligger nok et annet sted.",
+					"Null treff blant filene.",
+				)
 			}
-			return fmt.Sprintf("%s filer å velge mellom.", nf(r.hits))
+			return n.pick(
+				fmt.Sprintf("%s filer å velge mellom.", nf(r.hits)),
+				fmt.Sprintf("%s treff i OneDrive.", nf(r.hits)),
+			)
 		},
 	},
 
@@ -295,40 +393,72 @@ var narration = map[string]narrStep{
 		kind: kindFile,
 		before: func(n *narrator, a narrArgs) string {
 			if name := strings.TrimSpace(a.Name); name != "" {
-				return "Åpner " + name + "."
+				return n.pick("Åpner "+name+".", "Leser "+name+".", "Tar en titt i "+name+".")
 			}
-			return "Åpner filen."
+			return n.pick("Åpner filen.", "Leser filen.")
 		},
-		slow: "Stor fil. Leser fortsatt.",
+		slow: []string{
+			"Stor fil. Leser fortsatt.",
+			"Denne tar litt tid å komme gjennom.",
+			"Fortsatt i filen. Den var lengre enn ventet.",
+		},
 		after: func(n *narrator, r narrRes) string {
 			if len([]rune(r.raw)) < 200 {
-				return "Filen var nesten tom."
+				return n.pick(
+					"Filen var nesten tom.",
+					"Lite innhold der. Videre.",
+					"Tom fil, i praksis.",
+				)
 			}
-			return "Lest gjennom. Henter ut det relevante."
+			return n.pick(
+				"Lest gjennom. Henter ut det relevante.",
+				"Gjennomlest. Plukker ut poengene.",
+				"Ferdig lest. Tar med det som teller.",
+			)
 		},
 	},
 
 	"connect_database": {
-		kind:   kindDB,
-		before: func(n *narrator, a narrArgs) string { return "Tester tilkoblingen." },
-		slow:   "Databasen svarer ikke ennå. Gir den noen sekunder til.",
+		kind: kindDB,
+		before: func(n *narrator, a narrArgs) string {
+			return n.pick("Tester tilkoblingen.", "Ser om jeg kommer inn.", "Prøver å koble på.")
+		},
+		slow: []string{
+			"Databasen svarer ikke ennå. Gir den noen sekunder til.",
+			"Fortsatt ingen kontakt. Venter litt til.",
+			"Stille i andre enden.",
+		},
 		after: func(n *narrator, r narrRes) string {
-			return "Ser hva som ligger der inne."
+			return n.pick("Ser hva som ligger der inne.", "Inne. Kartlegger tabellene.", "Kontakt. Ser over skjemaet.")
 		},
 	},
 
 	"list_agents": {
-		kind:   kindAgent,
-		before: func(n *narrator, a narrArgs) string { return "Ser over rutinene dine." },
+		kind: kindAgent,
+		before: func(n *narrator, a narrArgs) string {
+			return n.pick("Ser over rutinene dine.", "Henter rutinelista.", "Sjekker hvilke rutiner du har.")
+		},
 	},
-	"create_agent":  {kind: kindAgent, before: func(n *narrator, a narrArgs) string { return "Setter opp rutinen." }},
-	"update_agent":  {kind: kindAgent, before: func(n *narrator, a narrArgs) string { return "Justerer rutinen." }},
-	"delete_agent":  {kind: kindAgent, before: func(n *narrator, a narrArgs) string { return "Fjerner rutinen." }},
-	"setup_routine": {kind: kindAgent, before: func(n *narrator, a narrArgs) string { return "Setter opp rutinen." }},
-	"save_m365_app": {kind: kindFile, before: func(n *narrator, a narrArgs) string { return "Lagrer app-registreringen." }},
+	"create_agent": {kind: kindAgent, before: func(n *narrator, a narrArgs) string {
+		return n.pick("Setter opp rutinen.", "Oppretter rutinen.")
+	}},
+	"update_agent": {kind: kindAgent, before: func(n *narrator, a narrArgs) string {
+		return n.pick("Justerer rutinen.", "Endrer rutinen.")
+	}},
+	"delete_agent": {kind: kindAgent, before: func(n *narrator, a narrArgs) string {
+		return n.pick("Fjerner rutinen.", "Sletter rutinen.")
+	}},
+	"setup_routine": {kind: kindAgent, before: func(n *narrator, a narrArgs) string {
+		return n.pick("Setter opp rutinen.", "Rigger rutinen.")
+	}},
+	"save_m365_app": {kind: kindFile, before: func(n *narrator, a narrArgs) string {
+		return n.pick("Lagrer app-registreringen.", "Tar vare på app-registreringen.")
+	}},
 	"contact_person": {
-		kind:   kindMail,
-		before: func(n *narrator, a narrArgs) string { return "Setter opp e-posten." },
+		kind: kindMail,
+		before: func(n *narrator, a narrArgs) string {
+			return n.pick("Setter opp e-posten.", "Skriver utkastet.", "Rigger e-posten.")
+		},
 	},
 }
 
