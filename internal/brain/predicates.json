@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "predicates": [
+    { "key": "er en",            "group": "struktur", "object": "entity", "hint": "type/kategori" },
+    { "key": "er del av",        "group": "struktur", "object": "entity" },
+    { "key": "eier",             "group": "struktur", "object": "entity" },
+    { "key": "jobber i",         "group": "struktur", "object": "entity", "hint": "avdeling/selskap" },
+    { "key": "har rolle",        "group": "struktur", "object": "text",   "hint": "stillingstittel" },
+
+    { "key": "har sjef",         "group": "relasjon", "object": "entity", "inverse": "er sjef for" },
+    { "key": "er sjef for",      "group": "relasjon", "object": "entity", "inverse": "har sjef" },
+    { "key": "rapporterer til",  "group": "relasjon", "object": "entity" },
+    { "key": "samarbeider med",  "group": "relasjon", "object": "entity", "symmetric": true },
+    { "key": "er kunde av",      "group": "relasjon", "object": "entity", "inverse": "har kunde" },
+    { "key": "har kunde",        "group": "relasjon", "object": "entity", "inverse": "er kunde av" },
+    { "key": "er leverandør til","group": "relasjon", "object": "entity" },
+    { "key": "er ansvarlig for", "group": "relasjon", "object": "entity" },
+    { "key": "er kontakt for",   "group": "relasjon", "object": "entity" },
+
+    { "key": "møter",            "group": "handling", "object": "entity", "hint": "kvalifiser med frekvens/dag" },
+    { "key": "leverer",          "group": "handling", "object": "entity" },
+    { "key": "godkjenner",       "group": "handling", "object": "entity" },
+    { "key": "bruker",           "group": "handling", "object": "entity", "hint": "system/verktøy" },
+    { "key": "erstatter",        "group": "handling", "object": "entity" },
+
+    { "key": "har frist",        "group": "egenskap", "object": "text",   "hint": "«48 timer før levering»" },
+    { "key": "har terskel",      "group": "egenskap", "object": "text",   "hint": "«over 50 000 kr»" },
+    { "key": "koster",           "group": "egenskap", "object": "text" },
+    { "key": "holdes på",        "group": "egenskap", "object": "text",   "hint": "ukedag/tidspunkt" },
+    { "key": "gjelder for",      "group": "egenskap", "object": "entity" }
+  ],
+  "kinds": ["person", "rolle", "kunde", "leverandør", "produkt", "system", "sted", "avdeling", "prosedyre", "dokument"]
+}

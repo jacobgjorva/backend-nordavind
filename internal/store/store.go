@@ -74,6 +74,9 @@ func Open(path string) (*Store, error) {
 	if err := s.migrateAgents(); err != nil {
 		return nil, err
 	}
+	if err := s.migrateBrain(); err != nil {
+		return nil, err
+	}
 	if err := s.migrateDesignBoard(); err != nil {
 		return nil, err
 	}
