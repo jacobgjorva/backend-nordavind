@@ -182,7 +182,6 @@ type sentenceGate struct {
 	sources   []string
 	buf       string          // ennå ikke sluppet
 	shown     strings.Builder // alt brukeren har sett
-	prev      rune            // siste ikke-blanke tegn som er sluppet (setningskontekst)
 	held      bool            // udekket påstand funnet — alt videre holdes igjen
 	offenders []string
 }
@@ -197,22 +196,18 @@ func (g *sentenceGate) feed(chunk string) string {
 	if g.held {
 		return ""
 	}
+	// Vis KUN komplette, verifiserte setninger. En kandidat (dato/tall/navn)
+	// kan dukke opp hvor som helst i en setning — først når setningen er hel
+	// vet vi om den er dikting. Å streame ord-for-ord innenfor en setning
+	// betød at «…versjonen min er fra» ble vist før datoen avslørte den, og
+	// måtte trekkes synlig tilbake. Heller vente på hele setningen: enten
+	// vises den korrekt, eller den holdes usett. Frontend animerer ordene, så
+	// opplevelsen forblir jevn setning for setning.
 	var out strings.Builder
 	for {
-		ci := g.candidateIdx()
-		if ci < 0 {
-			// Ingen kandidat: slipp alt unntatt en hale som kan bli «http».
-			keep := partialSuffix(strings.ToLower(g.buf), "http")
-			g.release(g.buf[:len(g.buf)-keep], &out)
-			g.buf = g.buf[len(g.buf)-keep:]
-			return out.String()
-		}
-		g.release(g.buf[:ci], &out)
-		g.buf = g.buf[ci:]
 		end := sentenceEnd(g.buf)
 		if end < 0 {
-			// Setningen med kandidaten er ikke ferdig — vent på mer.
-			return out.String()
+			return out.String() // setningen er ikke ferdig — vent
 		}
 		sent := g.buf[:end]
 		if off := offendersAgainst(sent, g.sources, 1); len(off) > 0 {
@@ -254,40 +249,10 @@ func (g *sentenceGate) release(s string, out *strings.Builder) {
 	}
 	out.WriteString(s)
 	g.shown.WriteString(s)
-	for _, r := range s {
-		if !isSpaceRune(r) {
-			g.prev = r
-		}
-	}
 }
 
 func isSpaceRune(r rune) bool {
 	return r == ' ' || r == '\t' || r == '\n' || r == '\r'
-}
-
-// candidateIdx finner første posisjon i bufferet som KAN starte en
-// faktapåstand: et siffer, en URL, eller stor bokstav midt i en setning.
-func (g *sentenceGate) candidateIdx() int {
-	prev := g.prev
-	for i, r := range g.buf {
-		switch {
-		case r >= '0' && r <= '9':
-			return i
-		case r == 'h' || r == 'H':
-			if strings.HasPrefix(strings.ToLower(g.buf[i:]), "http") {
-				return i
-			}
-		case (r >= 'A' && r <= 'Z') || r == 'Æ' || r == 'Ø' || r == 'Å':
-			// Stor bokstav som ikke åpner en setning = mulig egennavn.
-			if prev != 0 && !strings.ContainsRune(".!?:…\n", prev) {
-				return i
-			}
-		}
-		if !isSpaceRune(r) {
-			prev = r
-		}
-	}
-	return -1
 }
 
 // sentenceEnd gir byteposisjonen rett etter setningsslutt, eller -1 om

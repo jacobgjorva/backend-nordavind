@@ -61,10 +61,16 @@ func TestGateReleasesTraceableFacts(t *testing.T) {
 	}
 }
 
-func TestGateStreamsProseWithoutFactsImmediately(t *testing.T) {
+// Ny kontrakt (buffer per setning): en KOMPLETT prosa-setning uten påstand
+// slippes straks den er ferdig. En ufullstendig setning holdes til punktum —
+// bevisst, så en påstand som dukker opp sent aldri vises halvveis.
+func TestGateReleasesCompleteProse(t *testing.T) {
 	g := newSentenceGate(boatBasis())
-	if rel := g.feed("Det høres ut som en fin plan, og jeg er "); rel == "" {
-		t.Fatal("ren prosa uten kandidater skal slippes løpende")
+	if rel := g.feed("Det høres ut som en fin plan, og jeg er "); rel != "" {
+		t.Fatalf("ufullstendig setning ble sluppet før punktum: %q", rel)
+	}
+	if rel := g.feed("helt enig. "); rel == "" {
+		t.Fatal("komplett prosa-setning ble ikke sluppet")
 	}
 }
 
@@ -148,5 +154,40 @@ func TestStrictOffendersRejectSubstringOfLongIDs(t *testing.T) {
 	// forskjellen (formateringsvarianter i førstesvar, aldri i omforsøk).
 	if off := offendersAgainst("Ordren er 90102034567890.", src, 3); len(off) != 0 {
 		t.Fatalf("eksakt kildetall skal passere, fikk %v", off)
+	}
+}
+
+// «Heller vente»: en setning som ender i en udekket påstand skal ALDRI vises
+// halvveis. Før streamet gaten «…versjonen min er fra» og trakk det tilbake
+// da datoen avslørte diktingen.
+func TestGateHoldsWholeSentenceWithClaim(t *testing.T) {
+	g := newSentenceGate([]string{"hvor gammel er du?"}) // datoen står ikke her
+	var shown strings.Builder
+	// Streamet ord for ord, som en ekte modell.
+	for _, chunk := range []string{"Jeg ", "vet ", "ikke, ", "men ", "versjonen ",
+		"min ", "er ", "fra ", "2024", "."} {
+		shown.WriteString(g.feed(chunk))
+	}
+	shown.WriteString(g.finish())
+	// Første setning («Jeg vet ikke, men…») har ingen påstand og kan vises.
+	// Men den udekkede andre-delen med «2024» skal ikke ha lekket.
+	if strings.Contains(shown.String(), "versjonen min er fra") {
+		t.Fatalf("setningsstart som leder inn i dikting ble vist: %q", shown.String())
+	}
+	if !g.held {
+		t.Fatal("gaten fanget ikke den udekkede datoen")
+	}
+}
+
+// En KOMPLETT ren setning slippes straks den er ferdig; en ufullstendig
+// holdes til punktum (buffer per setning — «heller vente»).
+func TestGateReleasesCompletePlainSentence(t *testing.T) {
+	g := newSentenceGate(nil)
+	if out := g.feed("Dette er et helt vanlig svar uten tall"); out != "" {
+		t.Fatalf("ufullstendig setning ble sluppet: %q", out)
+	}
+	out := g.feed(". Og litt til")
+	if !strings.Contains(out, "vanlig svar uten tall.") {
+		t.Fatalf("komplett setning ble ikke sluppet: %q", out)
 	}
 }
