@@ -17,7 +17,7 @@ type Chat struct {
 	AgentEnabled bool      `json:"agent_enabled,omitempty"`
 	Kind         string    `json:"kind,omitempty"`        // "chat" | "dashboard" | "design"
 	DesignSlug   string    `json:"design_slug,omitempty"` // dokumentet en design-chat redigerer
-	FolderID     string    `json:"folder_id,omitempty"` // mappe chatten ligger i (tom = ingen)
+	FolderID     string    `json:"folder_id,omitempty"`   // mappe chatten ligger i (tom = ingen)
 }
 
 // Folder er en brukeropprettet mappe for å organisere chatter i sidebaren.

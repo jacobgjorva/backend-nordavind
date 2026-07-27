@@ -178,16 +178,11 @@ var deterministicPanels = map[string]string{
 	"manage_connections": "tilkoblinger",
 }
 
-// flowModel mapper flyt-radens modellnivå til router-konstantene. "light"
-// er bak LIGHT_TIER-bryteren: av (default) ruter de lette flytene til mid
-// som før — piloten skal kunne skrus av i prod uten deploy av ny kode.
+// flowModel mapper flyt-radens modellnivå til router-konstantene. Default er
+// mistral-medium («mid») for alt: lett-tieret (small) ble avviklet fordi
+// modellen degenererte sjeldent og ukontrollerbart — kvalitet er pri 1.
 func (s *Server) flowModel(level string) string {
 	switch level {
-	case "light":
-		if s.cfg.LightTier {
-			return router.LightModel
-		}
-		return router.MidModel
 	case "heavy":
 		return router.HeavyModel
 	case "top":
