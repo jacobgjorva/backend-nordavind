@@ -443,3 +443,4 @@ CREATE INDEX IF NOT EXISTS idx_procedures_tenant ON procedures (tenant_id);
 -- Tabellstørrelse: modellen må vite hva som er stort, ellers skriver den
 -- fritekstsøk over millioner av rader og spørringen timer ut.
 ALTER TABLE connection_tables ADD COLUMN IF NOT EXISTS est_rows bigint NOT NULL DEFAULT 0;
+ALTER TABLE connections ADD COLUMN IF NOT EXISTS is_primary boolean NOT NULL DEFAULT false;

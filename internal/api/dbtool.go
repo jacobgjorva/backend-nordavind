@@ -13,9 +13,12 @@ import (
 
 // dbToolCtx er databasene brukeren har tilgang til i denne forespørselen.
 type dbToolCtx struct {
-	conns  map[string]dbConn // connection-id -> tilkobling
-	tool   map[string]any
-	schema string // menneskelesbart skjema (til dashboard-SQL)
+	conns map[string]dbConn // connection-id -> tilkobling
+	tool  map[string]any
+	// primaryID: bedriftens egen driftsdata («vi/oss»). Med flere kilder er
+	// dette den spørringer uten klar adressat rutes til.
+	primaryID string
+	schema    string // menneskelesbart skjema (til dashboard-SQL)
 }
 
 type dbConn struct {
@@ -163,8 +166,19 @@ func (s *Server) buildDBToolFocused(tenantID, userID, onlyConnID, focus string) 
 	}
 
 	t := &dbToolCtx{conns: map[string]dbConn{}}
+	t.primaryID = conns[0].ID
+	multi := len(conns) > 1
 	var schema strings.Builder
 	for _, c := range conns {
+		// Med flere kilder MÅ modellen vite hvilken som er bedriftens egen:
+		// «vår største kunde» vekslet mellom selskaper da valget var fritt.
+		if multi {
+			if c.ID == t.primaryID {
+				fmt.Fprintf(&schema, "\n== PRIMÆRKILDE %q — bedriftens egne tall; bruk denne når brukeren mener sitt eget selskap (vi/oss/vår) ==\n", c.Name)
+			} else {
+				fmt.Fprintf(&schema, "\n== TILLEGGSKILDE %q — bruk KUN når spørsmålet handler om denne kildens data, og si da i svaret hvilken kilde du brukte. Spørsmål om vi/oss/vårt selskap besvares ALDRI herfra ==\n", c.Name)
+			}
+		}
 		// Kolonnene per tabell for denne tilkoblingen — grunnlaget for presise
 		// feilmeldinger når modellen bommer på et kolonnenavn.
 		colIndex := map[string][]string{}
@@ -353,6 +367,14 @@ func (t *dbToolCtx) resolveConn(connID, query string) (dbConn, string, bool, str
 		return dc, connID, true, ""
 	}
 
+	// 1b) Ingen id og ingen gjenkjennelige tabeller: primærkilden, aldri
+	// tilfeldig map-rekkefølge.
+	if len(refs) == 0 {
+		if dc, ok := t.conns[t.primaryID]; ok {
+			return dc, t.primaryID, true, ""
+		}
+	}
+
 	// 2) Auto-ruting: nøyaktig én kobling som har alle tabellene.
 	if len(refs) > 0 {
 		var match []string
@@ -365,6 +387,14 @@ func (t *dbToolCtx) resolveConn(connID, query string) (dbConn, string, bool, str
 			return t.conns[match[0]], match[0], true, ""
 		}
 		if len(match) > 1 {
+			// Dekker primærkilden alle tabellene, vinner den — det er
+			// bedriftens egne tall. Feilmeldingen under er reservert for
+			// ekte tvetydighet mellom tilleggskilder.
+			for _, id := range match {
+				if id == t.primaryID {
+					return t.conns[id], id, true, ""
+				}
+			}
 			return dbConn{}, "", false, fmt.Sprintf(
 				"Tabellene finnes i flere databaser (%s). Oppgi riktig connection_id.\n%s",
 				strings.Join(match, ", "), t.connectionList())

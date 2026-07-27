@@ -733,6 +733,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					basis := groundingBasis(full, toolResults)
 					if ok, problems := s.judgeClaims(ctx, lastUserText(full), trimmed, gate.offenders, basis); ok {
 						emit(contentSSE(gate.heldText()))
+						narr.sourceNote(emit, trimmed, usedSources(attempts), dbCtx != nil && len(dbCtx.conns) > 1)
 					} else {
 						s.log.Warn("faktadommer: dikting stanset", "problemer", strings.Join(problems, "; "))
 						// Midt i en setning: en modell-fortsettelse leser dårlig
@@ -744,6 +745,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 							emit(contentSSE(honestCut(shown)))
 						} else if cont := s.regroundContinuation(ctx, full, trimmed, shown, gate.offenders, basis, &promptTokens, &completionTokens); cont != "" {
 							emit(contentSSE(cont))
+							narr.sourceNote(emit, cont, usedSources(attempts), dbCtx != nil && len(dbCtx.conns) > 1)
 						} else {
 							emit(contentSSE(honestCut(shown)))
 						}
@@ -789,6 +791,8 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 						if ok, problems := s.judgeClaims(ctx, lastUserText(full), final, off, basis); ok {
 							emit(contentSSE(final))
 							narr.deliverInsight(emit, pending, final, answerLimit, tableShown)
+							narr.sourceNote(emit, final, usedSources(attempts), dbCtx != nil && len(dbCtx.conns) > 1)
+							narr.sourceNote(emit, final, usedSources(attempts), dbCtx != nil && len(dbCtx.conns) > 1)
 							// Tabell-garantien: bare hvis den ikke alt er vist.
 							if lastDBResult != "" && !tableShown {
 								emit(contentSSE("\n\n```table\n" + lastDBResult + "\n```"))
@@ -821,6 +825,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 								tableShown = true
 							}
 							narr.deliverInsight(emit, pending, "", answerLimit, tableShown)
+							narr.sourceNote(emit, "", usedSources(attempts), dbCtx != nil && len(dbCtx.conns) > 1)
 						} else {
 							emit(contentSSE("Jeg fikk ikke formulert dette kildefast — se kildene over for detaljene."))
 						}

@@ -11,6 +11,11 @@ type Connection struct {
 	TenantID string `json:"-"`
 	Name     string `json:"name"`
 	Driver   string `json:"driver"`
+	// IsPrimary: bedriftens egen driftsdata — kilden «vi/oss/vår» peker på.
+	// Med flere kilder er dette et FAKTUM admin setter, aldri noe modellen
+	// gjetter per melding: målt at «vår største kunde» vekslet mellom
+	// selskaper fra tur til tur da valget lå hos modellen.
+	IsPrimary bool `json:"is_primary"`
 }
 
 // TableConfig er admin-kuratert konfigurasjon for én tabell.
@@ -102,6 +107,8 @@ func (s *Store) migrateConnections() error {
 	}
 	// Eldre dev-databaser mangler col_type — legg til om nødvendig.
 	s.db.Exec(`ALTER TABLE connection_columns ADD COLUMN col_type TEXT NOT NULL DEFAULT ''`)
+	// Primærkilde-flagget (se Connection.IsPrimary).
+	s.db.Exec(`ALTER TABLE connections ADD COLUMN is_primary INTEGER NOT NULL DEFAULT 0`)
 	// Radestimat kom etter tabellen. MÅ stå her, i oppstartsmigreringen:
 	// lå den bare i DeleteConnection fikk en base som aldri hadde slettet en
 	// tilkobling aldri kolonnen, ConnectionTables feilet, og hele databasen
@@ -125,8 +132,10 @@ func (s *Store) CreateConnection(tenantID, name, driver string, credsEnc []byte)
 }
 
 func (s *Store) ListConnections(tenantID string) ([]Connection, error) {
+	// Primærkilden først: rekkefølgen ER prioriteringen nedstrøms (skjema-
+	// beskrivelsen, default-ruting). Uten flagg er eldste kilde primær.
 	rows, err := s.db.Query(
-		`SELECT id, name, driver FROM connections WHERE tenant_id = ? ORDER BY created_at`, tenantID,
+		`SELECT id, name, driver, is_primary FROM connections WHERE tenant_id = ? ORDER BY is_primary DESC, created_at`, tenantID,
 	)
 	if err != nil {
 		return nil, err
@@ -135,7 +144,7 @@ func (s *Store) ListConnections(tenantID string) ([]Connection, error) {
 	var out []Connection
 	for rows.Next() {
 		c := Connection{TenantID: tenantID}
-		if err := rows.Scan(&c.ID, &c.Name, &c.Driver); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.Driver, &c.IsPrimary); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -374,4 +383,25 @@ func (s *Store) AccessibleTables(connID, userID string) ([]TableConfig, []LinkCo
 		}
 	}
 	return open, openLinks, nil
+}
+
+// SetPrimaryConnection utpeker bedriftens hovedkilde. Nuller alle andre i
+// samme transaksjon — det finnes alltid høyst én primærkilde per tenant.
+func (s *Store) SetPrimaryConnection(tenantID, id string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE connections SET is_primary = FALSE WHERE tenant_id = ?`, tenantID); err != nil {
+		return err
+	}
+	res, err := tx.Exec(`UPDATE connections SET is_primary = TRUE WHERE id = ? AND tenant_id = ?`, id, tenantID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return tx.Commit()
 }

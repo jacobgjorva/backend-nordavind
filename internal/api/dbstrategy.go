@@ -673,3 +673,39 @@ func explainSubjectFailure(subject string) string {
 		"rakk å svare, så jeg har ingen tall å gi deg om akkurat dette. Prøv igjen om et øyeblikk, " +
 		"eller avgrens (for eksempel til ett år), så går det som regel gjennom."
 }
+
+// usedSources: hvilke tilkoblinger de VELLYKKEDE oppslagene i turen traff.
+func usedSources(attempts []dbAttempt) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, a := range attempts {
+		if a.ok() && a.conn != "" && !seen[a.conn] {
+			seen[a.conn] = true
+			out = append(out, a.conn)
+		}
+	}
+	return out
+}
+
+// sourceNote navngir kilden i svaret når tenanten har FLERE kilder og turen
+// brukte nøyaktig én. Tidslinjen viser kilden underveis, men den kollapser —
+// svaret må selv bære hvor tallene kom fra når det finnes alternativer.
+// Ved flere kilder i samme svar sies det også: det er et blandingsvarsel.
+func (n *narrator) sourceNote(emit func(string), answer string, sources []string, multi bool) {
+	if n == nil || !n.on || !multi || len(sources) == 0 || n.saidSource {
+		return
+	}
+	// Én gang per tur: svargrenene i agent-løkka er ikke gjensidig
+	// utelukkende (målt: «Tallene er fra X. Tallene er fra X.»), så vakten
+	// ligger her og ikke i grenstrukturen.
+	n.saidSource = true
+	low := strings.ToLower(answer)
+	if len(sources) == 1 {
+		if strings.Contains(low, strings.ToLower(sources[0])) {
+			return
+		}
+		emit(contentSSE(" Tallene er fra " + sources[0] + "."))
+		return
+	}
+	emit(contentSSE(" Merk at svaret bygger på flere kilder: " + humanList(sources) + "."))
+}

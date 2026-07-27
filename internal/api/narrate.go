@@ -80,6 +80,8 @@ type narrator struct {
 	turn int
 	// connName slår opp visningsnavnet til en databasetilkobling.
 	connName func(id string) string
+	// saidSource: kildenoten er alt levert denne turen.
+	saidSource bool
 }
 
 func newNarrator(emit func(string), on bool, connName func(string) string) *narrator {

@@ -133,6 +133,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /v1/connections/{id}", s.requireAdmin(s.handleDeleteConnection))
 	mux.HandleFunc("GET /v1/connections/{id}/schema", s.requireAdmin(s.handleConnectionSchema))
 	mux.HandleFunc("PUT /v1/connections/{id}/config", s.requireAdmin(s.handleSaveConnectionConfig))
+	mux.HandleFunc("PUT /v1/connections/{id}/primary", s.requireAdmin(s.handleSetPrimaryConnection))
 	mux.HandleFunc("GET /v1/admin/users", s.requireAdmin(s.handleAdminListUsers))
 	mux.HandleFunc("POST /v1/admin/users", s.requireAdmin(s.handleAdminCreateUser))
 	mux.HandleFunc("DELETE /v1/admin/users/{id}", s.requireAdmin(s.handleAdminDeleteUser))

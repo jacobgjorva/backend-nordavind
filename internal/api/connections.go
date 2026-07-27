@@ -211,3 +211,20 @@ func (s *Server) handleSaveConnectionConfig(w http.ResponseWriter, r *http.Reque
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// handleSetPrimaryConnection utpeker bedriftens hovedkilde («vi/oss»).
+func (s *Server) handleSetPrimaryConnection(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	if err := s.store.SetPrimaryConnection(user.TenantID, r.PathValue("id")); err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, store.ErrNotFound) {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
