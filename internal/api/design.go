@@ -399,6 +399,49 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
+// handleCreateDesign starter en design-chat: ett tomt dokument og en chat som
+// eier det. Én forespørsel, så frontend slipper å sy sammen to kall — og
+// dokumentet får alltid en fersk slug (kollisjon åpnet forrige dokument).
+func (s *Server) handleCreateDesign(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Kit   string `json:"kit"`
+		Title string `json:"title"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+	kit := design.Get(req.Kit)
+	title := strings.TrimSpace(req.Title)
+	if title == "" {
+		title = kit.Label
+	}
+	base := slugify(title)
+	if base == "" {
+		base = "dokument"
+	}
+	wg, err := s.store.CreateWidget(user.TenantID, user.ID,
+		base+"-"+strings.ToLower(randToken(4)), title)
+	if err != nil {
+		http.Error(w, "kunne ikke opprette dokumentet", http.StatusInternalServerError)
+		return
+	}
+	// Tomt dokument med valgt kitt: lerretet vet hvilket uttrykk som gjelder
+	// før modellen har lagt inn en eneste flate.
+	doc := design.Doc{Type: "design", Kind: kit.Type, Kit: kit.Name, Title: title}
+	if !s.saveDoc(user, wg.Slug, doc) {
+		http.Error(w, "kunne ikke lagre dokumentet", http.StatusInternalServerError)
+		return
+	}
+	chat, err := s.store.CreateDesignChat(user.TenantID, user.ID, title, wg.Slug)
+	if err != nil {
+		http.Error(w, "kunne ikke opprette chatten", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"chat_id": chat.ID, "slug": wg.Slug, "kit": kit.Name})
+}
+
 // handleDesignKits gir galleriet: alle kitt med tokens, bilder og layouts.
 func (s *Server) handleDesignKits(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.user(w, r); !ok {

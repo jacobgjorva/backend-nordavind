@@ -15,7 +15,8 @@ type Chat struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 	AgentID      string    `json:"agent_id,omitempty"`
 	AgentEnabled bool      `json:"agent_enabled,omitempty"`
-	Kind         string    `json:"kind,omitempty"`      // "chat" | "dashboard"
+	Kind         string    `json:"kind,omitempty"`        // "chat" | "dashboard" | "design"
+	DesignSlug   string    `json:"design_slug,omitempty"` // dokumentet en design-chat redigerer
 	FolderID     string    `json:"folder_id,omitempty"` // mappe chatten ligger i (tom = ingen)
 }
 
@@ -61,6 +62,8 @@ func (s *Store) migrateChats() error {
 		`ALTER TABLE chats ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat'`,
 		`ALTER TABLE chats ADD COLUMN dashboard_spec TEXT NOT NULL DEFAULT '{"components":[]}'`,
 		`ALTER TABLE chats ADD COLUMN folder_id TEXT NOT NULL DEFAULT ''`,
+		// Designlerret: slugen til dokumentet chatten redigerer.
+		`ALTER TABLE chats ADD COLUMN design_slug TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.db.Exec(col); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column") {
@@ -169,10 +172,27 @@ func (s *Store) CreateChat(tenantID, userID, title string) (Chat, error) {
 	return c, err
 }
 
+// CreateDesignChat oppretter en chat som eier ett designdokument. Egen kind
+// gjør at den grupperes for seg i sidebaren og åpner lerretet i stedet for
+// en vanlig samtale.
+func (s *Store) CreateDesignChat(tenantID, userID, title, slug string) (Chat, error) {
+	id, err := newID()
+	if err != nil {
+		return Chat{}, err
+	}
+	c := Chat{ID: id, Title: title, Kind: "design", DesignSlug: slug, UpdatedAt: time.Now()}
+	_, err = s.db.Exec(
+		`INSERT INTO chats (id, tenant_id, user_id, title, kind, design_slug)
+		 VALUES (?, ?, ?, ?, 'design', ?)`,
+		c.ID, tenantID, userID, c.Title, slug,
+	)
+	return c, err
+}
+
 // ListChats returnerer brukerens samtaler, nyest oppdatert først.
 func (s *Store) ListChats(userID string) ([]Chat, error) {
 	rows, err := s.db.Query(
-		`SELECT c.id, c.title, c.updated_at, c.agent_id, COALESCE(a.enabled, FALSE), c.kind, c.folder_id
+		`SELECT c.id, c.title, c.updated_at, c.agent_id, COALESCE(a.enabled, FALSE), c.kind, c.folder_id, c.design_slug
 		 FROM chats c LEFT JOIN agents a ON a.id = c.agent_id
 		 WHERE c.user_id = ? ORDER BY c.updated_at DESC LIMIT 100`,
 		userID,
@@ -186,7 +206,8 @@ func (s *Store) ListChats(userID string) ([]Chat, error) {
 	for rows.Next() {
 		var c Chat
 		var enabled Flag
-		if err := rows.Scan(&c.ID, &c.Title, &c.UpdatedAt, &c.AgentID, &enabled, &c.Kind, &c.FolderID); err != nil {
+		if err := rows.Scan(&c.ID, &c.Title, &c.UpdatedAt, &c.AgentID, &enabled,
+			&c.Kind, &c.FolderID, &c.DesignSlug); err != nil {
 			return nil, err
 		}
 		c.AgentEnabled = bool(enabled)
