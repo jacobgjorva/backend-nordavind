@@ -119,3 +119,13 @@
 {"text": "koble meg til Microsoft 365", "want": "connect_m365"}
 {"text": "hvor mye brukte vi på AI forrige måned?", "want": "usage_stats"}
 {"text": "lag en presentasjon om resultatene for styret", "want": "create_presentation"}
+{"text": "og i fjor da? hvem vant den prisen?", "want": "uklart"}
+{"text": "rakk vi fristen på den?", "want": "uklart"}
+{"text": "hvor mange ble det til slutt?", "want": "uklart"}
+{"text": "er han fortsatt ansatt hos oss?", "want": "uklart"}
+{"text": "hva kostet greia til slutt, husker du?", "want": "uklart"}
+{"text": "hva er prisen på en Tesla Model Y i Norge?", "want": "web_fact"}
+{"text": "hvor mange ansatte har vi i Bergen?", "want": "data_question"}
+{"text": "send møtereferatet til Ola Nordmann", "want": "email"}
+{"text": "lag et søylediagram over kostnader per avdeling", "want": "create_widget"}
+{"text": "hva sier arbeidsmiljøloven om nattarbeid?", "want": "web_fact"}

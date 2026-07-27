@@ -134,19 +134,23 @@ var Flows = map[string]Flow{
 	},
 
 	"data_question": {
-		// "light": svaret ER tall fra query_database, voktet av datavernet og
-		// kildekontrollen — modellens eneste jobb er å skrive SQL og gjengi.
+		// "mid": light degenererte synlig på uklare spørsmål — tegnsøppel og
+		// modellens egen verktøy-resonnering lakk ut i svaret («**Verktøyvalg**:
+		// … jeg må bruke query_database»), der medium svarte rent. Databasesvar
+		// er dessuten det brukeren stoler mest på; feil her koster mer enn
+		// modellen sparer.
 		Knowledge: true,
 		Tools:     []string{ToolQueryDatabase, ToolShowTable},
-		Model:     "light",
+		Model:     "mid",
 		MaxChars:  300, // tette tallsvar
 		Fallback:  FreeChatKey,
 		Sticky:    true, // oppfølgingsspørsmål («sikker?») skal beholde db-verktøyene
 	},
 	"show_table": {
+		// "mid" av samme grunn som data_question — samme verktøy, samme data.
 		Knowledge: true,
 		Tools:     []string{ToolQueryDatabase, ToolShowTable},
-		Model:     "light",
+		Model:     "mid",
 		MaxChars:  150, // tabellen er svaret; maks én ledsagende setning
 		Fallback:  FreeChatKey,
 		Sticky:    true,

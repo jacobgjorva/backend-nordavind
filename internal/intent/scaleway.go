@@ -95,14 +95,20 @@ func (s *ScalewayJudge) Pick(ctx context.Context, message string, keys []string)
 		case k == FreeChatKey:
 			fmt.Fprintf(&b, "- %s: ingen av disse — vanlig samtale, tekstarbeid på innhold brukeren gir, eller sammensatte ønsker\n", k)
 		case k == UnclearKey:
-			// Kriterium, ikke styrkegrad: «bruk sjelden» uten kjennetegn er
-			// nettopp det som gjorde forgjengeren død i praksis.
-			fmt.Fprintf(&b, "- %s: meldingen kan ikke besvares som den står, fordi den viser til noe som "+
-				"ikke er nevnt i den — «ordet», «den», «det året», «dem», «han», «den saken» — og som du "+
-				"ikke kan gjette. Dette gjelder OGSÅ når resten av meldingen ser ut som et vanlig "+
-				"spørsmål om dato, tall eller fakta: mangler det ledd som sier HVA det spørres om, er "+
-				"svaret umulig og flyten uklart. Velg dette FØR du gjetter et tema. Velg det ALDRI når "+
-				"meldingen gir mening alene.\n", k)
+			// Regelen forklares OG vises, med eksempler som bevisst ligger
+			// utenfor eval-settet: et par som bare skiller seg på om
+			// referenten er innført i meldingen selv. Eksempler hentet fra
+			// fasiten lærer dommeren testen, ikke regelen — det ga 9/10 på
+			// eval og 0/2 på nye varianter.
+			fmt.Fprintf(&b, "- %s: meldingen bruker bestemt form eller et pronomen om noe som ikke er "+
+				"introdusert i meldingen selv, så du kan ikke vite HVA den handler om. Test: kan en "+
+				"fremmed som bare leser denne ene meldingen si nøyaktig hva det spørres om? "+
+				"«hvor lenge varer garantien på den?» → %s (hvilken?). "+
+				"«hvor lenge varer garantien på en ny Volvo?» → et vanlig faktaspørsmål. "+
+				"«ble søknaden godkjent?» → %s (hvilken søknad?). "+
+				"«ble byggesøknaden vår for Storgata 4 godkjent?» → en vanlig forespørsel. "+
+				"Dette gjelder OGSÅ når resten av meldingen ser ut som et helt vanlig spørsmål om "+
+				"dato, pris eller fakta. Gir meldingen mening alene, velg ALDRI %s.\n", k, k, k, k)
 		default:
 			if in, ok := byKey[k]; ok {
 				fmt.Fprintf(&b, "- %s: %s\n", k, in.Description)
