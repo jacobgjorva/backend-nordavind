@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -96,8 +97,9 @@ func (s *Server) dataFollowup(ctx context.Context, slug string) (string, bool) {
 	for _, sf := range pending {
 		fmt.Fprintf(&b, "- %s (%s)\n", sf.ID, sf.Layout)
 	}
-	b.WriteString("Fyll dem med ETT patch-kall per flate: sett connection_id, " +
-		"sql, og x/y der grafen trenger det. Ikke rør noe annet.\n")
+	b.WriteString("Fyll dem ALLE i ETT patch-kall: bruk ops med én oppføring " +
+		"per flate, og sett connection_id, sql og x/y der grafen trenger det. " +
+		"Ikke rør noe annet.\n")
 	b.WriteString(schema)
 	return b.String(), true
 }
@@ -149,6 +151,16 @@ func designTools(kit design.Kit) []any {
 		},
 		"required": []string{"layout", "fields"},
 	}
+	op := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{"type": "string", "description": "set | add | remove | move (standard: set)"},
+			"id":     map[string]any{"type": "string", "description": "flate-id fra listen"},
+			"after":  map[string]any{"type": "string", "description": "plasser etter denne id-en (add/move)"},
+			"layout": map[string]any{"type": "string", "description": strings.Join(kit.LayoutKeys(), " | ")},
+			"fields": map[string]any{"type": "object", "properties": surfaceProps(true)},
+		},
+	}
 	return []any{
 		map[string]any{
 			"type": "function",
@@ -169,16 +181,22 @@ func designTools(kit design.Kit) []any {
 		map[string]any{
 			"type": "function",
 			"function": map[string]any{
-				"name":        "patch",
-				"description": "Endre ÉN flate. Send kun feltene som skal endres — resten står urørt.",
+				"name": "patch",
+				"description": "Endre flater. Send kun feltene som skal endres — resten står urørt. " +
+					"Skal du endre flere flater, send dem ALLE i ops i dette ene kallet.",
 				"parameters": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"action": map[string]any{"type": "string", "description": "set | add | remove | move (standard: set)"},
-						"id":     map[string]any{"type": "string", "description": "flate-id fra listen"},
-						"after":  map[string]any{"type": "string", "description": "plasser etter denne id-en (add/move)"},
-						"layout": map[string]any{"type": "string", "description": strings.Join(kit.LayoutKeys(), " | ")},
-						"fields": map[string]any{"type": "object", "properties": surfaceProps(true)},
+						"ops": map[string]any{
+							"type":        "array",
+							"items":       op,
+							"description": "flere endringer i én operasjon",
+						},
+						"action": op["properties"].(map[string]any)["action"],
+						"id":     op["properties"].(map[string]any)["id"],
+						"after":  op["properties"].(map[string]any)["after"],
+						"layout": op["properties"].(map[string]any)["layout"],
+						"fields": op["properties"].(map[string]any)["fields"],
 					},
 				},
 			},
@@ -290,19 +308,47 @@ func (s *Server) runDesignPatch(ctx context.Context, slug, rawArgs string) strin
 	if !ok {
 		return "Ikke innlogget."
 	}
-	var op design.Op
-	if err := json.Unmarshal([]byte(rawArgs), &op); err != nil {
+	ops, err := parseOps([]byte(rawArgs))
+	if err != nil {
 		return "Ugyldige argumenter: " + err.Error()
 	}
+	if len(ops) == 0 {
+		return "patch krever minst én endring."
+	}
 	kit, doc := s.docKit(ctx, slug)
-	rep := design.Apply(kit, &doc, op)
-	if !rep.OK {
-		return rep.String()
+	var all design.Report
+	for _, op := range ops {
+		rep := design.Apply(kit, &doc, op)
+		all.Applied += rep.Applied
+		all.Problems = append(all.Problems, rep.Problems...)
+	}
+	all.OK = all.Applied > 0
+	if !all.OK {
+		return all.String()
 	}
 	if !s.saveDoc(user, slug, doc) {
 		return "Kunne ikke lagre."
 	}
-	return rep.String()
+	return all.String()
+}
+
+// parseOps leser både «flere endringer i ops» og en enkelt endring på
+// toppnivå — modellen skal aldri kunne bomme på formen.
+func parseOps(raw []byte) ([]design.Op, error) {
+	var batch struct {
+		Ops []design.Op `json:"ops"`
+	}
+	if err := json.Unmarshal(raw, &batch); err == nil && len(batch.Ops) > 0 {
+		return batch.Ops, nil
+	}
+	var one design.Op
+	if err := json.Unmarshal(raw, &one); err != nil {
+		return nil, err
+	}
+	if one.ID == "" && one.Action == "" && len(one.Fields) == 0 {
+		return nil, nil
+	}
+	return []design.Op{one}, nil
 }
 
 // runRestyle bytter kitt, tittel eller stil-tokens.
@@ -368,8 +414,13 @@ func (s *Server) handleDesignPatch(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var op design.Op
-	if err := json.NewDecoder(r.Body).Decode(&op); err != nil {
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "ugyldig kropp", http.StatusBadRequest)
+		return
+	}
+	ops, err := parseOps(raw)
+	if err != nil || len(ops) == 0 {
 		http.Error(w, "ugyldig kropp", http.StatusBadRequest)
 		return
 	}
@@ -379,7 +430,14 @@ func (s *Server) handleDesignPatch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ikke funnet", http.StatusNotFound)
 		return
 	}
-	rep := design.Apply(design.Get(doc.Kit), &doc, op)
+	kit := design.Get(doc.Kit)
+	var rep design.Report
+	for _, op := range ops {
+		r1 := design.Apply(kit, &doc, op)
+		rep.Applied += r1.Applied
+		rep.Problems = append(rep.Problems, r1.Problems...)
+	}
+	rep.OK = rep.Applied > 0
 	if !rep.OK {
 		http.Error(w, rep.String(), http.StatusBadRequest)
 		return

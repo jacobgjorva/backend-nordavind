@@ -385,7 +385,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	searchNudged := false
 	// Designlerret: compose har kjørt denne turen, så flater som venter på en
 	// spørring skal få den i én fokusert runde (dataFollowup).
-	composed := false
+	composed, dataAsked, dataFilled := false, false, false
 	// Kildekontroll: alt verktøyene returnerer denne turen, ordrett — prosaen
 	// måles mot dette før den vises (grounding.go).
 	var toolResults []string
@@ -869,6 +869,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					full["tool_choice"] = "none"
 				case "patch":
 					result = s.runDesignPatch(ctx, designSlug, c.Args.String())
+					// Data-runden er ferdig når patchene er lagret: lerretet er
+					// svaret, og turen avsluttes i kode.
+					dataFilled = dataAsked
 				default:
 					result = s.runRestyle(ctx, designSlug, c.Args.String())
 				}
@@ -920,8 +923,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		// Lerretet ER svaret: er dokumentet bygget og ingen flater venter på
 		// tall, avslutter koden turen her. Å sende hele historikken opp igjen
 		// bare for å få et «Ok» tilbake er en hel runde betalt for ingenting.
-		if composed && designSlug != "" {
-			if ask, need := s.dataFollowup(ctx, designSlug); need {
+		if (composed || dataFilled) && designSlug != "" {
+			if ask, need := s.dataFollowup(ctx, designSlug); need && !dataAsked {
+				dataAsked = true
 				msgs, _ := full["messages"].([]any)
 				full["messages"] = append(msgs, map[string]any{"role": "user", "content": ask})
 				full["tool_choice"] = map[string]any{
