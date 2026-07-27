@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -487,6 +488,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	}()
 
 	for round := 0; round <= roundCap; round++ {
+		// Invariant før hver runde: tool_choice uten tools er 400 hos upstream
+		// («When using tool_choice, tools must be set» — også for "none"), og
+		// en tvungen tool_choice MÅ finnes i tools-lista (søke-nudgen pekte på
+		// web_search i en db-flyt). Begge ga «Klarte ikke hente et svar».
+		sanitizeToolChoice(full)
 		body, err := json.Marshal(full)
 		if err != nil {
 			return
@@ -511,7 +517,24 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			flowKey != "create_widget" && flowKey != "edit_widget" &&
 			flowKey != "create_presentation" && flowKey != "export_excel" && widgetSlug == ""
 		if resp.StatusCode != http.StatusOK {
-			s.log.Warn("upstream-runde ikke OK", "status", resp.StatusCode)
+			// Feilkroppen er JSON, ikke SSE — les den for diagnosen (relayRound
+			// får uansett ingenting ut av den).
+			eb, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+			tc, _ := json.Marshal(full["tool_choice"])
+			var names []string
+			if ts, ok := full["tools"].([]any); ok {
+				for _, t := range ts {
+					if m, ok := t.(map[string]any); ok {
+						if f, ok := m["function"].(map[string]any); ok {
+							if n, ok := f["name"].(string); ok {
+								names = append(names, n)
+							}
+						}
+					}
+				}
+			}
+			s.log.Warn("upstream-runde ikke OK", "status", resp.StatusCode,
+				"tool_choice", string(tc), "tools", strings.Join(names, ","), "body", string(eb))
 		}
 		// Kildekontroll på streamede svar (G1): grunnlaget er samtalen +
 		// verktøydata; gaten holder igjen udekkede påstander til de er sjekket.
@@ -527,7 +550,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		completionTokens += usage.CompletionTokens
 		if len(calls) == 0 {
 			trimmed := strings.TrimSpace(content)
-			if !searchNudged && searches == 1 && round < roundCap &&
+			if !searchNudged && searches == 1 && round < roundCap && hasWebTool(full) &&
 				(gaveUpRe.MatchString(trimmed) || len([]rune(trimmed)) < 3) {
 				searchNudged = true
 				s.log.Info("søke-nudge utløst")
@@ -669,7 +692,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				}
 				// Innsats-sjekk ETTER kildekontrollen: også et forsiktig
 				// omforsøk som melder tomt etter få søk sendes tilbake.
-				if !searchNudged && searches <= 2 && round < roundCap && gaveUpRe.MatchString(final) {
+				if !searchNudged && searches <= 2 && round < roundCap && hasWebTool(full) && gaveUpRe.MatchString(final) {
 					searchNudged = true
 					s.log.Info("søke-nudge utløst", "searches", searches)
 					msgs, _ := full["messages"].([]any)
@@ -1012,20 +1035,18 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 
 		// Tvungen verktøybruk gjelder KUN første runde (presentasjonsflyten):
 		// minst én endring skal skje, men modellen skal kunne stoppe etterpå.
-		// «none» settes derimot bevisst på siste runde og skal stå.
-		if tc, ok := full["tool_choice"]; ok && tc != "none" {
-			delete(full, "tool_choice")
-		}
+		delete(full, "tool_choice")
 
 		if round == roundCap-1 {
 			// Siste runde: tving frem et svar uten flere verktøykall, og be
 			// modellen tydelig om å svare NÅ fra det den har funnet — ikke tomt.
-			full["tool_choice"] = "none"
+			// Uten tools kan ingenting kalles — tool_choice skal da BORT, ikke
+			// settes til "none" (tool_choice uten tools er 400 hos upstream).
+			delete(full, "tool_choice")
 			injectSystem(full, backstopNudge)
-			// TOKEN: med tool_choice=none kan katalogen aldri brukes — da skal
-			// den heller ikke betales for. Verktøysettet er ~3k tokens på hver
-			// eneste runde, og siste runde er ren syntese fra det som alt er
-			// hentet (samme grep som streamBackstop og regroundAnswer gjør).
+			// TOKEN: uten verktøykatalogen betales den heller ikke — settet er
+			// ~3k tokens per runde, og siste runde er ren syntese fra det som
+			// alt er hentet (samme grep som streamBackstop og regroundAnswer).
 			delete(full, "tools")
 		}
 	}
@@ -1035,6 +1056,37 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	emit("data: " + string(step))
 	s.streamBackstop(ctx, full, emit, &promptTokens, &completionTokens)
 	emit("data: [DONE]")
+}
+
+// hasWebTool sier om web_search ligger i payloadens tools-liste — søke-nudgen
+// skal aldri kreve søk i en flyt uten søkeverktøy.
+func hasWebTool(full map[string]any) bool {
+	ts, _ := full["tools"].([]any)
+	return toolByName(ts, "web_search") != nil
+}
+
+// sanitizeToolChoice fjerner tool_choice-verdier upstream avviser med 400:
+// enhver tool_choice uten tools-liste (også "none"), og en navngitt
+// tool_choice som ikke finnes i lista. Kalles rett før hvert upstream-kall.
+func sanitizeToolChoice(payload map[string]any) {
+	tc, has := payload["tool_choice"]
+	if !has {
+		return
+	}
+	ts, _ := payload["tools"].([]any)
+	if len(ts) == 0 {
+		delete(payload, "tool_choice")
+		return
+	}
+	if m, ok := tc.(map[string]any); ok {
+		name := ""
+		if f, ok := m["function"].(map[string]any); ok {
+			name, _ = f["name"].(string)
+		}
+		if toolByName(ts, name) == nil {
+			delete(payload, "tool_choice")
+		}
+	}
 }
 
 // toolHistoryBudget: samlet tak (tegn) på verktøyresultater som bæres videre
@@ -1156,7 +1208,9 @@ const backstopGraceful = "Klarte ikke hente et svar nå — prøv igjen."
 // tomt, sendes en kort, vennlig linje. Bruker ser aldri en blank boble.
 func (s *Server) streamBackstop(ctx context.Context, full map[string]any, emit func(string), promptTokens, completionTokens *int) {
 	injectSystem(full, backstopNudge)
-	full["tool_choice"] = "none"
+	// Uten tools er tool_choice både unødvendig og ulovlig hos upstream
+	// («When using tool_choice, tools must be set», 400).
+	delete(full, "tool_choice")
 	delete(full, "tools")
 	body, err := json.Marshal(full)
 	if err != nil {
