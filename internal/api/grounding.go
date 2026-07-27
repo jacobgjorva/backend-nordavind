@@ -171,7 +171,36 @@ func groundingBasis(full map[string]any, toolResults []string) []string {
 			}
 		}
 	}
+	// Verktøy-BESKRIVELSENE er også grunnlag. Databaseskjemaet (tabell- og
+	// kolonnenavn) står i query_database-definisjonen, ikke i et
+	// verktøyresultat — uten dette ble «hvilken data har jeg tilgang på?»
+	// dømt som dikting selv om modellen siterte skjemaet helt korrekt.
+	basis = append(basis, toolDescriptions(full)...)
 	return append(basis, toolResults...)
+}
+
+// toolDescriptions plukker beskrivelsesteksten fra verktøykatalogen i
+// payloaden. Det modellen har fått se, kan den lovlig gjengi.
+func toolDescriptions(full map[string]any) []string {
+	tools, ok := full["tools"].([]any)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, t := range tools {
+		tm, ok := t.(map[string]any)
+		if !ok {
+			continue
+		}
+		fn, ok := tm["function"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if d, ok := fn["description"].(string); ok && strings.TrimSpace(d) != "" {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 // sentenceGate slipper et streamet svar gjennom ord for ord, men holder igjen
