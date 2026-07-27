@@ -547,6 +547,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		if err != nil {
 			return
 		}
+		s.logPayloadShape(round, full, len(body))
 		req, err := s.newUpstreamRequest(ctx, bytes.NewReader(body))
 		if err != nil {
 			return

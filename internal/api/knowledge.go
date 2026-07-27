@@ -26,6 +26,17 @@ const (
 	rrfK       = 60.0 // RRF-konstant (standard); demper topprangeringens dominans
 	noteMaxN   = 25   // maks antall lapper (budsjettet er den reelle grensen)
 	noteBudget = 4000 // hardt tak på injisert tekst (tegn)
+
+	// Relevansterskler. Uten dem fylles budsjettet ALLTID helt opp: sorteringen
+	// sier hva som er best, ikke hva som er godt nok, så en base med hundrevis
+	// av lapper sender 4 000 tegn selv på «skriv et dikt om våren». Målt på
+	// knowledge-eval med realistisk støy.
+	//
+	// vecStrong: en lapp UTEN nøkkelordstøtte må ligne spørsmålet klart.
+	vecStrong = 0.34
+	// relCutoff: lapper svakere enn denne andelen av toppscoren er naboer,
+	// ikke svar — de koster tokens og trekker oppmerksomhet.
+	relCutoff = 0.55
 )
 
 // knowledgeFor henter kunnskapskonteksten for siste brukermelding i en
@@ -345,6 +356,10 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 	// ord i «Mandagsmøte» — uten dette faller nettopp de spørsmålene ut.
 	qTokens := contentTokens(query)
 	fts, _ := s.store.SearchNotesFTS(tenantID, qTokens, candDepth)
+	// Delstrengtreff holdes ATSKILT: de fanger norsk sammensetning («møte» i
+	// «Mandagsmøte»), men treffer også tilfeldig («morgen» i «morgenmøtet»).
+	// De får være kandidater, men aldri alene bevise at spørsmålet er internt.
+	weak := map[string]bool{}
 	if sub, err := s.store.SearchNotesSubstring(tenantID, qTokens, candDepth); err == nil {
 		inFTS := map[string]bool{}
 		for _, id := range fts {
@@ -353,6 +368,7 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 		for _, id := range sub {
 			if !inFTS[id] {
 				fts = append(fts, id)
+				weak[id] = true
 			}
 		}
 	}
@@ -428,6 +444,36 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 		// Lik score: nyeste kunnskap vinner (ferskhet).
 		return byID[fused[i]].CreatedAt.After(byID[fused[j]].CreatedAt)
 	})
+
+	// Relevansfilter: behold bare det som er nær toppen. Er selv toppen svak
+	// (ingen sterk vektorlikhet, ingen nøkkelordstøtte), er spørsmålet ikke
+	// om intern kunnskap i det hele tatt — og da skal vi sende INGENTING.
+	if len(fused) > 0 {
+		top := rrf[fused[0]]
+		strongTop := false
+		for _, v := range vec {
+			if v.id == fused[0] && v.score >= vecStrong {
+				strongTop = true
+			}
+		}
+		for _, id := range fts {
+			if id == fused[0] && !weak[id] {
+				strongTop = true
+			}
+		}
+		if !strongTop {
+			s.log.Info("kunnskap hentet", "vektor", len(vec), "nøkkelord", len(fts),
+				"injisert", 0, "grunn", "ingen sterk kandidat")
+			return ""
+		}
+		kept := fused[:0]
+		for _, id := range fused {
+			if rrf[id] >= top*relCutoff {
+				kept = append(kept, id)
+			}
+		}
+		fused = kept
+	}
 
 	// Kant-utvidelse (G2): naboene til topptreffene i kunnskapsgrafen tas med
 	// bakerst, innenfor samme budsjett. En dokument-bit drar inn de destillerte
