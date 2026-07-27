@@ -285,6 +285,16 @@ func (g *sentenceGate) feed(chunk string) string {
 			return out.String() // setningen er ikke ferdig — vent
 		}
 		sent := g.buf[:end]
+		// Formsjekk FØR faktasjekk: en degenerert modell lekker verktøykall-
+		// fragmenter («+crusherweb_search{"query": …») i runde 0-prosaen, og
+		// de består faktasjekken fordi form aldri ble målt. Holdes som
+		// offender — dommeren godkjenner aldri verktøysøl, så held-løypa
+		// ender i ærlig klipp.
+		if isJunkAnswer(sent) {
+			g.held = true
+			g.offenders = append(g.offenders, "verktøysøl i svaret")
+			return out.String()
+		}
 		if off := offendersAgainst(sent, g.sources, 1); len(off) > 0 {
 			g.held = true
 			g.offenders = off

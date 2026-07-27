@@ -807,7 +807,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				// Kun tomhets-backstop og grense-LOGG igjen (aldri omskriving
 				// av noe brukeren har sett).
 				switch {
-				case len([]rune(trimmed)) < 3 && usedTool && !actionTool:
+				case (len([]rune(trimmed)) < 3 || isJunkAnswer(trimmed)) && usedTool && !actionTool:
 					step, _ := json.Marshal(map[string]any{"nordavind_step": "Oppsummerer funnene"})
 					emit("data: " + string(step))
 					s.streamBackstop(ctx, full, emit, &promptTokens, &completionTokens)
@@ -836,9 +836,14 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				// lå i én av dem). Erklærer modellen oppgaven umulig ETTER at
 				// databasen og kildene faktisk leverte, er kravet som «mangler»
 				// nesten alltid dens eget påfunn. Én tvungen fortsettelse.
-				if !surrenderNudged && round < roundCap && impossibleRe.MatchString(final) &&
+				// Egen runde, som benektelsesporten: kapitulasjonen kommer
+				// nesten alltid i SISTE runde (modellen brukte budsjettet på
+				// leting), så «round < roundCap» sperret vakten permanent —
+				// målt 0 treff på 15 kjøringer før dette.
+				if !surrenderNudged && impossibleRe.MatchString(final) &&
 					(dbSucceeded || len(toolResults) > 0) {
 					surrenderNudged = true
+					roundCap = round + 1
 					s.log.Info("kapitulasjonsvakt utløst")
 					narr.say("Nei, vent — jeg har jo tall. Bruker det jeg har.", kindDB)
 					msgs, _ := full["messages"].([]any)
@@ -1494,26 +1499,29 @@ func (s *Server) streamBackstop(ctx context.Context, full map[string]any, emit f
 	// Også backstop-syntesen er kildekontrollert — den gjenforteller verktøydata
 	// (som ligger i samtalen på dette tidspunktet) og kan dikte akkurat som
 	// hovedsvaret.
-	gate := newSentenceGate(groundingBasis(full, nil))
-	_, usage, content := s.relayRound(resp, emit, true, gate)
+	// BUFRET, ikke strømmet: backstopen kjører på samme modell som nettopp
+	// degenererte, og en live-strøm har sendt søppelet («évekekek …») før
+	// noen port rekker å se det. Syntesen er 2-3 setninger — bufring koster
+	// millisekunder og gir formsjekk + kildekontroll på HELE svaret først.
+	_, usage, content := s.relayRound(resp, func(string) {}, false, nil)
 	resp.Body.Close()
 	*promptTokens += usage.PromptTokens
 	*completionTokens += usage.CompletionTokens
-	if rel := gate.finish(); rel != "" {
-		emit(contentSSE(rel))
-	}
-	if gate.held {
-		if ok, _ := s.judgeClaims(ctx, lastUserText(full), content, gate.offenders, groundingBasis(full, nil)); ok {
-			emit(contentSSE(gate.heldText()))
-		} else {
-			s.log.Warn("faktadommer (backstop): dikting stanset", "avvik", strings.Join(gate.offenders, ", "))
-			emit(contentSSE(honestCut(gate.shownText())))
-		}
+	trim := strings.TrimSpace(content)
+	if len([]rune(trim)) < 3 || isJunkAnswer(trim) {
+		s.log.Warn("backstop: formsjekk avviste syntesen", "tegn", len([]rune(trim)))
+		emit(contentSSE(backstopGraceful))
 		return
 	}
-	if len([]rune(strings.TrimSpace(content))) < 3 {
-		emit(contentSSE(backstopGraceful))
+	basis := groundingBasis(full, nil)
+	if off := groundingOffenders(trim, basis); len(off) > 0 {
+		if ok, _ := s.judgeClaims(ctx, lastUserText(full), trim, off, basis); !ok {
+			s.log.Warn("faktadommer (backstop): dikting stanset", "avvik", strings.Join(off, ", "))
+			emit(contentSSE(honestCut("")))
+			return
+		}
 	}
+	emit(contentSSE(trim))
 }
 
 // runFetchURL henter hele det lesbare innholdet fra én side (dypere enn søk).

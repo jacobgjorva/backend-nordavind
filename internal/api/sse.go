@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // toolCall akkumulerer et verktøykall som strømmer inn i biter over SSE.
@@ -279,4 +280,35 @@ func contentSSE(text string) string {
 		"choices": []any{map[string]any{"delta": map[string]any{"content": text}}},
 	})
 	return "data: " + string(payload)
+}
+
+// jsonFragRe: en JSON-nøkkel med verdi («"query": "…"») i løpende prosa er
+// alltid et lekket verktøykall-fragment, aldri et svar.
+var jsonFragRe = regexp.MustCompile(`[a-zA-Z_]+"\s*:\s*["{\[]`)
+
+// fenceRe fjerner kodeblokker før formsjekken — tabell- og widgetblokker er
+// legitim JSON i svaret.
+var fenceRe = regexp.MustCompile("(?s)```.*?```")
+
+// isJunkAnswer: er svaret åpenbart ødelagt struktur — lekket verktøykall-JSON
+// eller tegnsøppel uten språk? Formsjekk på FAKTA (tegnklasser og struktur),
+// aldri på mening. Målt: «ermannquery": "Brent Crude …"}» og «…………」» gikk
+// rett til brukeren; ingen av gatene måler form.
+func isJunkAnswer(s string) bool {
+	s = strings.TrimSpace(fenceRe.ReplaceAllString(s, ""))
+	if s == "" {
+		return false // helt tomt håndteres av tom-vernet, ikke her
+	}
+	if jsonFragRe.MatchString(s) {
+		return true
+	}
+	// Tegnsøppel: nesten ingen bokstaver i noe som skal være en setning.
+	letters, total := 0, 0
+	for _, r := range s {
+		total++
+		if unicode.IsLetter(r) {
+			letters++
+		}
+	}
+	return total >= 5 && letters*10 < total*3
 }
