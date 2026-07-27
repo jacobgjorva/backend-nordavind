@@ -533,6 +533,8 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		return ""
 	})
 
+	narr.seed(lastUserText(full))
+
 	// Momentan kvittering: verktøyflyter melder fra i KODE før modellen har
 	// startet — vises der «Tenker»-teksten står, ikke i selve svaret.
 	if ack := flowAcks[flowKey]; ack.text != "" {

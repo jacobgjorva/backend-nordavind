@@ -89,6 +89,25 @@ func newNarrator(emit func(string), on bool, connName func(string) string) *narr
 	return &narrator{emit: emit, on: on, connName: connName}
 }
 
+// seed setter startpunktet for variantrotasjonen ut fra en tekst (typisk
+// brukerens melding). Uten dette startet turtelleren på 0 i HVER melding, så
+// det første steget ble alltid variant 0 — brukeren så samme åpningslinje hver
+// eneste gang, uansett hvor mange varianter registeret hadde. Deterministisk:
+// samme melding gir samme rotasjon, men ulike meldinger starter ulikt.
+func (n *narrator) seed(text string) {
+	if n == nil {
+		return
+	}
+	h := 0
+	for _, r := range text {
+		h = h*31 + int(r)
+	}
+	if h < 0 {
+		h = -h
+	}
+	n.turn = h % 7 // 7 er primtall: rimer ikke med variantantallene (2, 3, 4)
+}
+
 // say sender ett steg. Tomme og gjentatte steg svelges. Teksten ligger i
 // nordavind_step som før (gamle klienter er uberørt); typen er et tillegg.
 func (n *narrator) say(text, kind string) {
@@ -196,6 +215,8 @@ func (n *narrator) afterDB(a dbAttempt, raw string) {
 			"Ingen treff der. Prøver en annen vei.",
 			"Tomt. Jeg går en annen runde.",
 			"Null igjen. Ny vinkel.",
+			"Ingenting der heller. Videre.",
+			"Fortsatt blankt. Jeg prøver noe annet.",
 		), kindDB)
 		return
 	}
@@ -239,12 +260,17 @@ var narration = map[string]narrStep{
 			}
 			what := describeSQL(a.SQL)
 			if what == "" {
-				return n.pick("Spør "+who+".", "Tar en tur innom "+who+".", "Henter fra "+who+".")
+				return n.pick("Spør "+who+".", "Tar en tur innom "+who+".", "Henter fra "+who+".",
+					"Slår opp i "+who+".", "Ser i "+who+".")
 			}
 			return n.pick(
 				"Spør "+who+" om "+what+".",
 				"Ber "+who+" om "+what+".",
 				"Henter "+what+" fra "+who+".",
+				"Slår opp "+what+" i "+who+".",
+				"Går til "+who+" etter "+what+".",
+				"Ser hva "+who+" sier om "+what+".",
+				"Leter opp "+what+".",
 			)
 		},
 		slow: []string{
@@ -267,9 +293,13 @@ var narration = map[string]narrStep{
 					"Ingen treff. Databasen står ved sin sannhet: ingenting.",
 					"Tomt. Det var lite hjelpsomt.",
 					"Null rader tilbake. Jeg prøver en annen vei.",
+					"Ingenting. Basen er skuffende ordknapp i dag.",
+					"Blankt. Da spør jeg om noe annet.",
+					"Null. Jeg tar en ny vinkel.",
 				)
 			case 1:
-				return n.pick("Én rad. Kort og greit.", "Nøyaktig én rad. Konsist.", "Én rad tilbake.")
+				return n.pick("Én rad. Kort og greit.", "Nøyaktig én rad. Konsist.", "Én rad tilbake.",
+					"Ett treff. Det holder.", "Én rad, og det er svaret.")
 			}
 			if r.rows >= 1000 {
 				return n.pick(
@@ -282,6 +312,10 @@ var narration = map[string]narrStep{
 				fmt.Sprintf("%s rader tilbake. Ser på tallene.", nf(r.rows)),
 				fmt.Sprintf("%s rader. Leser dem nå.", nf(r.rows)),
 				fmt.Sprintf("Fikk %s rader. Går gjennom dem.", nf(r.rows)),
+				fmt.Sprintf("%s rader inn. Sorterer ut det viktige.", nf(r.rows)),
+				fmt.Sprintf("Der kom %s rader.", nf(r.rows)),
+				fmt.Sprintf("%s rader å jobbe med.", nf(r.rows)),
+				fmt.Sprintf("Har %s rader nå. Ser på dem.", nf(r.rows)),
 			)
 		},
 	},
@@ -289,7 +323,8 @@ var narration = map[string]narrStep{
 	"show_table": {
 		kind: kindTable,
 		before: func(n *narrator, a narrArgs) string {
-			return n.pick("Setter opp tabellen.", "Stiller opp radene.", "Rigger tabellen.")
+			return n.pick("Setter opp tabellen.", "Stiller opp radene.", "Rigger tabellen.",
+				"Ordner tabellen.", "Gjør klar oversikten.")
 		},
 	},
 
@@ -302,6 +337,9 @@ var narration = map[string]narrStep{
 					"Leter etter "+quote(q)+".",
 					"Ser hva nettet vet om "+quote(q)+".",
 					"Googler "+quote(q)+", i mangel av et bedre verb.",
+					"Slår opp "+quote(q)+".",
+					"Ute etter "+quote(q)+".",
+					"Sjekker "+quote(q)+" på nettet.",
 				)
 			}
 			return n.pick("Søker.", "Leter på nettet.")

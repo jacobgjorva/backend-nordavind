@@ -457,7 +457,11 @@ func (s *Server) runDBQuery(ctx context.Context, t *dbToolCtx, connID, query str
 		}
 		return dbAttempt{outcome: outcome, sql: query, conn: dc.conn.Name, text: msg}
 	}
-	s.log.Info("db-spørring", "connection", dc.conn.Name, "rader", len(rows))
+	// Logg SQL-en også når den lykkes: et bomskudd med gyldig syntaks ser
+	// identisk ut med et treff i loggen, og da er det umulig å se HVA den
+	// spurte om. «0 kroner» på et selskap med 3 000 rader kom denne veien.
+	s.log.Info("db-spørring", "connection", dc.conn.Name, "rader", len(rows),
+		"sql", strings.Join(strings.Fields(query), " "))
 
 	att := dbAttempt{outcome: dbOK, sql: query, conn: dc.conn.Name, cols: cols, rows: rows}
 	// Et aggregat uten treff ER tomt, selv om det kommer tilbake som én rad
