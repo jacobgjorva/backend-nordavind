@@ -1,6 +1,27 @@
 # Overlevering: assistentkvalitet (oppdatert 2026-07-28, 01:00)
 
-## TO ÅPNE KLASSER — start her
+## BEGGE KLASSENE LUKKET (2026-07-28, 01:45, deployet)
+
+Verktøysøl/degenerering: rotårsaken var MODELLEN selv (mistral-medium
+degenererer sporadisk i lange verktøyrunder — samme adferd som felte
+small-tieret). Koden fanger det nå på alle tre utslippsstedene: formsjekk
+(isJunkAnswer, sse.go: lekket verktøykall-JSON via jsonFragRe + bokstavandel)
+i setningsgaten (runde 0-streaming), i svar-switchen (bufret), og i backstopen
+— som nå er BUFRET i stedet for strømmet, med form- og kildeport før emit.
+Målt: 10/10 kjøringer uten lekkasje (før: ~1 av 3 lakk).
+
+Kapitulasjonsvakten fyrer nå: sperren var `round < roundCap` — kapitulasjonen
+kommer alltid i SISTE runde, så vakten var permanent død (0/15). Nå får den
+egen runde (roundCap = round+1), som benektelsesporten.
+
+GJENSTÅENDE MODELLVARIANS (åpen beslutning for Jacob): 6/10 kjøringer gjør
+hybrid-analysen fullt; resten kapitulerer høflig («trenger daglige priser»)
+tross vakt, eller har et kosmetisk søppel-hode («przemek, jeg har …»).
+Verktøy, regler og porter er på plass — dette er mid-modellens tak. Mulig
+lever: Model:"heavy" for analyseflyter (kvalitet over tokens-prinsippet),
+koster mer per datasporsmål. Ikke gjort uten Jacobs ja.
+
+## Historikk: to åpne klasser
 
 1) RÅ VERKTØYKALL-FRAGMENTER LEKKER SOM SVAR. Målt i olje-suiten (5 kjøringer,
 /tmp/olje.json): kjøring 2 ga «…………」», kjøring 3 ga «ermannquery": "Brent
