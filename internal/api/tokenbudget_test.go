@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jacobgjorva/backend-nordavind/internal/config"
 	"github.com/jacobgjorva/backend-nordavind/internal/intent"
 	"github.com/jacobgjorva/backend-nordavind/internal/router"
 )
@@ -159,21 +158,6 @@ func TestTrimToolHistory(t *testing.T) {
 	}
 }
 
-// LIGHT_TIER-bryteren: av → lette flyter kjører mid som før; på → LightModel.
-func TestFlowModelLightTier(t *testing.T) {
-	off := &Server{cfg: config.Config{LightTier: false}}
-	on := &Server{cfg: config.Config{LightTier: true}}
-	if got := off.flowModel("light"); got != router.MidModel {
-		t.Errorf("LIGHT_TIER=off: light ga %q, skal være MidModel", got)
-	}
-	if got := on.flowModel("light"); got != router.LightModel {
-		t.Errorf("LIGHT_TIER=on: light ga %q, skal være LightModel", got)
-	}
-	if got := on.flowModel("mid"); got != router.MidModel {
-		t.Errorf("mid skal aldri påvirkes av bryteren, ga %q", got)
-	}
-}
-
 // web_fact skal ALLTID søke: uten tvang svarte modellen fra hukommelsen og
 // ble stanset av kildekontrollen etterpå — brukeren satt igjen med en halv
 // setning («Årets ord var " — nei, vent: …»).
@@ -190,5 +174,18 @@ func TestWebFactForcesSearch(t *testing.T) {
 	}
 	if !hasSearch {
 		t.Fatal("web_fact har ikke web_search — tvangen i agent.go ville pekt på et verktøy som ikke finnes")
+	}
+}
+
+// mistral-medium er default for alt: light-tieret er avviklet.
+func TestFlowModelDefaultsToMid(t *testing.T) {
+	s := &Server{}
+	for _, lvl := range []string{"", "mid", "light", "ukjent"} {
+		if got := s.flowModel(lvl); got != router.MidModel {
+			t.Errorf("flowModel(%q) = %q, vil MidModel", lvl, got)
+		}
+	}
+	if s.flowModel("heavy") != router.HeavyModel || s.flowModel("top") != router.TopModel {
+		t.Error("heavy/top skal fortsatt rute til sine modeller")
 	}
 }
