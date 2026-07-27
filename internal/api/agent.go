@@ -418,6 +418,15 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			"eller databasefeil er UTDATERTE — ignorer dem, kjør spørringen og svar med ferske tall.")
 	}
 
+	// Vanlig chat: ingen av spesialmodusene. Kun her skal arbeidsnarrasjonen
+	// (modellens egen prosa mellom verktøykallene) slippes ut — agent-oppsett,
+	// agent-redigering, connector, widget og presentasjon er rene utfører-flyter
+	// der promptene forbyr prat, og der prosa ville forstyrret UI-et.
+	plainChat := !setup && !connectorMode && !planning && editID == "" &&
+		widgetSlug == "" && deckSlug == "" &&
+		flowKey != "create_widget" && flowKey != "edit_widget" &&
+		flowKey != "create_presentation" && flowKey != "export_excel"
+
 	// Grundig modus: vanlig chat (ikke oppsett/widget/agent-redigering) der
 	// brukeren ber om grundig/uforstyrret dybdearbeid → ekspert-prompt og mange
 	// runder før den konkluderer i chatten.
@@ -439,6 +448,18 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			flusher.Flush()
 		}
 	}
+
+	// Arbeidsnarrasjonen (narrate.go): deterministiske fremdriftssteg i kode,
+	// null tokens. Kun vanlig chat — utfører-flytene skal være tause.
+	narr := newNarrator(emit, plainChat, func(id string) string {
+		if dbCtx == nil {
+			return ""
+		}
+		if dc, ok := dbCtx.conns[id]; ok {
+			return dc.conn.Name
+		}
+		return ""
+	})
 
 	// Momentan kvittering: verktøyflyter melder fra i KODE før modellen har
 	// startet — vises der «Tenker»-teksten står, ikke i selve svaret.
@@ -548,6 +569,22 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		resp.Body.Close()
 		promptTokens += usage.PromptTokens
 		completionTokens += usage.CompletionTokens
+
+		// Måling: skriver modellen egen prosa i en runde som ender i verktøykall?
+		// Svaret er i praksis nei (promptene forbyr det med vilje), og derfor
+		// lages fremdriftsteksten deterministisk i narrate.go. Loggen står igjen
+		// så vi oppdager det hvis en modell begynner å snakke likevel.
+		if len(calls) > 0 {
+			if prose := strings.TrimSpace(content); prose != "" {
+				var names []string
+				for _, c := range calls {
+					names = append(names, c.Name)
+				}
+				s.log.Info("modell-prosa i verktøyrunde", "runde", round,
+					"tegn", len([]rune(prose)), "verktøy", strings.Join(names, ","))
+			}
+		}
+
 		if len(calls) == 0 {
 			trimmed := strings.TrimSpace(content)
 			if !searchNudged && searches == 1 && round < roundCap && hasWebTool(full) &&
@@ -823,11 +860,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			var result string
 			switch c.Name {
 			case "query_database":
-				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Spør databasen"})
-				emit("data: " + string(meta))
-				stopWait := emitAfter(emit, 4*time.Second, "Venter på svar fra databasen")
+				narr.before(c.Name, c.Args.String())
+				stopWait := narr.slow(c.Name)
 				result = s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL)
 				stopWait()
+				narr.after(c.Name, result)
 				dbAttempted = true
 				if strings.HasPrefix(strings.TrimSpace(result), "{") {
 					dbSucceeded = true
@@ -858,6 +895,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					}
 				}
 			case "show_table":
+				narr.before(c.Name, c.Args.String())
 				switch {
 				case tableShown:
 					result = "Tabellen er allerede vist til brukeren. Svar med maks én kort setning."
@@ -869,24 +907,19 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					result = "Ingen data å vise ennå — kjør query_database først, så show_table."
 				}
 			case "fetch_url":
-				step := "Leser en side"
-				if u := strings.TrimSpace(args.URL); u != "" {
-					step = "Leser: " + u
-				}
-				meta, _ := json.Marshal(map[string]any{"nordavind_step": step})
-				emit("data: " + string(meta))
+				narr.before(c.Name, c.Args.String())
+				stopWait := narr.slow(c.Name)
 				result = s.runFetchURL(ctx, args.URL)
+				stopWait()
+				narr.after(c.Name, result)
 			case "create_agent", "update_agent", "delete_agent", "list_agents":
 				var aa agentToolArgs
 				_ = json.Unmarshal([]byte(c.Args.String()), &aa)
+				narr.before(c.Name, c.Args.String())
 				switch c.Name {
 				case "create_agent":
-					meta, _ := json.Marshal(map[string]any{"nordavind_step": "Oppretter agent"})
-					emit("data: " + string(meta))
 					result = s.runCreateAgent(ctx, aa)
 				case "update_agent":
-					meta, _ := json.Marshal(map[string]any{"nordavind_step": "Oppdaterer agent"})
-					emit("data: " + string(meta))
 					result = s.runUpdateAgent(ctx, aa)
 				case "delete_agent":
 					result = s.runDeleteAgent(ctx, aa)
@@ -894,16 +927,17 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					result = s.runListAgents(ctx)
 				}
 			case "mail_search":
-				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Søker i e-posten"})
-				emit("data: " + string(meta))
+				narr.before(c.Name, c.Args.String())
+				stopWait := narr.slow(c.Name)
 				if uid, ok := s.m365Connected(ctx); ok {
 					result = s.runMailSearch(ctx, uid, args.Query)
 				} else {
 					result = "Microsoft 365 er ikke koblet til."
 				}
+				stopWait()
+				narr.after(c.Name, result)
 			case "mail_read":
-				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Leser e-posten"})
-				emit("data: " + string(meta))
+				narr.before(c.Name, c.Args.String())
 				var ma struct {
 					MailID string `json:"mail_id"`
 				}
@@ -913,50 +947,51 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				} else {
 					result = "Microsoft 365 er ikke koblet til."
 				}
+				narr.after(c.Name, result)
 			case "m365_search":
 				var ma struct {
 					Query string `json:"query"`
 				}
 				_ = json.Unmarshal([]byte(c.Args.String()), &ma)
-				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Søker i OneDrive: " + ma.Query})
-				emit("data: " + string(meta))
+				narr.before(c.Name, c.Args.String())
+				stopWait := narr.slow(c.Name)
 				if uid, ok := s.m365Connected(ctx); ok {
 					result = s.runM365Search(ctx, uid, ma.Query)
 				} else {
 					result = "Microsoft 365 er ikke koblet til."
 				}
+				stopWait()
+				narr.after(c.Name, result)
 			case "m365_read":
 				var ma struct {
 					FileID string `json:"file_id"`
 					Name   string `json:"name"`
 				}
 				_ = json.Unmarshal([]byte(c.Args.String()), &ma)
-				step := "Leser fil"
-				if ma.Name != "" {
-					step = "Leser: " + ma.Name
-				}
-				meta, _ := json.Marshal(map[string]any{"nordavind_step": step})
-				emit("data: " + string(meta))
+				narr.before(c.Name, c.Args.String())
+				stopWait := narr.slow(c.Name)
 				if uid, ok := s.m365Connected(ctx); ok {
 					result = s.runM365Read(ctx, uid, ma.FileID, ma.Name)
 				} else {
 					result = "Microsoft 365 er ikke koblet til."
 				}
+				stopWait()
+				narr.after(c.Name, result)
 			case "connect_database":
-				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Tester tilkoblingen"})
-				emit("data: " + string(meta))
+				narr.before(c.Name, c.Args.String())
+				stopWait := narr.slow(c.Name)
 				result = s.runConnectDatabase(ctx, c.Args.String(), emit)
+				stopWait()
+				narr.after(c.Name, result)
 			case "connect_m365":
 				result = s.runConnectM365(ctx, emit)
 			case "check_m365":
 				result = s.runCheckM365(ctx)
 			case "save_m365_app":
-				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Lagrer app-registreringen"})
-				emit("data: " + string(meta))
+				narr.before(c.Name, c.Args.String())
 				result = s.runSaveM365App(ctx, c.Args.String())
 			case "setup_routine":
-				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Setter opp rutinen"})
-				emit("data: " + string(meta))
+				narr.before(c.Name, c.Args.String())
 				result = s.runSetupRoutine(ctx, editID, c.Args.String())
 			case "set_widget":
 				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Bygger widget"})
@@ -986,16 +1021,14 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				dm, _ := json.Marshal(map[string]any{"nordavind_deck_updated": deckSlug})
 				emit("data: " + string(dm))
 			default:
-				if q := strings.TrimSpace(args.Query); q != "" {
-					// Fremdriftssteg til tidslinjen i frontend.
-					meta, _ := json.Marshal(map[string]any{"nordavind_step": "Søker: " + q})
-					emit("data: " + string(meta))
-				}
+				narr.before("web_search", c.Args.String())
 				searches++
 				var sources []sourceRef
-				stopWait := emitAfter(emit, 4*time.Second, "Søker dypere")
+				stopWait := narr.slow("web_search")
 				result, sources = s.runWebSearch(ctx, args.Query)
 				stopWait()
+				// Kildeantallet er det ekte funnet her, ikke tekstlengden.
+				narr.afterHits("web_search", len(sources))
 				if len(sources) > 0 {
 					// Kildene sendes som metadata til frontend — de skal ikke stå i svaret.
 					meta, _ := json.Marshal(map[string]any{"nordavind_sources": sources})
