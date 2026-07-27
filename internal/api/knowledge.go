@@ -379,6 +379,7 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 		rrf[id] += 1.0 / (rrfK + float64(rank+1))
 	}
 	if len(rrf) == 0 {
+		s.log.Info("kunnskap hentet", "vektor", len(vec), "nøkkelord", len(fts), "injisert", 0)
 		return ""
 	}
 
@@ -432,6 +433,10 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 		}
 		write(id, "(relatert) ")
 	}
+	// Driftsspor: uten dette er det umulig å se om et svar manglet kunnskap
+	// fordi ingenting ble funnet, eller fordi modellen ikke brukte den.
+	s.log.Info("kunnskap hentet", "vektor", len(vec), "nøkkelord", len(fts),
+		"naboer", len(neighbors), "injisert", n)
 	return b.String()
 }
 
