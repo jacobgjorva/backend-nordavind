@@ -368,7 +368,13 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					// da skal svaret komme fra nettet, ikke fra hukommelsen.
 					// Uten tvang svarte modellen i blinde og ble stanset av
 					// kildekontrollen etterpå, med et halvt svar som resultat.
-					if flowKey == "web_fact" {
+					//
+					// MEN: bar tvang gjør assistenten dum. «Så da er det ikke
+					// annonsert noe for 2026 enda?» er en SLUTNING fra kilder
+					// som alt står i tråden — da skal den få resonnere, ikke
+					// søke i blinde og rapportere tomhet. Tilstanden avgjør:
+					// hadde forrige svar kilder, er tvangen unødvendig.
+					if flowKey == "web_fact" && !s.answerHasSources(ctx, chatID) {
 						full["tool_choice"] = map[string]any{
 							"type":     "function",
 							"function": map[string]any{"name": "web_search"},
@@ -1278,6 +1284,21 @@ func (s *Server) runFetchURL(ctx context.Context, url string) string {
 		return "Fant ikke lesbart innhold på siden."
 	}
 	return text
+}
+
+// answerHasSources: bygde forrige assistentsvar i samtalen på websøk? Da
+// ligger kildene i tråden og oppfølgingsspørsmål trenger ikke tvunget søk.
+// Ukjent chat (agenter, rutiner, uinnlogget) → false, altså uendret tvang.
+func (s *Server) answerHasSources(ctx context.Context, chatID string) bool {
+	if chatID == "" {
+		return false
+	}
+	user, ok := ctx.Value(userKey).(store.User)
+	if !ok {
+		return false
+	}
+	had, err := s.store.LastAnswerHadSources(chatID, user.ID)
+	return err == nil && had
 }
 
 // runWebSearch utfører søk + sidehenting og formaterer kildekontekst.

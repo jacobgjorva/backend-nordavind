@@ -246,6 +246,24 @@ func (s *Store) ChatMessages(chatID, userID string) ([]ChatMessage, error) {
 	return out, rows.Err()
 }
 
+// LastAnswerHadSources sier om det siste assistentsvaret i samtalen bygde på
+// websøk. Da ligger kildene alt i tråden, og et oppfølgingsspørsmål kan
+// besvares ved å resonnere over dem i stedet for å søke på nytt.
+func (s *Store) LastAnswerHadSources(chatID, userID string) (bool, error) {
+	if err := s.chatOwned(chatID, userID); err != nil {
+		return false, err
+	}
+	var sources string
+	err := s.db.QueryRow(
+		`SELECT sources FROM chat_messages WHERE chat_id = ? AND role = 'assistant'
+		 ORDER BY id DESC LIMIT 1`, chatID,
+	).Scan(&sources)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return strings.TrimSpace(sources) != "" && sources != "[]", err
+}
+
 // ChatSummary henter det rullerende samtalesammendraget (tomt om intet).
 func (s *Store) ChatSummary(chatID, userID string) (string, error) {
 	if err := s.chatOwned(chatID, userID); err != nil {
