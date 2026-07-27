@@ -31,3 +31,31 @@ func TestGroundingCatchesFabricatedLinks(t *testing.T) {
 		t.Fatalf("diktet lenke skulle blokkeres hardt, fikk %v", off)
 	}
 }
+
+// Databaseskjemaet står i query_database-BESKRIVELSEN, ikke i et
+// verktøyresultat. Uten den i grunnlaget ble «hvilken data har jeg tilgang
+// på?» dømt som dikting selv om modellen siterte skjemaet korrekt.
+func TestGroundingBasisIncludesToolDescriptions(t *testing.T) {
+	full := map[string]any{
+		"messages": []any{
+			map[string]any{"role": "user", "content": "Hvilken data har jeg tilgang på?"},
+		},
+		"tools": []any{
+			map[string]any{"type": "function", "function": map[string]any{
+				"name": "query_database",
+				"description": "Kjør SQL mot bedriftens database.\n\n" +
+					"Database \"Kunder\": orders(id, customer_name, total_value), v_Sales(month, sum)",
+			}},
+		},
+	}
+	basis := groundingBasis(full, nil)
+
+	answer := "Du har tilgang til tabellen orders og visningen v_Sales i databasen Kunder."
+	if off := groundingOffenders(answer, basis); len(off) > 0 {
+		t.Fatalf("skjema-navn fra verktøybeskrivelsen ble flagget som dikting: %v", off)
+	}
+	// Et tabellnavn som IKKE finnes skal fortsatt fanges.
+	if off := groundingOffenders("Du har tilgang til Financial_Budget_2099.", basis); len(off) == 0 {
+		t.Fatal("oppdiktet tabellnavn slapp gjennom")
+	}
+}
