@@ -292,3 +292,29 @@ func TestUnclearFlowHasNoTools(t *testing.T) {
 		t.Fatalf("FlowFor mistet uklart, fikk %s", k)
 	}
 }
+
+// Degradert-flagget: en avgjørelse som falt fail-open fordi et KALL feilet
+// må kunne skilles fra en ekte fri chat-vurdering. Uten skillet måler
+// eval-porten nettverkstreghet — identisk kode svingte 115-119 av 131.
+func TestDegradedMarksFailOpen(t *testing.T) {
+	em := registryStub()
+	e := buildEngine(t, em, &stubJudge{pick: FreeChatKey})
+	// Feilen settes ETTER oppstart: registeret embeddes ved bygging.
+	em.err = errors.New("embed nede")
+	d := e.Resolve(context.Background(), "en helt vanlig melding", true)
+	if !d.Degraded {
+		t.Fatal("embedding-feil ga ikke Degraded")
+	}
+	if d.Method != MethodNone {
+		t.Fatalf("ville ha none, fikk %s", d.Method)
+	}
+
+	// Ekte fri chat-vurdering skal IKKE være degradert.
+	em2 := registryStub()
+	em2.vecs["si noe fint"] = []float32{0.4, 0.4, 0.4}
+	e2 := buildEngine(t, em2, &stubJudge{pick: FreeChatKey})
+	d2 := e2.Resolve(context.Background(), "si noe fint", true)
+	if d2.Degraded {
+		t.Fatal("ekte fri chat-valg ble merket degradert")
+	}
+}

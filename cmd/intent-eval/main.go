@@ -86,6 +86,11 @@ func main() {
 	}
 
 	var hits int
+	// Degraderte avgjørelser (embedding/dommer feilet — typisk timeout) sier
+	// ingenting om ruting. De holdes UTENFOR accuracy, ellers måler porten
+	// nettverket: identisk kode ga 115-119 av 131 og krysset 90 %-grensen
+	// begge veier. Rapporteres for seg — de skal være få.
+	var degraded int
 	var lat []time.Duration
 	methods := map[string]int{}
 	var misses []string
@@ -102,6 +107,13 @@ func main() {
 				return ""
 			}
 			return k
+		}
+		if d.Degraded {
+			degraded++
+			if *verbose {
+				fmt.Printf("SKIP  degradert (kall feilet)          «%s»\n", c.Text)
+			}
+			continue
 		}
 		ok := norm(d.Key) == norm(c.Want)
 		if c.Want == intent.UnclearKey {
@@ -124,7 +136,12 @@ func main() {
 	}
 
 	sort.Slice(lat, func(i, j int) bool { return lat[i] < lat[j] })
-	acc := float64(hits) / float64(len(cases))
+	scored := len(cases) - degraded
+	if scored == 0 {
+		fmt.Fprintln(os.Stderr, "alle avgjørelser degraderte — upstream nede?")
+		os.Exit(2)
+	}
+	acc := float64(hits) / float64(scored)
 	p50 := lat[len(lat)/2]
 	p95 := lat[int(float64(len(lat))*0.95)-1]
 
@@ -137,8 +154,12 @@ func main() {
 	for _, m := range mkeys {
 		mparts = append(mparts, fmt.Sprintf("%s=%d", m, methods[m]))
 	}
-	fmt.Printf("Accuracy: %d/%d (%.0f %%)   metoder: %s\n",
-		hits, len(cases), 100*acc, strings.Join(mparts, " "))
+	// Én desimal: «90 %» ved 89,9 % fikk rapporten til å motsi porten.
+	fmt.Printf("Accuracy: %d/%d (%.1f %%)   metoder: %s\n",
+		hits, scored, 100*acc, strings.Join(mparts, " "))
+	if degraded > 0 {
+		fmt.Printf("Degradert: %d av %d holdt utenfor (embedding/dommer feilet)\n", degraded, len(cases))
+	}
 	fmt.Printf("Uklart:   %d/%d truffet, %d falskt utløst\n", unclearHit, unclearWant, unclearFalse)
 	fmt.Printf("Latens:   p50 %dms, p95 %dms\n", p50.Milliseconds(), p95.Milliseconds())
 	if len(misses) > 0 {

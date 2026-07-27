@@ -76,6 +76,13 @@ type Decision struct {
 	Candidates []Candidate `json:"candidates"`
 	// Elapsed er total tid brukt i motoren (embed + evt. dommer).
 	Elapsed time.Duration `json:"-"`
+	// Degraded er sann når avgjørelsen falt fail-open fordi et KALL feilet
+	// (embedding eller dommer — typisk timeout), ikke fordi meldingen ble
+	// vurdert til fri chat. Skillet er avgjørende for målingen: uten det
+	// telles nettverkstreghet som feilruting, og eval-tallet svinger med
+	// nettet i stedet for med kvaliteten (målt: 115-119 av 131 på identisk
+	// kode, altså tvers gjennom 90 %-porten).
+	Degraded bool `json:"degraded,omitempty"`
 }
 
 // entry er én embeddet tekst (beskrivelse eller eksempel) for en intent.
@@ -171,6 +178,7 @@ func (e *Engine) Resolve(ctx context.Context, message string, isAdmin bool) Deci
 		vecs, err = e.embedder.Embed(ectx2, []string{msg})
 		if err != nil || len(vecs) != 1 {
 			e.log.Warn("intent: embedding feilet, fail-open til fri chat", "err", err)
+			none.Degraded = true
 			none.Elapsed = time.Since(start)
 			return none
 		}
@@ -250,9 +258,11 @@ func (e *Engine) judgeDecision(ctx context.Context, msg string, isAdmin bool, ca
 		// Dommeren feilet eller svarte utenfor enum: fall tilbake til beste
 		// kandidat hvis den er godt over gulvet, ellers fri chat.
 		if cands[0].Score >= directScore {
-			return Decision{Key: cands[0].Key, Method: MethodDirect, Candidates: cands, Elapsed: time.Since(start)}
+			return Decision{Key: cands[0].Key, Method: MethodDirect, Candidates: cands,
+				Degraded: true, Elapsed: time.Since(start)}
 		}
 		e.log.Warn("intent: dommer feilet, fail-open til fri chat", "err", err)
+		none.Degraded = true
 		none.Candidates = cands
 		none.Elapsed = time.Since(start)
 		return none
