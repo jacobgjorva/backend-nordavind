@@ -421,7 +421,11 @@ func honestCut(shown string) string {
 	if strings.ContainsRune(".!?…", []rune(t)[len([]rune(t))-1]) {
 		return " Det jeg skulle til å legge til hadde jeg ikke grunnlag for, så det dropper jeg."
 	}
-	return " — nei, vent: det har jeg faktisk ikke grunnlag for å si."
+	// Midt i en setning: det viste fragmentet kan ikke tas tilbake (det er
+	// alt streamet), så halen må gjøre linja forståelig på egen hånd — «Årets
+	// ord var " — nei, vent: …» leste som en feil, ikke som et ærlig svar.
+	return "… – her stopper jeg: resten hadde jeg ikke dekning for i kildene. " +
+		"Se bort fra den halve setningen over."
 }
 
 // hasNameOffender: minst ett avvik er et egennavn eller en lenke (ikke tall).

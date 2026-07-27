@@ -364,6 +364,16 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			if tools, ok := s.flowTools(ctx, flowKey, dbCtx); ok {
 				if len(tools) > 0 {
 					full["tools"] = tools
+					// web_fact ER definisjonen «spørsmål om verden utenfor» —
+					// da skal svaret komme fra nettet, ikke fra hukommelsen.
+					// Uten tvang svarte modellen i blinde og ble stanset av
+					// kildekontrollen etterpå, med et halvt svar som resultat.
+					if flowKey == "web_fact" {
+						full["tool_choice"] = map[string]any{
+							"type":     "function",
+							"function": map[string]any{"name": "web_search"},
+						}
+					}
 				} else {
 					delete(full, "tools")
 				}
