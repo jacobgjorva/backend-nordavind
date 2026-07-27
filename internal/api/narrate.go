@@ -188,6 +188,17 @@ func (n *narrator) afterDB(a dbAttempt, raw string) {
 		), kindDB)
 		return
 	}
+	// Tomt er tomt, også når basen svarte med én rad som inneholder 0. Uten
+	// dette meldte narrasjonen «Én rad. Kort og greit.» om et oppslag som
+	// ikke fant noe.
+	if a.outcome == dbEmpty && a.note == "" {
+		n.say(n.pick(
+			"Ingen treff der. Prøver en annen vei.",
+			"Tomt. Jeg går en annen runde.",
+			"Null igjen. Ny vinkel.",
+		), kindDB)
+		return
+	}
 	// Fant koden en nærmeste verdi, er DET funnet — ikke at raden manglet.
 	if a.note != "" && a.outcome == dbEmpty {
 		n.say(n.pick(
