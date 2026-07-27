@@ -123,3 +123,18 @@ func TestAnyOKAndLastAttempt(t *testing.T) {
 		t.Error("tom liste skal gi nullverdien")
 	}
 }
+
+func TestZeroAggregateDetectsMiss(t *testing.T) {
+	if !zeroAggregate([]string{"total"}, [][]string{{"0"}}) {
+		t.Error("COUNT som ga 0 skal regnes som bom, ikke som svar")
+	}
+	if !zeroAggregate([]string{"sum", "n"}, [][]string{{"0.00", "0"}}) {
+		t.Error("aggregat med bare nuller skal regnes som bom")
+	}
+	if zeroAggregate([]string{"total"}, [][]string{{"1473032.49"}}) {
+		t.Error("ekte tall skal ikke regnes som bom")
+	}
+	if zeroAggregate([]string{"a"}, [][]string{{"0"}, {"0"}}) {
+		t.Error("flere rader er ikke et enkelt-aggregat")
+	}
+}

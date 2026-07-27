@@ -4,10 +4,10 @@ import "testing"
 
 func TestParseLooseNumber(t *testing.T) {
 	cases := map[string]float64{
-		"6594.90":   6594.90,
-		"6 595":     6595,
+		"6594.90":    6594.90,
+		"6 595":      6595,
 		"2835196,20": 2835196.20,
-		"12":        12,
+		"12":         12,
 	}
 	for in, want := range cases {
 		got, ok := parseLooseNumber(in)

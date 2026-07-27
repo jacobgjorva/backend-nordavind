@@ -29,6 +29,9 @@ type dbConn struct {
 	// kolonnene når en spørring bommer, i stedet for bare «does not exist».
 	// Uten dette gjettet den samme feil om igjen (målt tre ganger på rad).
 	columns map[string][]string
+	// textColumns: tabellnavn → kolonner det gir mening å lete etter navn i.
+	// Grunnlaget for å sjekke «finnes ikke»-svar før de slippes ut.
+	textColumns map[string][]string
 }
 
 // dbToolContext bygger query_database-verktøyet for innlogget bruker.
@@ -165,6 +168,7 @@ func (s *Server) buildDBToolFocused(tenantID, userID, onlyConnID, focus string) 
 		// Kolonnene per tabell for denne tilkoblingen — grunnlaget for presise
 		// feilmeldinger når modellen bommer på et kolonnenavn.
 		colIndex := map[string][]string{}
+		textIndex := map[string][]string{}
 		if onlyConnID != "" && c.ID != onlyConnID {
 			continue
 		}
@@ -240,7 +244,11 @@ func (s *Server) buildDBToolFocused(tenantID, userID, onlyConnID, focus string) 
 				cols = append(cols, s)
 			}
 			for _, col := range tb.ColumnList {
-				colIndex[strings.ToLower(tb.Name)] = append(colIndex[strings.ToLower(tb.Name)], col.Name)
+				lower := strings.ToLower(tb.Name)
+				colIndex[lower] = append(colIndex[lower], col.Name)
+				if shortType(col.Type) == "text" {
+					textIndex[lower] = append(textIndex[lower], col.Name)
+				}
 			}
 			fmt.Fprintf(&schema, "%s(%s)", tb.Name, strings.Join(cols, ", "))
 			if n := rowHint(tb.Rows); n != "" {
@@ -283,7 +291,7 @@ func (s *Server) buildDBToolFocused(tenantID, userID, onlyConnID, focus string) 
 			}
 			allowed = kept
 		}
-		t.conns[c.ID] = dbConn{conn: c, creds: creds, allowed: allowed, views: viewMap, columns: colIndex}
+		t.conns[c.ID] = dbConn{conn: c, creds: creds, allowed: allowed, views: viewMap, columns: colIndex, textColumns: textIndex}
 	}
 	if len(t.conns) == 0 {
 		s.log.Warn("db-verktøy: ingen brukbare koblinger, modellen får ingen database", "tenant", tenantID, "user", userID, "onlyConnID", onlyConnID)
@@ -458,7 +466,7 @@ func (s *Server) runDBQuery(ctx context.Context, t *dbToolCtx, connID, query str
 
 	// Strategi: bommet et fritekstfilter, slå opp nærmeste verdi FØR modellen
 	// rekker å konkludere med at noe «ikke finnes». Ett lett prefikskall.
-	if att.outcome == dbEmpty {
+	if att.outcome == dbEmpty || zeroAggregate(cols, rows) {
 		if col, needle, hits := s.nearestValues(ctx, db, dc, query); len(hits) > 0 {
 			att.note = fmt.Sprintf("Ingen rader for %q i %s. Nærmeste verdier som FINNES: %s. "+
 				"Kjør spørringen på nytt med den riktige, og fortell brukeren hvilken du brukte.",

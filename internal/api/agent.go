@@ -553,6 +553,8 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// kvalitetsporten: har vi noe håndfast, eller skylder vi brukeren en
 	// ærlig redegjørelse? (dbstrategy.go)
 	var attempts []dbAttempt
+	// Benektelsesporten kjøres høyst én gang per tur.
+	denialChecked := false
 	// Kode-håndhevet søkeinnsats: «fant ikke» etter bare ett søk godtas aldri —
 	// modellen sendes tilbake for flere vinkler (én gang).
 	searchNudged := false
@@ -668,6 +670,28 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				emit("data: " + string(step))
 				continue
 			}
+			// Benektelsesporten: nekter svaret at noe finnes, skal vi ha lett
+			// etter det først. Modellen henter gjerne topp-N, ser ikke navnet
+			// i lista og konkluderer «finnes ikke» — uten at én eneste
+			// spørring lette etter navnet. Ett oppslag, og bare når svaret
+			// faktisk er avvisende. (dbstrategy.go)
+			// Porten får sin EGEN runde: modellen har som regel brukt opp
+			// budsjettet nettopp fordi den lette forgjeves, og da ville
+			// «round < roundCap» stengt den ute akkurat når den trengs.
+			if !denialChecked && dbCtx != nil && trimmed != "" {
+				denialChecked = true
+				if nudge := s.checkDenial(ctx, dbCtx, lastUserText(full), trimmed, attempts); nudge != "" {
+					s.log.Info("benektelsesport: navn funnet likevel")
+					roundCap = round + 1
+					narr.say("Vent, det navnet finnes nesten helt sikkert. Ser en gang til.", kindDB)
+					msgs, _ := full["messages"].([]any)
+					full["messages"] = append(msgs,
+						map[string]any{"role": "assistant", "content": trimmed},
+						map[string]any{"role": "user", "content": nudge})
+					continue
+				}
+			}
+
 			// Kvalitetsporten: databasen ble forsøkt, men turen ga aldri én
 			// eneste rad. Da finnes det ingen tall å gjengi, og modellens
 			// tekst kan være fabrikkert. I stedet for den gamle faste

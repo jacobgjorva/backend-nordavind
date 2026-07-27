@@ -463,3 +463,174 @@ func hasColumn(dc dbConn, table, col string) bool {
 	}
 	return false
 }
+
+// --- Strategi 4: sjekk «finnes ikke» før det slippes ut ---------------------
+
+// deniedRe fanger svar der assistenten avviser at noe finnes. Målt tilfelle:
+// brukeren skrev «Racamca AB», basen har «Racamaca AB», og svaret ble
+// «Racamca AB finnes ikke i databasen» — uten at noen spørring noen gang lette
+// etter navnet. Modellen hentet topp-N, så det ikke i lista, og konkluderte.
+var deniedRe = regexp.MustCompile(`(?i)(finnes ikke|har ikke (?:registrert|forekommet|noen)|ingen (?:treff|registrerte|ordre|kjøp)|ikke funnet|eksisterer ikke|ikke registrert)`)
+
+// properNouns plukker ut navnekandidater fra brukerens melding: ord med stor
+// forbokstav som ikke står først i setningen, satt sammen til flerordsnavn.
+// Bevisst enkel — falske kandidater koster bare et oppslag som ikke gir treff.
+func properNouns(text string) []string {
+	words := strings.Fields(text)
+	var out []string
+	var cur []string
+	flush := func() {
+		if len(cur) > 0 {
+			out = append(out, strings.Join(cur, " "))
+			cur = nil
+		}
+	}
+	for i, w := range words {
+		clean := strings.Trim(w, ".,?!:;\"'()")
+		if clean == "" {
+			flush()
+			continue
+		}
+		r := []rune(clean)
+		isUpper := r[0] == []rune(strings.ToUpper(string(r[0])))[0] &&
+			r[0] != []rune(strings.ToLower(string(r[0])))[0]
+		// Første ord i meldingen er stort uansett — ikke en navnekandidat i seg selv.
+		if isUpper && i > 0 && len(r) > 1 {
+			cur = append(cur, clean)
+			continue
+		}
+		flush()
+	}
+	flush()
+	// Selskapsformer er sterke signaler; enkeltord under fire tegn er støy.
+	var keep []string
+	for _, n := range out {
+		if len([]rune(n)) >= 4 {
+			keep = append(keep, n)
+		}
+	}
+	return keep
+}
+
+// lookupNoun leter etter et navn på tvers av tekstkolonnene og gir nærmeste
+// faktiske verdier. Ett prefikskall per kolonne, og bare på tabeller modellen
+// allerede har tilgang til.
+func (s *Server) lookupNoun(ctx context.Context, t *dbToolCtx, noun string) (string, []string) {
+	if t == nil || len([]rune(noun)) < 4 {
+		return "", nil
+	}
+	word := longestWord(noun)
+	if len([]rune(word)) < 4 {
+		return "", nil
+	}
+	prefix := strings.ToLower(string([]rune(word)[:4]))
+
+	for _, dc := range t.conns {
+		db, err := connector.Open(ctx, dc.creds)
+		if err != nil {
+			continue
+		}
+		for table, cols := range dc.textColumns {
+			if !tableAllowed(dc, table) || !safeIdent(table) {
+				continue
+			}
+			for _, col := range cols {
+				if !safeIdent(col) {
+					continue
+				}
+				q := fmt.Sprintf(
+					`SELECT DISTINCT %s FROM %s WHERE lower(%s) LIKE '%s' AND %s IS NOT NULL`,
+					col, table, col, prefix+"%", col)
+				_, rows, err := connector.SafeQueryViewsN(ctx, db, dc.creds.Driver, q, dc.allowed, dc.views, 40)
+				if err != nil || len(rows) == 0 {
+					continue
+				}
+				var cands []string
+				for _, r := range rows {
+					if len(r) > 0 && strings.TrimSpace(r[0]) != "" {
+						cands = append(cands, r[0])
+					}
+				}
+				if hits := rankByCloseness(noun, cands, 3); len(hits) > 0 {
+					db.Close()
+					return table + "." + col, hits
+				}
+			}
+		}
+		db.Close()
+	}
+	return "", nil
+}
+
+// checkDenial er kvalitetsporten for negative svar: nekter assistenten at noe
+// finnes, skal den ha lett etter det først. Returnerer en beskjed modellen
+// får én runde til på, eller tom streng når svaret står seg.
+func (s *Server) checkDenial(ctx context.Context, t *dbToolCtx, userText, answer string, attempts []dbAttempt) string {
+	if t == nil {
+		return ""
+	}
+	// Utløseren er IKKE hvordan svaret er formulert. «finnes ikke», «har ikke
+	// foretatt noen kjøp», «forekommer ikke» — modellen finner stadig nye
+	// vendinger, og et regex på dem bommet i annenhver kjøring. Det som
+	// faktisk teller er om vi noen gang LETTE etter navnet: står det ikke i
+	// én eneste spørring, har vi ikke grunnlag for å si noe om det.
+	nouns := properNouns(userText)
+	if len(nouns) == 0 {
+		return ""
+	}
+	var searched []string
+	for _, a := range attempts {
+		searched = append(searched, strings.ToLower(a.sql))
+	}
+	allSQL := strings.Join(searched, " ")
+	var unsearched []string
+	for _, n := range nouns {
+		// Nok at det lengste ordet i navnet er brukt — «Racamca AB» dekkes av
+		// en spørring som filtrerer på «racamca».
+		if !strings.Contains(allSQL, strings.ToLower(longestWord(n))) {
+			unsearched = append(unsearched, n)
+		}
+	}
+	if len(unsearched) == 0 {
+		return ""
+	}
+	nouns = unsearched
+	s.log.Info("benektelsesport: navn nevnt, men aldri søkt på", "navn", strings.Join(nouns, ", "))
+	for _, noun := range nouns {
+		where, hits := s.lookupNoun(ctx, t, noun)
+		if len(hits) == 0 {
+			continue
+		}
+		// Fant vi nøyaktig det brukeren skrev, var avvisningen reell nok.
+		if len(hits) == 1 && strings.EqualFold(hits[0], noun) {
+			continue
+		}
+		return fmt.Sprintf(
+			"STOPP: du svarte at %q ikke finnes, men i %s finnes %s. "+
+				"Det er nesten sikkert det brukeren mente — stavet litt annerledes. "+
+				"Kjør spørringen på nytt med det riktige navnet og svar med tallene. "+
+				"Si samtidig hvilket navn du brukte.",
+			noun, where, strings.Join(quoteAll(hits), " eller "))
+	}
+	return ""
+}
+
+// zeroAggregate: er dette et aggregat som fant ingenting? COUNT/SUM over et
+// filter uten treff gir ÉN rad med 0 — ikke null rader. Uten dette ser et
+// bomskudd ut som et gyldig svar, tom-strategien utløses aldri, og «Racamca
+// AB har ikke registrert kjøp» slipper ut selv om «Racamaca AB» ligger i
+// basen. Målt: seks slike spørringer på rad, alle med rader=1.
+func zeroAggregate(cols []string, rows [][]string) bool {
+	if len(rows) != 1 || len(cols) == 0 {
+		return false
+	}
+	for _, v := range rows[0] {
+		t := strings.TrimSpace(v)
+		switch t {
+		case "", "0", "0.0", "0.00", "null", "NULL":
+			continue
+		}
+		return false
+	}
+	return true
+}
