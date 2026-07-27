@@ -122,9 +122,14 @@ func clean(s string) string {
 // kan sitere. pages[i] er hentet tekst for results[i] (kan være tom).
 func FormatContext(query string, results []Result, pages []string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Websøk (%s). Fakta om dette temaet skal KUN hentes fra kildene under — "+
-		"aldri fra egen hukommelse. Oppgi URL når du siterer. Dekker ikke kildene svaret, "+
-		"si at du ikke fant pålitelig informasjon:\n", query)
+	// Samme kildekontrakt som utdragsveien (api.sourceHeader): fakta fra
+	// kildene, men slutninger over dem er lov — og ønsket.
+	fmt.Fprintf(&b, "Websøk (%s). Alle FAKTA om dette temaet — tall, navn, datoer, "+
+		"hendelser — skal hentes fra kildene under, aldri fra egen hukommelse. "+
+		"Du skal derimot TENKE med det du finner: trekk de slutningene fakta i "+
+		"kildene gir grunnlag for, og si hva de betyr for det brukeren spurte om. "+
+		"Mangler et faktum i kildene, si det — men ikke hold tilbake en slutning "+
+		"som følger av det som faktisk står der. Oppgi URL når du siterer:\n", query)
 	for i, r := range results {
 		fmt.Fprintf(&b, "\n### Kilde %d: %s — %s\n%s\n", i+1, r.Title, r.URL, r.Description)
 		if i < len(pages) && pages[i] != "" {

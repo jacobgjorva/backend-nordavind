@@ -148,9 +148,7 @@ func formatExcerptContext(query string, results []search.Result, picked []source
 	sort.Slice(order, func(i, j int) bool { return totalScore[order[i]] > totalScore[order[j]] })
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "Websøk (%s). Fakta om dette temaet skal KUN hentes fra kildene under — "+
-		"aldri fra egen hukommelse. Oppgi URL når du siterer. Dekker ikke kildene svaret, "+
-		"si at du ikke fant pålitelig informasjon:\n", query)
+	fmt.Fprintf(&b, "%s\n", sourceHeader(query))
 	n := 0
 	for _, src := range order {
 		r := results[src]
