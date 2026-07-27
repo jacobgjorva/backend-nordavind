@@ -57,6 +57,17 @@ func (s *Server) handleExtractKnowledge(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	// Hjernen fylles i BAKGRUNNEN av samme utveksling: påstander og
+	// prosedyrer krever ingen bekreftelse for å være nyttige, og de kan
+	// rettes i grafen. Kjører den ikke, er alt som før.
+	if s.cfg.BrainMode == "on" {
+		go func(tenant, uid, chat, q, a string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+			defer cancel()
+			ctx = context.WithValue(ctx, userKey, store.User{ID: uid, TenantID: tenant})
+			s.ExtractToBrain(ctx, tenant, uid, q+"\n\n(AI svarte: "+a+")", "chat", chat)
+		}(user.TenantID, user.ID, req.ChatID, req.Question, req.Answer)
+	}
 	proposals := s.extractProposals(r.Context(), user.TenantID, req.Question, req.Answer)
 	writeJSON(w, map[string]any{"proposals": proposals})
 }

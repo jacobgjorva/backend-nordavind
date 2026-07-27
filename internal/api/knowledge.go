@@ -35,7 +35,22 @@ func (s *Server) knowledgeFor(ctx context.Context, full map[string]any) string {
 	if !ok || user.TenantID == "" {
 		return ""
 	}
-	return s.knowledgeContext(ctx, user.TenantID, lastUserText(full))
+	query := lastUserText(full)
+	notes := s.knowledgeContext(ctx, user.TenantID, query)
+	if s.cfg.BrainMode != "on" {
+		return notes
+	}
+	// Hjernen legges FORAN lappene: påstandene er destillatet, lappene er
+	// beviset. Finner hjernen ingenting, står lappene alene som før.
+	claims := s.brainContext(ctx, user.TenantID, user.ID, query)
+	switch {
+	case claims == "":
+		return notes
+	case notes == "":
+		return claims
+	default:
+		return claims + "\n" + notes
+	}
 }
 
 // lastUserText henter ren tekst fra siste brukermelding (håndterer både
