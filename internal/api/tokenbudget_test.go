@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/config"
+	"github.com/jacobgjorva/backend-nordavind/internal/intent"
 	"github.com/jacobgjorva/backend-nordavind/internal/router"
 )
 
@@ -170,5 +171,24 @@ func TestFlowModelLightTier(t *testing.T) {
 	}
 	if got := on.flowModel("mid"); got != router.MidModel {
 		t.Errorf("mid skal aldri påvirkes av bryteren, ga %q", got)
+	}
+}
+
+// web_fact skal ALLTID søke: uten tvang svarte modellen fra hukommelsen og
+// ble stanset av kildekontrollen etterpå — brukeren satt igjen med en halv
+// setning («Årets ord var " — nei, vent: …»).
+func TestWebFactForcesSearch(t *testing.T) {
+	flow, ok := intent.Flows["web_fact"]
+	if !ok {
+		t.Fatal("web_fact mangler i flyt-tabellen")
+	}
+	var hasSearch bool
+	for _, name := range flow.Tools {
+		if name == intent.ToolWebSearch {
+			hasSearch = true
+		}
+	}
+	if !hasSearch {
+		t.Fatal("web_fact har ikke web_search — tvangen i agent.go ville pekt på et verktøy som ikke finnes")
 	}
 }
