@@ -306,8 +306,22 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 		}
 	}
 
-	// Nøkkelord-kandidater, allerede rangert av databasen.
-	fts, _ := s.store.SearchNotesFTS(tenantID, contentTokens(query), candDepth)
+	// Nøkkelord-kandidater, allerede rangert av databasen. Delstrengtreffene
+	// legges bak: norsk skriver sammensatt, og «møte» finnes ikke som eget
+	// ord i «Mandagsmøte» — uten dette faller nettopp de spørsmålene ut.
+	qTokens := contentTokens(query)
+	fts, _ := s.store.SearchNotesFTS(tenantID, qTokens, candDepth)
+	if sub, err := s.store.SearchNotesSubstring(tenantID, qTokens, candDepth); err == nil {
+		inFTS := map[string]bool{}
+		for _, id := range fts {
+			inFTS[id] = true
+		}
+		for _, id := range sub {
+			if !inFTS[id] {
+				fts = append(fts, id)
+			}
+		}
+	}
 	// Postgres: FTS-treff utenfor vektor-toppen må hentes inn i kartet.
 	if s.store.IsPostgres() {
 		var missing []string
