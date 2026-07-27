@@ -31,7 +31,9 @@ const designSystemCompose = "\nBygg HELE dokumentet i ETT compose-kall: " +
 	"en liste med flater i endelig rekkefølge. Start med en åpningsflate, " +
 	"bygg innholdet, avslutt med et poeng eller en oppsummering. " +
 	"Sikt på 6-10 flater og varier typene — samme type på rad blir kjedelig. " +
-	"Tenk gjennom rekkefølgen FØR du kaller: du får bare ett forsøk på utkastet."
+	"Tenk gjennom rekkefølgen FØR du kaller: du får bare ett forsøk på utkastet. " +
+	"Skal en flate vise tall fra databasen, sett bare type og tittel på " +
+	"visualiseringen — spørringen får du fylle etterpå, når du har sett skjemaet."
 
 const designSystemEdit = "\nDokumentet finnes allerede — gjør KUN det brukeren ber om nå. " +
 	"patch endrer én flate (oppgi id); felt du ikke nevner står urørt, og tom " +
@@ -102,18 +104,26 @@ func (s *Server) dataFollowup(ctx context.Context, slug string) (string, bool) {
 
 // surfaceProps er feltene en flate kan ha. Verdiene valideres mot kittets
 // slots i motoren — schemaet her holdes bevisst løst og lite.
-func surfaceProps() map[string]any {
+//
+// withSQL styrer om visualiseringene kan bære spørring: ved compose kan de
+// IKKE. Modellen har ikke sett databasen på det tidspunktet, og fikk den
+// lov, diktet den opp både tabellnavn og connection_id. Spørringene fylles
+// i data-runden, der skjemaet faktisk ligger ved.
+func surfaceProps(withSQL bool) map[string]any {
 	visual := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"type":          map[string]any{"type": "string", "description": "kpi | line | bar | donut | table"},
-			"title":         map[string]any{"type": "string"},
-			"unit":          map[string]any{"type": "string"},
-			"connection_id": map[string]any{"type": "string"},
-			"sql":           map[string]any{"type": "string"},
-			"x":             map[string]any{"type": "string"},
-			"y":             map[string]any{"type": "string"},
+			"type":  map[string]any{"type": "string", "description": "kpi | line | bar | donut | table"},
+			"title": map[string]any{"type": "string"},
+			"unit":  map[string]any{"type": "string"},
 		},
+	}
+	if withSQL {
+		vp := visual["properties"].(map[string]any)
+		vp["connection_id"] = map[string]any{"type": "string"}
+		vp["sql"] = map[string]any{"type": "string"}
+		vp["x"] = map[string]any{"type": "string", "description": "kategori-/dato-kolonne"}
+		vp["y"] = map[string]any{"type": "string", "description": "verdi-kolonne"}
 	}
 	return map[string]any{
 		"title":   map[string]any{"type": "string"},
@@ -135,7 +145,7 @@ func designTools(kit design.Kit) []any {
 				"type":        "string",
 				"description": strings.Join(kit.LayoutKeys(), " | "),
 			},
-			"fields": map[string]any{"type": "object", "properties": surfaceProps()},
+			"fields": map[string]any{"type": "object", "properties": surfaceProps(false)},
 		},
 		"required": []string{"layout", "fields"},
 	}
@@ -168,7 +178,7 @@ func designTools(kit design.Kit) []any {
 						"id":     map[string]any{"type": "string", "description": "flate-id fra listen"},
 						"after":  map[string]any{"type": "string", "description": "plasser etter denne id-en (add/move)"},
 						"layout": map[string]any{"type": "string", "description": strings.Join(kit.LayoutKeys(), " | ")},
-						"fields": map[string]any{"type": "object", "properties": surfaceProps()},
+						"fields": map[string]any{"type": "object", "properties": surfaceProps(true)},
 					},
 				},
 			},
