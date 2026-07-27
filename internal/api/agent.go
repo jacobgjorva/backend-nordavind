@@ -458,7 +458,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 
 	// Husets stemme: kun vanlig chat. Widget-, design- og agent-flytene har
 	// egne, strengere kontrakter der prat er feil.
-	if !setup && widgetSlug == "" && designSlug == "" && !connectorMode && !planning && editID == "" {
+	//
+	// AV inntil den er målt: den nye søkemotoren endret svarkvaliteten, og
+	// stilen skal vurderes mot den — ikke mot slik det var før.
+	if s.cfg.AnswerStyle == "on" &&
+		!setup && widgetSlug == "" && designSlug == "" && !connectorMode && !planning && editID == "" {
 		injectSystem(full, answerStyle)
 	}
 
