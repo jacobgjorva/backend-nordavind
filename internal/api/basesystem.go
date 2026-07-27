@@ -56,6 +56,15 @@ const tableRule = " Ber brukeren eksplisitt om en " +
 const m365Rule = " OneDrive/SharePoint-lenker (url fra m365-verktøyene) SKAL deles " +
 	"som klikkbar markdown-lenke når brukeren vil åpne eller ha fila."
 
+// groundsRule: en konklusjon om en SAMMENHENG som bare tallfester den ene
+// siden er ikke begrunnet. Målt (Jacob-godkjent prompt-endring 2026-07-28):
+// «ingen korrelasjon mellom oljepris og salg, for salget steg fra 32 til 118
+// mill.» — oljeprisen aldri nevnt med ett tall. Generelt prinsipp, ingen
+// eksempler; injiseres kun på verktøyturer.
+const groundsRule = " KONKLUSJONSREGEL: en påstand om en sammenheng eller forskjell (korrelasjon, " +
+	"utvikling, «større enn») skal tallfeste BEGGE sidene den sammenligner — én side alene er " +
+	"ikke et grunnlag.\n"
+
 // actionRule: kun når turen faktisk HAR verktøy å handle med.
 const actionRule = " HANDLINGSREGEL: har du et verktøy som kan utføre eller sjekke det brukeren spør om, KJØR det " +
 	"med en gang — spør ALDRI «vil du at jeg skal …» eller om lov/tillatelse for søk og lesing. " +
@@ -83,6 +92,7 @@ func baseSystem(opts systemOpts) string {
 	}
 	if opts.tools {
 		b.WriteString(actionRule)
+		b.WriteString(groundsRule)
 	}
 	if opts.image {
 		b.WriteString(imageRule)

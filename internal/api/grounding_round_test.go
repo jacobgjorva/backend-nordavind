@@ -64,3 +64,17 @@ func TestOffendersAllowUserMentionedNames(t *testing.T) {
 		t.Errorf("brukernevnt navn flagget: %v", off)
 	}
 }
+
+// Sammensetninger av kildeord og etiketter er ikke fabrikasjon.
+func TestOffendersAllowCompoundsOfSourceWords(t *testing.T) {
+	basis := []string{"Brent spot 65 USD. Kurs NOK 10,4. database med salg."}
+	for _, prose := range []string{
+		"**Brent-priser** falt gjennom året.",
+		"Målt i **NOK/fat** er bildet likt.",
+		"**Nåværende data:** salget steg.",
+	} {
+		if off := groundingOffenders(prose, basis); len(off) > 0 {
+			t.Errorf("gyldig sammensetning flagget: %q → %v", prose, off)
+		}
+	}
+}

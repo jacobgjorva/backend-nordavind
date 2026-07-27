@@ -127,13 +127,19 @@ func offendersCore(prose string, sources []string, minDigits int, exactNums bool
 	// — et produkt som ikke eksisterer — passerte fordi bare tall ble målt.
 	// Samme løype som tallene: offender → faktadommer → omforsøk; dommeren
 	// frikjenner allmennkunnskap, så «Norge» i løpende tekst overlever.
+	// Dekning per TOKEN, ikke hel frase: «Brent-priser» og «NOK/fat» er
+	// lovlige sammensetninger av kildeord, og formatteringsetiketter
+	// («Nåværende data:») er ikke entiteter. Kravet er at MINST ett
+	// meningsbærende token finnes i grunnlaget — «Eplemost 1L» har ingen og
+	// fanges fortsatt. (Første versjon krevde hel frase og drepte gyldige
+	// svar til naken tabell.)
 	for _, m := range boldRe.FindAllStringSubmatch(prose, -1) {
-		ent := strings.TrimSpace(m[1])
+		ent := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(m[1]), ":"))
 		if len([]rune(ent)) < 3 || seen[strings.ToLower(ent)] {
 			continue
 		}
 		seen[strings.ToLower(ent)] = true
-		if !strings.Contains(src, strings.ToLower(ent)) {
+		if !entityCovered(ent, src) {
 			offenders = append(offenders, ent)
 		}
 	}
@@ -143,7 +149,7 @@ func offendersCore(prose string, sources []string, minDigits int, exactNums bool
 			continue
 		}
 		seen[key] = true
-		if !strings.Contains(src, key) {
+		if !entityCovered(ent, src) {
 			offenders = append(offenders, ent)
 		}
 	}
@@ -532,4 +538,17 @@ func roundToSignificant(v float64, n int) float64 {
 	}
 	mag := math.Pow(10, float64(n)-math.Ceil(math.Log10(math.Abs(v))))
 	return math.Round(v*mag) / mag
+}
+
+// entityCovered: finnes minst ett meningsbærende token av entiteten i
+// grunnlaget? Splitter på mellomrom, bindestrek og skråstrek.
+func entityCovered(ent, lowSrc string) bool {
+	for _, tok := range strings.FieldsFunc(strings.ToLower(ent), func(r rune) bool {
+		return r == ' ' || r == '-' || r == '/'
+	}) {
+		if len([]rune(tok)) >= 3 && strings.Contains(lowSrc, tok) {
+			return true
+		}
+	}
+	return false
 }
