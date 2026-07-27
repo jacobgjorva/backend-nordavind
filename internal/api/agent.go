@@ -611,6 +611,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// Kode-håndhevet søkeinnsats: «fant ikke» etter bare ett søk godtas aldri —
 	// modellen sendes tilbake for flere vinkler (én gang).
 	searchNudged := false
+	// Kapitulasjonsvakt: «umulig» etter vellykket innsamling godtas aldri —
+	// én tvungen fortsettelse på grunnlaget den HAR.
+	surrenderNudged := false
 	// Designlerret: compose har kjørt denne turen, så flater som venter på en
 	// spørring skal få den i én fokusert runde (dataFollowup).
 	composed, dataAsked, dataFilled := false, false, false
@@ -828,6 +831,22 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				emit(contentSSE(backstopGraceful))
 			default:
 				final := content
+				// Kapitulasjonsvakten FØR kildekontrollen: svargrenene under er
+				// ikke gjensidig utelukkende (målt at vakten aldri traff da den
+				// lå i én av dem). Erklærer modellen oppgaven umulig ETTER at
+				// databasen og kildene faktisk leverte, er kravet som «mangler»
+				// nesten alltid dens eget påfunn. Én tvungen fortsettelse.
+				if !surrenderNudged && round < roundCap && impossibleRe.MatchString(final) &&
+					(dbSucceeded || len(toolResults) > 0) {
+					surrenderNudged = true
+					s.log.Info("kapitulasjonsvakt utløst")
+					narr.say("Nei, vent — jeg har jo tall. Bruker det jeg har.", kindDB)
+					msgs, _ := full["messages"].([]any)
+					full["messages"] = append(msgs,
+						map[string]any{"role": "assistant", "content": final},
+						map[string]any{"role": "user", "content": "Du har allerede hentet interne tall og kilder. Ikke krev mer presisjon enn spørsmålet trenger — gjør analysen med det du HAR (månedstall holder når dagstall mangler), og konkluder. Kun hvis et KONKRET tall faktisk mangler: navngi det."})
+					continue
+				}
 				basis := groundingBasis(full, toolResults)
 				if off := groundingOffenders(final, basis); len(off) > 0 {
 					s.log.Warn("kildekontroll: avvik i svar", "avvik", strings.Join(off, ", "))
@@ -1665,6 +1684,13 @@ func emitAfter(emit func(string), d time.Duration, status string) func() {
 
 // gaveUpRe: svar som melder tomt uten reell innsats.
 var gaveUpRe = regexp.MustCompile(`(?i)fant (ikke|ingen)|ingen pålitelig|ikke pålitelig informasjon`)
+
+// impossibleRe: modellen erklærer oppgaven umulig. Samme kontraktsklasse som
+// gaveUpRe (driver et OMFORSØK, aldri en tillitsdom — en falsk positiv koster
+// én ekstra runde, ikke et galt svar). Målt: «ingen tilgjengelige daglige
+// oljeprisdata … korrelasjonsanalyse kan ikke gjennomføres» — etter fire
+// vellykkede kilder og ferske salgstall; kravet om DAGLIGE tall var dens eget.
+var impossibleRe = regexp.MustCompile(`(?i)kan ikke (gjennomføres|beregnes|utføres|analyseres)|ikke mulig å|finnes ingen tilgjengelige|analysen? (er|blir) ikke mulig`)
 
 // attachHintRe: brukeren ba om fil/vedlegg/oversikt i e-posten.
 var attachHintRe = regexp.MustCompile(`(?i)vedlegg|excel|xlsx|regneark|oversikt|rapport|liste|fil\b`)

@@ -1,4 +1,25 @@
-# Overlevering: assistentkvalitet (oppdatert 2026-07-28 natt)
+# Overlevering: assistentkvalitet (oppdatert 2026-07-28, 01:00)
+
+## TO ÅPNE KLASSER — start her
+
+1) RÅ VERKTØYKALL-FRAGMENTER LEKKER SOM SVAR. Målt i olje-suiten (5 kjøringer,
+/tmp/olje.json): kjøring 2 ga «…………」», kjøring 3 ga «ermannquery": "Brent
+Crude monthly average price 2025..."» rett i chatten. splitToolCallText/
+cutBareToolCall (sse.go) fanger <tool_call>-tagger og hele kall, men ikke
+JSON-fragmenter midt i teksten. Gaten slipper dem (ingen tall/entiteter).
+Klassen: svar som er åpenbart ødelagt struktur skal aldri emiteres — vurder
+en form-sjekk i sse-laget (ubalanserte anførselstegn/klammer, styrt av fakta,
+ikke innhold).
+
+2) KAPITULASJONSVAKTEN TREFFER IKKE. impossibleRe + vakt ligger COMMITTET på
+branchen (agent.go, «kapitulasjonsvakt»), plassert før kildekontrollen i
+default-grenen — men 0 treff på 9 kjøringer, selv på «Det er ikke mulig å
+fastslå …». UVERIFISERT hvorfor: enten når ikke svarene default-grenen
+(sjekk hvilken gren som emitter, tur-verktøy-loggen + en midlertidig logg av
+grenvalg), eller regexen bommer på ekte formuleringer. IKKE DEPLOYET — verifiser
+først. Oljesvarene er ellers 3/5 gode (begge sider tallfestet, groundsRule
+virker; deployet og verifisert tidligere i kveld).
+
 
 ## HYBRID-SAKEN LØST (2026-07-28 natt)
 
