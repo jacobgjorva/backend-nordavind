@@ -304,11 +304,25 @@ func isJunkAnswer(s string) bool {
 	}
 	// Tegnsøppel: nesten ingen bokstaver i noe som skal være en setning.
 	letters, total := 0, 0
+	hasDigit := false
 	for _, r := range s {
 		total++
 		if unicode.IsLetter(r) {
 			letters++
 		}
+		if unicode.IsDigit(r) {
+			hasDigit = true
+		}
 	}
-	return total >= 5 && letters*10 < total*3
+	if total >= 5 && letters*10 < total*3 {
+		return true
+	}
+	// Bar ordstump: ett enslig «ord» uten setningsslutt og uten tall er en
+	// degenereringshale («eskola», «lium»), aldri et svar. Ekte kortsvar har
+	// tegnsetting («Ja.») eller tall («426 ordre.»).
+	if !hasDigit && !strings.ContainsAny(s, ".!?") &&
+		len(strings.Fields(s)) == 1 && len([]rune(s)) <= 14 {
+		return true
+	}
+	return false
 }

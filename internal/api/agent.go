@@ -11,6 +11,7 @@ import (
 
 	"github.com/jacobgjorva/backend-nordavind/internal/connector"
 	"github.com/jacobgjorva/backend-nordavind/internal/intent"
+	"github.com/jacobgjorva/backend-nordavind/internal/router"
 	"github.com/jacobgjorva/backend-nordavind/internal/search"
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
@@ -824,6 +825,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				// Reelt tomt (eller bare tegnsetting) etter verktøybruk —
 				// korte, gyldige svar («426 ordre.») skal IKKE hit.
 				// (Nesten) tomt etter verktøybruk → synteser fra det den fant.
+				// På Storm: medium har nettopp degenerert eller levert tomt,
+				// og en ny runde på samme modell ga målbart samme søppel.
+				full["model"] = router.HeavyModel
 				step, _ := json.Marshal(map[string]any{"nordavind_step": "Oppsummerer funnene"})
 				emit("data: " + string(step))
 				s.streamBackstop(ctx, full, emit, &promptTokens, &completionTokens)
@@ -844,7 +848,12 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					(dbSucceeded || len(toolResults) > 0) {
 					surrenderNudged = true
 					roundCap = round + 1
-					s.log.Info("kapitulasjonsvakt utløst")
+					// Jacobs regel (2026-07-28): trenger analysen mer enn
+					// medium leverer, går vi til Storm — eskalering på MÅLT
+					// svikt, aldri på forhånd. Kostnaden treffer kun turer
+					// der medium faktisk ga opp.
+					full["model"] = router.HeavyModel
+					s.log.Info("kapitulasjonsvakt utløst", "eskalerer", router.HeavyModel)
 					narr.say("Nei, vent — jeg har jo tall. Bruker det jeg har.", kindDB)
 					msgs, _ := full["messages"].([]any)
 					full["messages"] = append(msgs,

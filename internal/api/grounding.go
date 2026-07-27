@@ -311,6 +311,14 @@ func (g *sentenceGate) finish() string {
 	if g.held || g.buf == "" {
 		return ""
 	}
+	// Formsjekk også på HALEN: fragmentene uten sluttpunktum
+	// («yağışweb_search{"query …», «eskola») gikk utenom setningssjekken i
+	// feed og rett ut her. Samme held-løype som udekkede påstander.
+	if isJunkAnswer(g.buf) {
+		g.held = true
+		g.offenders = append(g.offenders, "verktøysøl i svaret")
+		return ""
+	}
 	if off := offendersAgainst(g.buf, g.sources, 1); len(off) > 0 {
 		g.held = true
 		g.offenders = off

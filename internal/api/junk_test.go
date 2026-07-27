@@ -7,6 +7,8 @@ func TestIsJunkAnswer(t *testing.T) {
 	junk := []string{
 		`ermannquery": "Brent Crude monthly average price 2025 USD per barrel"}`,
 		"…………」",
+		"eskola",
+		"lium",
 		`{"connection_id": "abc", "sql": "SELECT 1"}`,
 	}
 	for _, s := range junk {
