@@ -155,13 +155,15 @@ var Registry = []Intent{
 	},
 	{
 		Key:         "manage_users",
-		Description: "Administrere plattformbrukere: invitere nye, fjerne, endre roller og tilganger",
+		Description: "Administrere plattformbrukere: invitere nye, fjerne, endre roller og tilganger. Gjelder HVEM som har tilgang — ikke hva dataene inneholder",
 		Examples: []string{
 			"inviter kari@family.no",
 			"gjør Jacob til admin",
 			"fjern brukeren til Ola",
 			"legg til en ny bruker",
 			"hvem har tilgang til plattformen?",
+			"hvem har tilgang til kundedatabasen?",
+			"hvem kan se dataene våre?",
 		},
 		AdminOnly: true,
 	},
