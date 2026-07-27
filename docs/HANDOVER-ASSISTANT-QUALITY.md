@@ -22,7 +22,23 @@ prod-mønsteret. Alle målte felleklasser er kodet inn i dataene (fuzzy-par,
 &-navn, konstant kolonne, NULL-tung, hval 45 %, sesong, join-fanout, død
 tabell). Suite: scratchpad/mjod.json (10 scenarier). Runde 2: 8/10 gode.
 
-## NESTE STORE KLASSE: flerkilde-integritet
+## FLERKILDE-INTEGRITET: LEVERT (2026-07-28 natt)
+
+Primærkilde-modellen er bygget og deployet: connections.is_primary (settes med
+PUT /v1/connections/{id}/primary; én kilde = automatisk primær), skjemaet
+merker PRIMÆRKILDE/TILLEGGSKILDE, resolveConn ruter tomme/tvetydige valg til
+primær, og sourceNote (dbstrategy.go) navngir kilden i svaret når tenanten har
+flere — med blandingsvarsel når ett svar bygget på flere kilder. Én gang per
+tur (narrator.saidSource — svargrenene i agent-løkka er ikke gjensidig
+utelukkende, målt dobbel note). Verifisert: «vår største kunde» er stabilt
+Mjødhallens Valhall over gjentatte kjøringer, med kildenote.
+
+VIKTIG LÆRDOM fra runden: «403 mill i 2022»-funnet var IKKE en blanding —
+spørringen gikk korrekt mot Mjødhallens RÅTABELLER, som testkonfigen min selv
+eksponerte ved siden av utsnittet. Feilkalibrert forventning hos meg, ikke
+systemfeil. Sjekk alltid hvilken kilde loggen faktisk viser før diagnose.
+
+## Tidligere notat (historikk): flerkilde-integritet
 
 Med to tilkoblinger lokalt (Kunder + Mjødhallen) blander modellen selskapene:
 «din største kunde» ble Kunder-basens Brüdog i stedet for Mjødhallens Valhall,
