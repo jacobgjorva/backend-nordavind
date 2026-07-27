@@ -162,3 +162,46 @@ func TestZeroAggregateCountsAsEmptyOutcome(t *testing.T) {
 		}
 	}
 }
+
+// Prod-feilen: totaltall lyktes, Moestue-spørringen timet ut, svaret ble
+// «0 kroner». Alle subjekt-spørringer feilet → vi vet ingenting om subjektet.
+func TestSubjectFailedCatchesTimedOutSubject(t *testing.T) {
+	attempts := []dbAttempt{
+		{outcome: dbOK, sql: "SELECT SUM(net_revenue) FROM v_Sales"},
+		{outcome: dbFailed, sql: "SELECT company, SUM(net_revenue) FROM v_Sales WHERE company LIKE '%Moestue%' GROUP BY company"},
+	}
+	subject, bad := subjectFailed("Hvor mye har Moestue & Cask AS kjøpt for?", attempts)
+	if !bad || !strings.Contains(subject, "Moestue") {
+		t.Fatalf("subjektfeil ikke fanget: %q, %v", subject, bad)
+	}
+}
+
+// Lyktes ÉN subjekt-spørring, har modellen data og skal få svare.
+func TestSubjectFailedAllowsPartialSuccess(t *testing.T) {
+	attempts := []dbAttempt{
+		{outcome: dbFailed, sql: "SELECT * FROM v_Sales WHERE company LIKE '%Moestue%'"},
+		{outcome: dbOK, sql: "SELECT SUM(net_revenue) FROM v_Sales WHERE company LIKE '%Moestue%'"},
+	}
+	if _, bad := subjectFailed("Hvor mye har Moestue & Cask AS kjøpt for?", attempts); bad {
+		t.Error("delvis suksess skal slippe gjennom")
+	}
+}
+
+// Tomt resultat er et legitimt «ikke funnet» (fuzzy har alt kjørt) — ikke en
+// teknisk feil, og skal ikke utløse porten.
+func TestSubjectFailedIgnoresEmpty(t *testing.T) {
+	attempts := []dbAttempt{
+		{outcome: dbEmpty, sql: "SELECT SUM(x) FROM orders WHERE name LIKE '%Moestue%'"},
+	}
+	if _, bad := subjectFailed("Hva har Moestue kjøpt?", attempts); bad {
+		t.Error("dbEmpty er ikke en teknisk feil")
+	}
+}
+
+// Ingen subjekt-spørringer i det hele tatt: checkDenial eier det tilfellet.
+func TestSubjectFailedNeedsTouchedQueries(t *testing.T) {
+	attempts := []dbAttempt{{outcome: dbFailed, sql: "SELECT SUM(x) FROM orders"}}
+	if _, bad := subjectFailed("Hva har Moestue kjøpt?", attempts); bad {
+		t.Error("navn som aldri ble søkt på hører til benektelsesporten")
+	}
+}

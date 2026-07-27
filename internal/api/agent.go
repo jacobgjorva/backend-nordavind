@@ -709,6 +709,15 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				emit("data: [DONE]")
 				return
 			}
+			// Subjektintegritet: andre spørringer kan ha lyktes, men hvis alle
+			// som handlet om det brukeren FAKTISK spurte om feilet, har vi
+			// ingenting å si om det — og skal si nettopp det. (dbstrategy.go)
+			if subject, bad := subjectFailed(lastUserText(full), attempts); bad {
+				s.log.Warn("subjektintegritet: alle subjekt-spørringer feilet", "subjekt", subject)
+				emit(contentSSE(explainSubjectFailure(subject)))
+				emit("data: [DONE]")
+				return
+			}
 			if streamThis {
 				// Slipp en ren hale, eller avgjør skjebnen til det tilbakeholdte:
 				// dommer godkjenner (beregning/telling) → vis; underkjenner →

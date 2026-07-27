@@ -634,3 +634,42 @@ func zeroAggregate(cols []string, rows [][]string) bool {
 	}
 	return true
 }
+
+// --- Subjektintegritet ------------------------------------------------------
+
+// subjectFailed: finnes det et navn i brukerens spørsmål der ALLE spørringene
+// som refererte navnet feilet teknisk? Da vet turen INGENTING om subjektet —
+// uansett hvor mange andre spørringer som lyktes. dbSucceeded er global og
+// skjulte dette: tre vellykkede totaltall pluss én timeout på «Moestue» ga
+// «Moestue har kjøpt for 0 kroner» om et selskap med 3 000 rader i basen.
+// Faktabasert med vilje: vi ser på hva som ble kjørt og hvordan det gikk,
+// aldri på hvordan svaret er formulert.
+func subjectFailed(userText string, attempts []dbAttempt) (string, bool) {
+	for _, noun := range properNouns(userText) {
+		word := strings.ToLower(longestWord(noun))
+		if len([]rune(word)) < 4 {
+			continue
+		}
+		touched, failed := 0, 0
+		for _, a := range attempts {
+			if strings.Contains(strings.ToLower(a.sql), word) {
+				touched++
+				if a.outcome == dbFailed {
+					failed++
+				}
+			}
+		}
+		if touched > 0 && failed == touched {
+			return noun, true
+		}
+	}
+	return "", false
+}
+
+// explainSubjectFailure er den ærlige beskjeden når subjekt-spørringene døde:
+// ikke «0 kroner», ikke «finnes ikke» — vi VET ikke, og sier hvorfor.
+func explainSubjectFailure(subject string) string {
+	return "Jeg fikk ikke svar om " + subject + ": spørringene ble avbrutt på tid før databasen " +
+		"rakk å svare, så jeg har ingen tall å gi deg om akkurat dette. Prøv igjen om et øyeblikk, " +
+		"eller avgrens (for eksempel til ett år), så går det som regel gjennom."
+}
