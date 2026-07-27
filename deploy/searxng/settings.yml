@@ -17,25 +17,26 @@ search:
 valkey:
   url: valkey://valkey:6379/0
 
-# Motorspredning: ingen enkeltmotor skal bære volumet. Google nedvektet —
-# strengest på scraping; mister vi den, bærer de andre søket videre
-# (unresponsive_engines logges av backenden som blokkeringsmetrikk).
+# Motorvalg er MÅLT, ikke antatt (12-søks stabilitetstest 2026-07-27):
+# google cse 12/12, startpage 12/12, mojeek 8/12 — disse bærer.
+# brave 0/12 og duckduckgo 0/12 blokkerer datasenter-IP-en nesten per
+# forespørsel («too many requests»/CAPTCHA) og er ren støy — fjernet.
+# NB: den tidligere Google-nedvektingen var feil; google cse er MEST stabil.
+# wikipedia beholdes som spesialkilde for rene oppslag (blokkeres ikke).
 engines:
-  - name: mojeek
+  - name: google
     weight: 1.3
     disabled: false
-  - name: brave
+  - name: startpage
     weight: 1.2
     disabled: false
-  - name: startpage
+  - name: mojeek
     weight: 1.0
     disabled: false
   - name: wikipedia
     weight: 1.0
     disabled: false
-  - name: google
-    weight: 0.3
-    disabled: false
+  - name: brave
+    disabled: true
   - name: duckduckgo
-    weight: 0.8
-    disabled: false
+    disabled: true
