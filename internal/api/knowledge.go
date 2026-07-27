@@ -214,10 +214,14 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 	if len([]rune(strings.TrimSpace(query))) < 12 {
 		return ""
 	}
+	// Embeddingen er et nettverkskall til en leverandør med lang hale (målt
+	// 0,5-21 s fra prod). Feiler den, hentes kunnskapen på nøkkelord alene i
+	// stedet for å droppe den: BM25-indeksen ligger lokalt i databasen, og et
+	// treff derfra er uendelig mye bedre enn «jeg har ikke tilgang».
 	qvec, err := s.embedCached(ctx, query)
 	if err != nil {
-		s.log.Warn("embedding feilet", "err", err)
-		return ""
+		s.log.Warn("embedding feilet — henter kunnskap på nøkkelord alene", "err", err)
+		return s.keywordContext(tenantID, query)
 	}
 
 	// Vektor-kandidater: cosine over gulvet, rangert (best først).
@@ -371,6 +375,70 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 		}
 		write(id, "(relatert) ")
 	}
+	return b.String()
+}
+
+// keywordContext er reserveveien når vektorsøket ikke kan kjøres: rent BM25
+// mot den lokale indeksen. Samme format og budsjett som den vanlige veien, og
+// samme enslig-ord-vern — ett tilfeldig felles ord er støy, ikke kunnskap.
+func (s *Server) keywordContext(tenantID, query string) string {
+	ids, _ := s.store.SearchNotesFTS(tenantID, contentTokens(query), candDepth)
+	if len(ids) == 0 {
+		return ""
+	}
+	notes, err := s.store.NotesByIDs(tenantID, ids)
+	if err != nil || len(notes) == 0 {
+		return ""
+	}
+	byID := map[string]store.KnowledgeNote{}
+	for _, n := range notes {
+		byID[n.ID] = n
+	}
+	qToks := map[string]bool{}
+	for _, t := range ftsTokenRe.FindAllString(strings.ToLower(query), -1) {
+		if !ftsStopwords[t] {
+			qToks[t] = true
+		}
+	}
+	var b strings.Builder
+	b.WriteString("Relevant intern kunnskap (bruk der det passer; siter kilden når du bruker et dokument):\n")
+	budget, n := noteBudget, 0
+	var used []string
+	for _, id := range ids {
+		if n >= noteMaxN || budget <= 0 {
+			break
+		}
+		note, ok := byID[id]
+		if !ok {
+			continue
+		}
+		text := strings.ToLower(note.Text + " " + note.Context)
+		matches := 0
+		for t := range qToks {
+			if strings.Contains(text, t) {
+				matches++
+			}
+		}
+		if matches < 2 {
+			continue
+		}
+		body := note.Text
+		if note.Context != "" {
+			body = note.Context + " " + body
+		}
+		src := "notat"
+		if note.SourceType == "document" && note.Title != "" {
+			src = "«" + note.Title + "»"
+		}
+		fmt.Fprintf(&b, "- (fra %s) %s\n", src, body)
+		budget -= len(body)
+		n++
+		used = append(used, id)
+	}
+	if n == 0 {
+		return ""
+	}
+	go s.store.RecordNoteHits(used)
 	return b.String()
 }
 
