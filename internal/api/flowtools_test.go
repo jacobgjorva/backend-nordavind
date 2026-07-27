@@ -3,7 +3,7 @@ package api
 import (
 	"testing"
 
-	"github.com/jacobgjorva/backend-nordavind/internal/deck"
+	"github.com/jacobgjorva/backend-nordavind/internal/design"
 	"github.com/jacobgjorva/backend-nordavind/internal/intent"
 )
 
@@ -20,7 +20,7 @@ func TestAllFlowToolsResolvable(t *testing.T) {
 		intent.ToolCheckM365: true, intent.ToolSaveM365App: true,
 		intent.ToolSetupRoutine: true, intent.ToolListAgents: true,
 		intent.ToolUpdateAgent: true, intent.ToolSetWidget: true,
-		intent.ToolSetSlide: true, intent.ToolSetDeck: true,
+		intent.ToolCompose: true, intent.ToolPatch: true, intent.ToolRestyle: true,
 		intent.ToolContactPerson: true,
 	}
 	for key, f := range intent.Flows {
@@ -49,8 +49,9 @@ func TestToolByNameFindsBuilders(t *testing.T) {
 		{intent.ToolListAgents, buildAgentSetupTools()},
 		{intent.ToolUpdateAgent, buildAgentEditTools()},
 		{intent.ToolSetWidget, widgetTools()},
-		{intent.ToolSetSlide, deckTools(deck.Default)},
-		{intent.ToolSetDeck, deckTools(deck.Default)},
+		{intent.ToolCompose, designTools(design.Get(design.Default))},
+		{intent.ToolPatch, designTools(design.Get(design.Default))},
+		{intent.ToolRestyle, designTools(design.Get(design.Default))},
 	} {
 		if toolByName(c.list, c.name) == nil {
 			t.Errorf("verktøy %q finnes ikke i byggeren", c.name)

@@ -200,15 +200,13 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	if widgetSlug == "" && (flowKey == "create_widget" || flowKey == "edit_widget") {
 		injectSystem(full, s.widgetSystem(ctx))
 	}
-	// Presentasjonsflyten: kit-katalogen (temaets ferdige slides) i stedet for
-	// widget-skjemaet — modellen velger layout og fyller felter.
-	deckSlug, _ := full["nordavind_deck"].(string)
-	// Bygg-modus avgjøres av tilstanden før første kall: et tomt lerret skal
-	// få en gjennomgangsrunde når utkastet står (se deckReviewed under).
-	deckBuildMode := deckSlug != "" && s.deckIsEmpty(ctx, deckSlug)
-	delete(full, "nordavind_deck")
-	if deckSlug != "" {
-		injectSystem(full, s.deckSystem(ctx, s.deckTheme(ctx, deckSlug), deckSlug))
+	// Designlerretet: kittets ferdige flate-typer i stedet for widget-skjemaet.
+	// Modellen velger layout og fyller felt — aldri komposisjon eller farger.
+	designSlug, _ := full["nordavind_design"].(string)
+	delete(full, "nordavind_design")
+	designKit, designDoc := s.docKit(ctx, designSlug)
+	if designSlug != "" {
+		injectSystem(full, s.designSystem(ctx, designKit, designDoc))
 	}
 
 	// Connector-agent: hjelper brukeren koble til eksterne kilder via verktøy.
@@ -244,18 +242,16 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// Bilder tolkes av vision-modellen uten verktøy — web_search/db gir
 	// tomme svar sammen med bilde-input.
 	if !hasImageMessage(full) {
-		if deckSlug != "" {
-			// Åpent presentasjons-lerret: KUN slide-verktøyene, uansett hva
-			// ruteren måtte mene om meldingen. tool_choice=required gjør det
-			// umulig å svare med prat i stedet for å gjøre jobben — koden
-			// håndhever det, ikke en formulering i prompten.
-			full["tools"] = deckTools(s.deckTheme(ctx, deckSlug))
-			// Tomt lerret: første kall MÅ være en slide. Ellers holdt modellen
-			// seg for god med å sette tittel via set_deck og stoppe der.
-			if s.deckIsEmpty(ctx, deckSlug) {
+		if designSlug != "" {
+			// Åpent lerret: KUN design-verktøyene, uansett hva ruteren måtte
+			// mene om meldingen. Tomt dokument tvinges til compose — hele
+			// utkastet i ett kall; ellers må turen i det minste endre noe.
+			// Koden håndhever det, ikke en formulering i prompten.
+			full["tools"] = designTools(designKit)
+			if len(designDoc.Surfaces) == 0 {
 				full["tool_choice"] = map[string]any{
 					"type":     "function",
-					"function": map[string]any{"name": "set_slide"},
+					"function": map[string]any{"name": "compose"},
 				}
 			} else {
 				full["tool_choice"] = "required"
@@ -387,9 +383,6 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// Kode-håndhevet søkeinnsats: «fant ikke» etter bare ett søk godtas aldri —
 	// modellen sendes tilbake for flere vinkler (én gang).
 	searchNudged := false
-	// Presentasjonsutkast: én gjennomgang der modellen retter rekkefølge og
-	// hull med move/set. Kun ved nybygg — redigering går aldri denne veien.
-	deckReviewed := false
 	// Kildekontroll: alt verktøyene returnerer denne turen, ordrett — prosaen
 	// måles mot dette før den vises (grounding.go).
 	var toolResults []string
@@ -620,23 +613,6 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			// glemmer blokka i svaret sitt.
 			if createdWidget != "" && !strings.Contains(content, "```widget") {
 				emit(contentSSE("\n\n```widget\n" + createdWidget + "\n```"))
-			}
-			// Nybygd presentasjon: én gjennomgang før brukeren ser den ferdig.
-			// Modellen får listen slik den faktisk ble, og retter selv.
-			if deckBuildMode && !deckReviewed && deckSlug != "" && round < roundCap {
-				deckReviewed = true
-				msgs, _ := full["messages"].([]any)
-				full["messages"] = append(msgs,
-					map[string]any{"role": "assistant", "content": content},
-					map[string]any{"role": "user", "content": "Se over presentasjonen med kritiske øyne:\n\n" +
-						s.deckState(ctx, deckSlug) +
-						"\nRett det som ikke henger sammen: feil rekkefølge (op=move), " +
-						"slides som mangler eller gjentar hverandre, tynt innhold, " +
-						"samme slide-type for mange ganger på rad. Er alt bra, svarer du bare «Ok»."})
-				delete(full, "tool_choice")
-				step, _ := json.Marshal(map[string]any{"nordavind_step": "Går gjennom presentasjonen"})
-				emit("data: " + string(step))
-				continue
 			}
 			emit("data: [DONE]")
 			return
@@ -873,22 +849,22 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					}
 				}
 				emit(`data: {"nordavind_widget_updated":true}`)
-			case "set_slide", "set_deck":
-				// Presentasjon: hver patch lagres med en gang, og canvaset får
-				// beskjed om å hente specen på nytt.
-				meta, _ := json.Marshal(map[string]any{"nordavind_step": "Bygger presentasjon"})
+			case "compose", "patch", "restyle":
+				// Designlerretet: hver operasjon lagres med en gang, og
+				// lerretet får beskjed om å hente dokumentet på nytt.
+				step := map[string]string{"compose": "Bygger dokumentet",
+					"patch": "Endrer flaten", "restyle": "Bytter uttrykk"}[c.Name]
+				meta, _ := json.Marshal(map[string]any{"nordavind_step": step})
 				emit("data: " + string(meta))
-				if c.Name == "set_slide" {
-					result, deckSlug = s.runSlideOp(ctx, deckSlug, c.Args.String())
-				} else {
-					result, deckSlug = s.runDeckOp(ctx, deckSlug, c.Args.String())
+				switch c.Name {
+				case "compose":
+					result = s.runCompose(ctx, designSlug, c.Args.String())
+				case "patch":
+					result = s.runDesignPatch(ctx, designSlug, c.Args.String())
+				default:
+					result = s.runRestyle(ctx, designSlug, c.Args.String())
 				}
-				if createdWidget == "" {
-					if m := widgetSlugRe.FindStringSubmatch(result); m != nil {
-						createdWidget = m[1]
-					}
-				}
-				dm, _ := json.Marshal(map[string]any{"nordavind_deck_updated": deckSlug})
+				dm, _ := json.Marshal(map[string]any{"nordavind_design_updated": designSlug})
 				emit("data: " + string(dm))
 			default:
 				if q := strings.TrimSpace(args.Query); q != "" {

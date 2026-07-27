@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 
-	"github.com/jacobgjorva/backend-nordavind/internal/deck"
+	"github.com/jacobgjorva/backend-nordavind/internal/design"
 	"github.com/jacobgjorva/backend-nordavind/internal/intent"
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
@@ -90,8 +90,8 @@ func (s *Server) flowTools(ctx context.Context, flowKey string, dbCtx *dbToolCtx
 			} else {
 				return nil, false
 			}
-		case intent.ToolSetSlide, intent.ToolSetDeck:
-			if t := toolByName(deckTools(deck.Default), name); t != nil {
+		case intent.ToolCompose, intent.ToolPatch, intent.ToolRestyle:
+			if t := toolByName(designTools(design.Get(design.Default)), name); t != nil {
 				tools = append(tools, t)
 			} else {
 				return nil, false
