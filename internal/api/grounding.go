@@ -120,6 +120,9 @@ func offendersCore(prose string, sources []string, minDigits int, exactNums bool
 		}
 	}
 
+	// Apostrof-normalisert kildetekst: engelsk genitiv («Bieber's») skal dekke
+	// norsk genitiv («Biebers») — apostrofen er formatering, ikke innhold.
+	srcNoApos := stripApostrophes(src)
 	for _, m := range groundNameRe.FindAllStringSubmatch(prose, -1) {
 		name := strings.TrimSpace(m[2])
 		// Enkeltord med stor bokstav er ofte vanlige ord etter komma o.l. —
@@ -128,11 +131,27 @@ func offendersCore(prose string, sources []string, minDigits int, exactNums bool
 			continue
 		}
 		seen[strings.ToLower(name)] = true
-		if !strings.Contains(src, strings.ToLower(name)) {
+		ln := stripApostrophes(strings.ToLower(name))
+		covered := strings.Contains(srcNoApos, ln)
+		// Norsk genitiv-s uten motstykke i kilden: «Parades tall» ↔ «Parade».
+		if !covered && strings.HasSuffix(ln, "s") {
+			covered = strings.Contains(srcNoApos, strings.TrimSuffix(ln, "s"))
+		}
+		if !covered {
 			offenders = append(offenders, name)
 		}
 	}
 	return offenders
+}
+
+// stripApostrophes fjerner rette og typografiske apostrofer.
+func stripApostrophes(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\'' || r == '’' || r == '‘' || r == '`' {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // messageText henter ren tekst fra en meldings content — enten en streng
@@ -325,7 +344,9 @@ func (s *Server) regroundAnswer(ctx context.Context, full map[string]any, draft 
 		map[string]any{"role": "user", "content": "RETTELSE: svaret ditt inneholdt verdier som IKKE finnes i verktøydataene: " +
 			strings.Join(offenders, ", ") + ". Skriv svaret på nytt og bruk KUN tall og navn som står ordrett i verktøyresultatene."})
 	fixed["messages"] = msgs
+	// tool_choice uten tools avvises av upstream (400) — fjern begge.
 	delete(fixed, "tools")
+	delete(fixed, "tool_choice")
 
 	body, err := jsonMarshal(fixed)
 	if err != nil {
@@ -371,7 +392,9 @@ func (s *Server) regroundContinuation(ctx context.Context, full map[string]any, 
 			"». Fortsett NATURLIG akkurat derfra (ikke gjenta noe av det viste), uten de udekkede påstandene. " +
 			"Mangler du grunnlag for noe, si ærlig at du ikke vet."})
 	fixed["messages"] = msgs
+	// tool_choice uten tools avvises av upstream (400) — fjern begge.
 	delete(fixed, "tools")
+	delete(fixed, "tool_choice")
 
 	body, err := jsonMarshal(fixed)
 	if err != nil {

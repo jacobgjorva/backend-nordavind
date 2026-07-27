@@ -24,6 +24,17 @@ func TestGroundingIgnoresSmallCountsAndPlainText(t *testing.T) {
 	}
 }
 
+func TestGroundingAcceptsNorwegianGenitive(t *testing.T) {
+	sources := []string{"### Kilde 1: Pernod Ricard's annual revenue 2026: $300M and growing"}
+	if off := groundingOffenders("Pernod Ricards omsetning er rundt 300 millioner dollar.", sources); len(off) != 0 {
+		t.Fatalf("norsk genitiv av kildefast navn skal passere, fikk %v", off)
+	}
+	sources = []string{"### Kilde 1: Celebrity Net Worth skriver at formuen vokser"}
+	if off := groundingOffenders("Celebrity Net Worths anslag viser det samme.", sources); len(off) != 0 {
+		t.Fatalf("genitiv-s uten apostrof i kilden skal passere, fikk %v", off)
+	}
+}
+
 func TestGroundingCatchesFabricatedLinks(t *testing.T) {
 	sources := []string{`{"columns":["id"],"rows":[["1"]]}`}
 	off := groundingOffenders("Fila ligger her: [ordre.xlsx](https://moestuecask.sharepoint.com/x/abc)", sources)
