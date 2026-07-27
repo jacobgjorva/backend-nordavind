@@ -74,12 +74,16 @@ var Registry = []Intent{
 		AdminOnly: true,
 	},
 	{
-		Key:         "create_widget",
-		Description: "Lage en ny widget, graf eller visualisering av bedriftsdata",
+		Key: "create_widget",
+		// Skillet mot data_question går på GJENSTANDEN (en varig widget/graf på
+		// dashbordet), aldri på datainnholdet. Eksempelet «ny widget med topp
+		// 10 kunder» beskrev innholdet og dro til seg rene datasporsmål —
+		// «vis de tre største kundene» rutet direct til widget-bygging.
+		Description: "Lage en VARIG widget, graf eller visualisering på dashbordet. Engangsspørsmål om tall, lister eller rader er data_question, selv når de starter med «vis»",
 		Examples: []string{
 			"lag et linjediagram over månedlig omsetning",
 			"trenger en graf over ordre per status",
-			"ny widget med topp 10 kunder",
+			"sett opp en ny widget på dashbordet",
 			"lag en donut over fordelingen",
 			"visualiser salget per region",
 		},

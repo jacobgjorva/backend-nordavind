@@ -39,6 +39,12 @@ const (
 	directMargin = 0.08
 	// candN: hvor mange kandidater dommeren får velge blant.
 	candN = 3
+	// panelScore: gulvet for at et DOMMERVALGT deterministisk panel får kapre
+	// svaret. Målt: ekte panelønsker («lag en presentasjon…», «vis meg
+	// forbruket», «koble til databasen vår») ligger 0,83–0,89 i embedding,
+	// mens feiltreffet «er ute etter startup navn» → connect_database lå på
+	// 0,63. Gulvet skiller de to klassene med god margin begge veier.
+	panelScore = 0.70
 	// freeChatMargin: er free_chat nærmere toppkandidaten enn dette, avgjør
 	// dommeren i stedet for direct — romsligere enn directMargin fordi
 	// rådgivningsformuleringer scorer systematisk lavere på tekstlikhet.
@@ -223,6 +229,13 @@ func (e *Engine) Resolve(ctx context.Context, message string, isAdmin bool) Deci
 		// traff forbrukspanelet direkte). Modellflyter beholder direct: der
 		// koster en bom bare verktøyskop, ikke et feil panel.
 		if f, ok := Flows[cands[0].Key]; ok && f.Deterministic {
+			// Panelgulvet gjelder OGSÅ her: 0,63 med heldig margin og en
+			// medgjørlig dommer åpnet skjemaet likevel. Under gulvet mister
+			// treffet direktestatusen og må vinne som vanlig dommervalg —
+			// som det ikke kan, av samme gulv.
+			if cands[0].Score < panelScore {
+				return e.judgeDecision(ctx, msg, isAdmin, cands, start, "")
+			}
 			return e.judgeDecision(ctx, msg, isAdmin, cands, start, cands[0].Key)
 		}
 		return Decision{Key: cands[0].Key, Method: MethodDirect, Candidates: cands, Elapsed: time.Since(start)}
@@ -269,6 +282,29 @@ func (e *Engine) judgeDecision(ctx context.Context, msg string, isAdmin bool, ca
 	}
 	if pick == FreeChatKey {
 		return Decision{Method: MethodJudge, Candidates: cands, Elapsed: time.Since(start)}
+	}
+	// Panel-vernet, andre retning: et DIREKTETREFF på en deterministisk flyt
+	// krever dommerbekreftelse (over). Speilbildet: et DOMMERVALGT panel
+	// krever embedding-styrke over panelgulvet. Et panel som åpnes feil
+	// kaprer hele svaret, så begge signalene må peke samme vei med tyngde —
+	// «er ute etter startup navn» hadde dommeren med seg, men bare 0,63 i
+	// embedding, og skjemaet kapret svaret. En hard blokk (kun bekreftet
+	// direct) ble prøvd først og forkastet: den drepte tre legitime
+	// panelønsker i eval. Modellflyter er unntatt: der koster en bom bare
+	// verktøyskop, ikke en kapret samtale.
+	if f, ok := Flows[pick]; ok && f.Deterministic && pick != directKey {
+		score := 0.0
+		for _, c := range cands {
+			if c.Key == pick {
+				score = c.Score
+				break
+			}
+		}
+		if score < panelScore {
+			e.log.Warn("intent: panelvalg under panelgulvet, fail-open til fri chat",
+				"pick", pick, "score", score)
+			return Decision{Method: MethodJudge, Candidates: cands, Elapsed: time.Since(start)}
+		}
 	}
 	if pick == directKey {
 		// Bekreftet direktetreff — logges som direct for målbarhet.
