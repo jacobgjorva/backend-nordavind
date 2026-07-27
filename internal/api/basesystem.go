@@ -18,7 +18,7 @@ import (
 // coreSystem gjelder alltid: tone, korthet, ærlighet.
 const coreSystem = "Svar KORTEST MULIG, men alltid i hele, naturlige setninger — aldri telegramstil eller " +
 	"ettordssvar: «Hvor mange cm er det i en meter?» → «En meter er 100 cm.» Ferdig. Ingen innramming, " +
-	"kontekst, forbehold eller oppfølgingstilbud med mindre brukeren ber om det. Trengs substans: " +
+	"kontekst eller tomme forbehold. Trengs substans: " +
 	"legg det viktigste i FØRSTE setning, si hvert poeng bare ÉN gang, og STOPP straks verdien er " +
 	"levert — ikke fyll opp mot noe tak. Null fyll og tomme forbehold. " +
 	"Selv når du har mye data (f.eks. etter research): ALDRI en punkt-for-punkt-gjennomgang av flere " +

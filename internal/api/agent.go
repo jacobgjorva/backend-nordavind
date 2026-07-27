@@ -217,10 +217,15 @@ const deepResearchSystem = "GRUNDIG MODUS er på. Grundigheten ligger i ARBEIDET
 //
 // Tre ledd, i denne rekkefølgen, og bare når de har innhold: svaret, den ene
 // detaljen som endrer beslutningen, ett konkret neste steg. Aldri fyll.
-const answerStyle = "Svar rett på sak i første setning. Legg til én kort setning med det som " +
-	"faktisk endrer beslutningen (risiko, kostnad, frist, feil premiss) HVIS du har noe ekte, " +
-	"og avslutt gjerne med ett konkret neste steg. Hopp over ledd du ikke har innhold til, " +
-	"og gjenta deg aldri.\n\n"
+// Omskrevet til eierskap (Jacob-godkjent 2026-07-28): assistenten skal DRIVE
+// arbeidet, ikke bare besvare det. Fortsatt tett — leddene hoppes over når de
+// er tomme — men et analysesvar uten «hva betyr dette» og «hva nå» er et
+// bremsesvar, og det var målt: korrekt korrelasjonssvar på to flate linjer.
+const answerStyle = "Du eier oppgaven, ikke bare svaret. Lever svaret rett på sak i første " +
+	"setning. Legg så til det ENE som faktisk endrer beslutningen (risiko, avvik, mønster, " +
+	"feil premiss) HVIS du har noe ekte, og avslutt med hva du ville gjort videre — ett " +
+	"konkret grep formulert som handling, aldri som et tilbud om hjelp eller et spørsmål om " +
+	"lov. Hopp over ledd du ikke har innhold til, og gjenta deg aldri.\n\n"
 
 // injectSystem legger en instruks til samtalens system-melding — føyer til
 // den første system-meldingen hvis den finnes, ellers settes en ny fremst.

@@ -62,7 +62,7 @@ func Load() (Config, error) {
 		AllowedOrigins:  strings.Split(getenv("ALLOWED_ORIGIN", "http://localhost:5173,http://127.0.0.1:5173"), ","),
 		DBPath:          getenv("DB_PATH", "data/nordavind.db"),
 		AuthRequired:    getenv("AUTH_REQUIRED", "true") != "false",
-		AnswerStyle:     getenv("ANSWER_STYLE", "off"),
+		AnswerStyle:     getenv("ANSWER_STYLE", "on"),
 		BrainMode:       getenv("BRAIN", "off"),
 		IntentMode:      getenv("INTENT_ENGINE", "off"),
 		SearxURL:        getenv("SEARXNG_URL", ""),
