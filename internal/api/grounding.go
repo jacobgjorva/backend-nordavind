@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -74,7 +76,9 @@ func offendersCore(prose string, sources []string, minDigits int, exactNums bool
 	// sammenklistrede sifferstrengen av HELE kildematerialet dekker ingenting.
 	srcNums := map[string]bool{}
 	var srcNumList []string
+	var srcNumRaw []string // uendret form, til avrundingssjekken
 	for _, m := range groundNumRe.FindAllString(src, -1) {
+		srcNumRaw = append(srcNumRaw, m)
 		d := normDigits(m)
 		if !srcNums[d] {
 			srcNums[d] = true
@@ -102,6 +106,14 @@ func offendersCore(prose string, sources []string, minDigits int, exactNums bool
 					break
 				}
 			}
+		}
+		// Avrunding er ikke dikting. «6 595» for kildens 6594,90 ble underkjent
+		// og klippet prosaen bort fra svaret, så brukeren satt igjen med en
+		// naken tabell. Vi godtar tallet når det er kildetallet avrundet til
+		// samme antall signifikante siffer — ikke en løs prosentmargin, som
+		// ville sluppet gjennom ekte avvik på store beløp.
+		if !covered && isRoundingOf(m, srcNumRaw) {
+			covered = true
 		}
 		if !covered {
 			offenders = append(offenders, strings.TrimSpace(m))
@@ -435,4 +447,61 @@ func hasNameOffender(offenders []string) bool {
 		}
 	}
 	return false
+}
+
+// isRoundingOf: er `shown` et av kildetallene avrundet til samme antall
+// signifikante siffer? Det er den eneste formen for tallomskriving vi godtar
+// uten dekning — en fast prosentmargin ville sluppet gjennom ekte avvik på
+// store beløp.
+func isRoundingOf(shown string, sourceNums []string) bool {
+	want, ok := parseLooseNumber(shown)
+	if !ok {
+		return false
+	}
+	digits := len(strings.TrimLeft(normDigits(shown), "0"))
+	if digits == 0 || digits > 15 {
+		return false
+	}
+	for _, raw := range sourceNums {
+		got, ok := parseLooseNumber(raw)
+		if !ok {
+			continue
+		}
+		if roundToSignificant(got, digits) == roundToSignificant(want, digits) {
+			return true
+		}
+	}
+	return false
+}
+
+// parseLooseNumber leser tall slik de skrives i norsk tekst: mellomrom som
+// tusenskille, komma eller punktum som desimalskille.
+func parseLooseNumber(s string) (float64, bool) {
+	t := strings.TrimSpace(s)
+	t = strings.ReplaceAll(t, " ", "")
+	t = strings.ReplaceAll(t, " ", "")
+	// Siste separator er desimalskillet når det står 1-2 sifre etter det.
+	if i := strings.LastIndexAny(t, ".,"); i >= 0 && len(t)-i-1 <= 2 && len(t)-i-1 > 0 {
+		t = strings.ReplaceAll(t[:i], ",", "") + "." + t[i+1:]
+		t = strings.ReplaceAll(t, ".", "@")
+		t = strings.Replace(t, "@", ".", 1)
+		if j := strings.LastIndex(t, "@"); j >= 0 {
+			t = strings.ReplaceAll(t, "@", "")
+			_ = j
+		}
+	} else {
+		t = strings.ReplaceAll(t, ".", "")
+		t = strings.ReplaceAll(t, ",", "")
+	}
+	f, err := strconv.ParseFloat(t, 64)
+	return f, err == nil
+}
+
+// roundToSignificant runder til n signifikante siffer.
+func roundToSignificant(v float64, n int) float64 {
+	if v == 0 || n <= 0 {
+		return 0
+	}
+	mag := math.Pow(10, float64(n)-math.Ceil(math.Log10(math.Abs(v))))
+	return math.Round(v*mag) / mag
 }

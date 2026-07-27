@@ -130,7 +130,13 @@ var Flows = map[string]Flow{
 	},
 
 	"data_question": {
-		Knowledge: true,
+		// Kunnskapslaget er AV på rene tallspørsmål: databasen er kilden, og
+		// et notat som havner i konteksten blir servert som om det var et
+		// datasvar. Målt: «Hva er marginen per produkt?» hentet 19 notater og
+		// svarte «inngangsgebyret er 1 800 kr per produkt» — et notat, ikke
+		// et tall fra basen. Sparer også kontekst på den flyten som kjører
+		// oftest.
+		Knowledge: false,
 		Tools:     []string{ToolQueryDatabase, ToolShowTable},
 		Model:     "mid",
 		MaxChars:  300, // tette tallsvar
@@ -138,7 +144,8 @@ var Flows = map[string]Flow{
 		Sticky:    true, // oppfølgingsspørsmål («sikker?») skal beholde db-verktøyene
 	},
 	"show_table": {
-		Knowledge: true,
+		// Samme grunn som data_question: tabellen skal komme fra basen.
+		Knowledge: false,
 		Tools:     []string{ToolQueryDatabase, ToolShowTable},
 		Model:     "mid",
 		MaxChars:  150, // tabellen er svaret; maks én ledsagende setning
