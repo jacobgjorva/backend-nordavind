@@ -1342,6 +1342,9 @@ func (s *Server) runWebSearchFor(ctx context.Context, query, intentText string) 
 		s.log.Warn("websøk feilet", "query", query, "err", err)
 		return "Søket ga ingen resultater.", nil
 	}
+	// Sosiale medier bakerst FØR kuttet — ellers presser et YouTube/Reddit-
+	// treff en faktakilde ut av topp-N (Aurora-fødselsdato-saken).
+	results = demoteSocial(results)
 	if len(results) > excerptPages {
 		results = results[:excerptPages]
 	}
