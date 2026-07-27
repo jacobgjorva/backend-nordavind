@@ -7,9 +7,21 @@ handle /v1/* {
 	reverse_proxy 127.0.0.1:8080
 }
 
+# Byggede filer har innholds-hash i navnet og kan caches for alltid.
+@assets path /assets/*
+handle @assets {
+	root * /opt/nordavind/frontend
+	header Cache-Control "public, max-age=31536000, immutable"
+	file_server
+}
+
 # Alt annet er frontend-bygget (SPA med fallback til index.html).
+# index.html skal ALDRI caches: en deploy sletter gamle chunk-filer, og en
+# fane som holder på gammel index.html vil da feile når den laster en modul
+# som ikke finnes lenger.
 handle {
 	root * /opt/nordavind/frontend
+	header Cache-Control "no-cache"
 	try_files {path} /index.html
 	file_server
 }
