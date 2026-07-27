@@ -42,7 +42,9 @@ func (s *Server) knowledgeFor(ctx context.Context, full map[string]any) string {
 	}
 	// Hjernen legges FORAN lappene: påstandene er destillatet, lappene er
 	// beviset. Finner hjernen ingenting, står lappene alene som før.
-	claims := s.brainContext(ctx, user.TenantID, user.ID, query)
+	// Hjernen ser på de siste meldingene, ikke bare den siste: «Hvem har
+	// ansvar for kunden?» nevner ingen entitet — navnet sto i forrige tur.
+	claims := s.brainContext(ctx, user.TenantID, user.ID, recentUserText(full, 3))
 	switch {
 	case claims == "":
 		return notes
@@ -55,6 +57,23 @@ func (s *Server) knowledgeFor(ctx context.Context, full map[string]any) string {
 
 // lastUserText henter ren tekst fra siste brukermelding (håndterer både
 // streng-innhold og multimodale deler).
+// recentUserText slår sammen de n siste brukermeldingene. Brukes til
+// entitetsgjenkjenning, der referanser peker bakover i samtalen.
+func recentUserText(full map[string]any, n int) string {
+	msgs, _ := full["messages"].([]any)
+	var parts []string
+	for i := len(msgs) - 1; i >= 0 && len(parts) < n; i-- {
+		m, ok := msgs[i].(map[string]any)
+		if !ok || m["role"] != "user" {
+			continue
+		}
+		if c, ok := m["content"].(string); ok && c != "" {
+			parts = append(parts, c)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
 func lastUserText(full map[string]any) string {
 	msgs, _ := full["messages"].([]any)
 	for i := len(msgs) - 1; i >= 0; i-- {

@@ -443,14 +443,19 @@ func matchesEntity(query string, words map[string]bool, name string) bool {
 	if strings.Contains(query, n) {
 		return true
 	}
-	parts := strings.Fields(n)
-	if len(parts) < 2 {
-		return false
-	}
-	for _, p := range parts {
+	for _, p := range strings.Fields(n) {
 		// Bare distinkte deler: korte ord som «as» og «og» treffer alt.
-		if len([]rune(p)) >= 4 && words[p] {
+		if len([]rune(p)) < 4 {
+			continue
+		}
+		if words[p] {
 			return true
+		}
+		// Norsk bøyer navn: «Vestlands Fisk» skal treffe «Vestland Fisk».
+		for w := range words {
+			if len([]rune(w)) >= 4 && (strings.HasPrefix(w, p) || strings.HasPrefix(p, w)) {
+				return true
+			}
 		}
 	}
 	return false
