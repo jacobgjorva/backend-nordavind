@@ -1,0 +1,673 @@
+{
+  "name": "noir",
+  "type": "deck",
+  "label": "Noir",
+  "description": "svart, stor hvit sans, fargede grafer",
+  "format": {
+    "ratio": "16:9",
+    "width": 1920
+  },
+  "tokens": {
+    "bg": "#000000",
+    "text": "#ffffff",
+    "muted": "rgba(255, 255, 255, 0.6)",
+    "faint": "rgba(255, 255, 255, 0.45)",
+    "line": "rgba(255, 255, 255, 0.12)",
+    "grid": "#242424",
+    "sans": "\"Helvetica Neue\", Helvetica, Arial, sans-serif",
+    "serif": "Georgia, \"Times New Roman\", Times, serif",
+    "mono": "ui-monospace, \"SF Mono\", Menlo, monospace"
+  },
+  "palette": [
+    "#6b8afd",
+    "#e8e97a",
+    "#f2683c",
+    "#c9d96a",
+    "#f4b8c7",
+    "#7de2b8",
+    "#f2994a",
+    "#a8e6f0",
+    "#a8a838",
+    "#8b6bb0",
+    "#d8d8d8",
+    "#e04444"
+  ],
+  "assets": [
+    "bg-1.jpg",
+    "bg-2.jpg",
+    "bg-3.jpg"
+  ],
+  "layouts": [
+    {
+      "key": "title",
+      "use": "åpning, bilde",
+      "slots": [
+        {
+          "key": "title",
+          "kind": "text",
+          "hint": "3-7 ord",
+          "required": true
+        },
+        {
+          "key": "content",
+          "kind": "text",
+          "hint": "én linje"
+        },
+        {
+          "key": "image",
+          "kind": "image",
+          "hint": "bg-N",
+          "required": true
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "bg",
+          "field": "image"
+        },
+        {
+          "kind": "group",
+          "class": "centerBlock",
+          "children": [
+            {
+              "kind": "text",
+              "field": "title",
+              "class": "monoTitle"
+            },
+            {
+              "kind": "md",
+              "field": "content",
+              "class": "centerSub"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "section",
+      "use": "kapittelskille, eget bilde",
+      "slots": [
+        {
+          "key": "title",
+          "kind": "text",
+          "hint": "1-2 ord",
+          "required": true
+        },
+        {
+          "key": "content",
+          "kind": "text",
+          "hint": "01"
+        },
+        {
+          "key": "image",
+          "kind": "image",
+          "hint": "bg-N",
+          "required": true
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "bg",
+          "field": "image"
+        },
+        {
+          "kind": "group",
+          "class": "sectionBlock",
+          "children": [
+            {
+              "kind": "text",
+              "field": "title",
+              "class": "sectionTitle"
+            },
+            {
+              "kind": "text",
+              "field": "content",
+              "class": "sectionNum"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "contents",
+      "use": "innholdsliste, nummereres selv",
+      "slots": [
+        {
+          "key": "title",
+          "kind": "text",
+          "hint": "Innhold"
+        },
+        {
+          "key": "content",
+          "kind": "list",
+          "hint": "én linje per seksjon",
+          "required": true
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "brand",
+          "class": "proseMeta"
+        },
+        {
+          "kind": "text",
+          "field": "title",
+          "class": "proseLabel",
+          "fallback": "Innhold"
+        },
+        {
+          "kind": "toc",
+          "field": "content",
+          "class": "tocList"
+        }
+      ]
+    },
+    {
+      "key": "prose",
+      "use": "lengre tekst i to spalter",
+      "slots": [
+        {
+          "key": "title",
+          "kind": "text",
+          "hint": "1-2 ord"
+        },
+        {
+          "key": "content",
+          "kind": "markdown",
+          "hint": "flere avsnitt",
+          "required": true
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "brand",
+          "class": "proseMeta"
+        },
+        {
+          "kind": "text",
+          "field": "title",
+          "class": "proseLabel"
+        },
+        {
+          "kind": "md",
+          "field": "content",
+          "class": "proseBody"
+        }
+      ]
+    },
+    {
+      "key": "text",
+      "use": "hovedbudskap i løpende tekst",
+      "slots": [
+        {
+          "key": "content",
+          "kind": "markdown",
+          "hint": "1-3 avsnitt",
+          "required": true
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "brand",
+          "class": "proseMeta"
+        },
+        {
+          "kind": "md",
+          "field": "content",
+          "class": "textBlock"
+        }
+      ]
+    },
+    {
+      "key": "statement",
+      "use": "ett stort poeng",
+      "slots": [
+        {
+          "key": "content",
+          "kind": "text",
+          "hint": "1-3 setninger",
+          "required": true
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "brand",
+          "class": "proseMeta"
+        },
+        {
+          "kind": "group",
+          "class": "statement",
+          "children": [
+            {
+              "kind": "md",
+              "field": "content",
+              "class": "statementText"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "quote",
+      "use": "sitat med avsender",
+      "slots": [
+        {
+          "key": "content",
+          "kind": "text",
+          "hint": "sitatet uten hermetegn",
+          "required": true
+        },
+        {
+          "key": "title",
+          "kind": "text",
+          "hint": "hvem"
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "brand",
+          "class": "proseMeta"
+        },
+        {
+          "kind": "group",
+          "class": "statement",
+          "children": [
+            {
+              "kind": "quote",
+              "field": "content",
+              "class": "statementText"
+            },
+            {
+              "kind": "text",
+              "field": "title",
+              "class": "quoteAuthor",
+              "prefix": "— "
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "bullets",
+      "use": "3-5 punkter",
+      "slots": [
+        {
+          "key": "title",
+          "kind": "text",
+          "hint": "kort tittel"
+        },
+        {
+          "key": "content",
+          "kind": "list",
+          "hint": "3-5 punkter",
+          "required": true
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "text",
+          "field": "title",
+          "class": "heading"
+        },
+        {
+          "kind": "md",
+          "field": "content",
+          "class": "bullets"
+        }
+      ]
+    },
+    {
+      "key": "image",
+      "use": "motiv høyre, tekst venstre",
+      "slots": [
+        {
+          "key": "title",
+          "kind": "text",
+          "hint": "kort"
+        },
+        {
+          "key": "content",
+          "kind": "markdown",
+          "hint": "1-3 linjer"
+        },
+        {
+          "key": "image",
+          "kind": "image",
+          "hint": "bg-N",
+          "required": true
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "brand",
+          "class": "proseMeta"
+        },
+        {
+          "kind": "group",
+          "class": "imageCaption",
+          "children": [
+            {
+              "kind": "text",
+              "field": "title",
+              "class": "imageCaptionTitle"
+            },
+            {
+              "kind": "md",
+              "field": "content"
+            }
+          ]
+        },
+        {
+          "kind": "image",
+          "field": "image",
+          "class": "imageMain"
+        }
+      ]
+    },
+    {
+      "key": "image-lg",
+      "use": "stort motiv, liten tekst",
+      "slots": [
+        {
+          "key": "title",
+          "kind": "text",
+          "hint": "kort"
+        },
+        {
+          "key": "content",
+          "kind": "markdown",
+          "hint": "1-3 linjer"
+        },
+        {
+          "key": "image",
+          "kind": "image",
+          "hint": "bg-N",
+          "required": true
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "brand",
+          "class": "proseMeta"
+        },
+        {
+          "kind": "image",
+          "field": "image",
+          "class": "imageLg"
+        },
+        {
+          "kind": "group",
+          "class": "imageLgCaption",
+          "children": [
+            {
+              "kind": "text",
+              "field": "title",
+              "class": "imageCaptionTitle"
+            },
+            {
+              "kind": "md",
+              "field": "content"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "images",
+      "use": "to motiver",
+      "slots": [
+        {
+          "key": "title",
+          "kind": "text",
+          "hint": "kort"
+        },
+        {
+          "key": "content",
+          "kind": "markdown",
+          "hint": "bildetekster"
+        },
+        {
+          "key": "images",
+          "kind": "images",
+          "hint": "to bg-N",
+          "required": true
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "brand",
+          "class": "proseMeta"
+        },
+        {
+          "kind": "imageAt",
+          "field": "images",
+          "index": 0,
+          "class": "imagesBig"
+        },
+        {
+          "kind": "imageAt",
+          "field": "images",
+          "index": 1,
+          "class": "imagesSmall"
+        },
+        {
+          "kind": "group",
+          "class": "imagesCaption",
+          "children": [
+            {
+              "kind": "text",
+              "field": "title",
+              "class": "imageCaptionTitle"
+            },
+            {
+              "kind": "md",
+              "field": "content"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "figure",
+      "use": "innrammet motiv med forklaring",
+      "slots": [
+        {
+          "key": "content",
+          "kind": "markdown",
+          "hint": "2-4 setninger",
+          "required": true
+        },
+        {
+          "key": "title",
+          "kind": "text",
+          "hint": "kilde"
+        },
+        {
+          "key": "image",
+          "kind": "image",
+          "hint": "bg-N",
+          "required": true
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "brand",
+          "class": "proseMeta"
+        },
+        {
+          "kind": "image",
+          "field": "image",
+          "class": "figureImg"
+        },
+        {
+          "kind": "group",
+          "class": "figureText",
+          "children": [
+            {
+              "kind": "md",
+              "field": "content",
+              "class": "statementText"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "field": "title",
+          "class": "figureCaption"
+        }
+      ]
+    },
+    {
+      "key": "chart",
+      "use": "én graf",
+      "slots": [
+        {
+          "key": "title",
+          "kind": "text",
+          "hint": "3-6 ord"
+        },
+        {
+          "key": "widget",
+          "kind": "widget",
+          "hint": "bar|line|donut",
+          "required": true
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "brand",
+          "class": "proseMeta"
+        },
+        {
+          "kind": "text",
+          "field": "title",
+          "class": "chartHeading"
+        },
+        {
+          "kind": "chart",
+          "field": "widget",
+          "class": "chartArea"
+        }
+      ]
+    },
+    {
+      "key": "split",
+      "use": "graf pluss poeng",
+      "slots": [
+        {
+          "key": "content",
+          "kind": "text",
+          "hint": "1-2 setninger",
+          "required": true
+        },
+        {
+          "key": "widget",
+          "kind": "widget",
+          "hint": "bar|line|donut",
+          "required": true
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "chart",
+          "field": "widget",
+          "class": "splitViz"
+        },
+        {
+          "kind": "md",
+          "field": "content",
+          "class": "splitText"
+        }
+      ]
+    },
+    {
+      "key": "chart-duo",
+      "use": "to grafer",
+      "slots": [
+        {
+          "key": "title",
+          "kind": "text",
+          "hint": "3-6 ord"
+        },
+        {
+          "key": "widgets",
+          "kind": "widgets",
+          "hint": "nøyaktig 2",
+          "required": true
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "brand",
+          "class": "proseMeta"
+        },
+        {
+          "kind": "text",
+          "field": "title",
+          "class": "chartHeading"
+        },
+        {
+          "kind": "chartDuo",
+          "field": "widgets"
+        }
+      ]
+    },
+    {
+      "key": "kpis",
+      "use": "2-4 nøkkeltall",
+      "slots": [
+        {
+          "key": "title",
+          "kind": "text",
+          "hint": "kort tittel"
+        },
+        {
+          "key": "widgets",
+          "kind": "widgets",
+          "hint": "2-4 kpi, SQL gir ett tall",
+          "required": true
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "text",
+          "field": "title",
+          "class": "heading"
+        },
+        {
+          "kind": "kpis",
+          "field": "widgets",
+          "class": "kpiRow"
+        }
+      ]
+    },
+    {
+      "key": "table",
+      "use": "tabell fra databasen",
+      "slots": [
+        {
+          "key": "title",
+          "kind": "text",
+          "hint": "3-6 ord"
+        },
+        {
+          "key": "widget",
+          "kind": "widget",
+          "hint": "table med SELECT",
+          "required": true
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "text",
+          "field": "title",
+          "class": "heading"
+        },
+        {
+          "kind": "table",
+          "field": "widget"
+        }
+      ]
+    }
+  ]
+}
