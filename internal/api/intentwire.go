@@ -159,6 +159,12 @@ const (
 // skal ha intern kunnskap injisert (Flow.Knowledge). Ingen ruting satt
 // (fail-open, widget/connector-moduser) = ja — dagens oppførsel.
 func flowWantsKnowledge(full map[string]any) bool {
+	// En @-nevning er brukerens eksplisitte beskjed om at dette handler om
+	// noe internt. Da skal kunnskapen alltid med, uansett hvor ruteren
+	// mente meldingen hørte hjemme («Hvem er @Kari Nes» havnet i web_fact).
+	if strings.Contains(lastUserText(full), "@") {
+		return true
+	}
 	key, _ := full[flowKeyField].(string)
 	if key == "" {
 		return true
@@ -257,6 +263,13 @@ func (s *Server) applyIntent(ctx context.Context, user store.User, full map[stri
 		}
 	}()
 	key, flow := intent.FlowFor(d)
+	// Nevner brukeren en intern entitet, handler spørsmålet om bedriften —
+	// ikke om verden. Web-flyten ville svart «fant ingen informasjon» med
+	// svaret liggende i grafen.
+	if strings.Contains(msg, "@") && (key == "web_fact" || key == "smalltalk") {
+		key, flow = intent.FreeChatKey, intent.Flows[intent.FreeChatKey]
+		s.log.Info("intent: nevning gjør spørsmålet internt", "fra", d.Key)
+	}
 	s.log.Info("intent", "key", key, "method", d.Method, "ms", d.Elapsed.Milliseconds())
 
 	if flow.Deterministic {
