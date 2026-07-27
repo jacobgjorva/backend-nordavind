@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/connector"
@@ -29,17 +30,114 @@ type dbConn struct {
 // dbToolContext bygger query_database-verktøyet for innlogget bruker.
 // Returnerer nil hvis tenanten ikke har tilkoblinger brukeren kan bruke.
 func (s *Server) dbToolContext(ctx context.Context) *dbToolCtx {
+	return s.dbToolContextFor(ctx, "")
+}
+
+// dbToolContextFor tar med brukerens melding som fokus for tabellutvalget.
+func (s *Server) dbToolContextFor(ctx context.Context, focus string) *dbToolCtx {
 	user, ok := ctx.Value(userKey).(store.User)
 	if !ok {
 		return nil
 	}
-	return s.buildDBTool(user.TenantID, user.ID, "")
+	return s.buildDBToolFocused(user.TenantID, user.ID, "", focus)
+}
+
+// tableDetailLimit: over dette antallet tabeller sendes bare de mest
+// relevante med kolonner. Under: alt, som før — de fleste baser er små, og
+// da er full oversikt både billig og best.
+const tableDetailLimit = 8
+
+// relevantTables velger hvilke tabeller som skal vises med kolonner, ut fra
+// ordene i brukerens melding. nil = alle (liten base).
+func relevantTables(tables []store.TableConfig, focus string) map[string]bool {
+	if len(tables) <= tableDetailLimit || strings.TrimSpace(focus) == "" {
+		return nil
+	}
+	words := map[string]bool{}
+	for _, w := range strings.FieldsFunc(strings.ToLower(focus), func(r rune) bool {
+		return !('a' <= r && r <= 'z' || '0' <= r && r <= '9' ||
+			r == 'æ' || r == 'ø' || r == 'å')
+	}) {
+		if len([]rune(w)) >= 3 {
+			words[w] = true
+		}
+	}
+	type scored struct {
+		name  string
+		score int
+	}
+	var list []scored
+	for _, tb := range tables {
+		sc := 0
+		hay := strings.ToLower(tb.Name + " " + tb.Description)
+		for w := range words {
+			if strings.Contains(hay, w) {
+				sc += 3
+			}
+		}
+		for _, col := range tb.ColumnList {
+			cl := strings.ToLower(col.Name)
+			for w := range words {
+				if strings.Contains(cl, w) {
+					sc++
+				}
+			}
+		}
+		list = append(list, scored{tb.Name, sc})
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].score > list[j].score })
+	out := map[string]bool{}
+	for i, x := range list {
+		// Alltid noen tabeller med kolonner, selv uten treff — ellers står
+		// modellen uten noe å skrive SQL mot.
+		if i < tableDetailLimit || x.score > 0 {
+			out[x.name] = true
+		}
+	}
+	return out
+}
+
+// shortType kutter SQL-typenavn til det modellen faktisk trenger å vite.
+// «timestamp with time zone» er 25 tegn i hver eneste melding; «ts» sier det
+// samme for den som skal skrive en WHERE-klausul.
+func shortType(t string) string {
+	l := strings.ToLower(strings.TrimSpace(t))
+	switch {
+	case strings.HasPrefix(l, "timestamp"), strings.HasPrefix(l, "datetime"):
+		return "ts"
+	case strings.HasPrefix(l, "date"):
+		return "date"
+	case strings.HasPrefix(l, "time"):
+		return "time"
+	case strings.HasPrefix(l, "character varying"), strings.HasPrefix(l, "varchar"),
+		strings.HasPrefix(l, "nvarchar"), strings.HasPrefix(l, "text"),
+		strings.HasPrefix(l, "char"):
+		return "text"
+	case strings.HasPrefix(l, "bigint"), strings.HasPrefix(l, "integer"),
+		strings.HasPrefix(l, "smallint"), strings.HasPrefix(l, "int"):
+		return "int"
+	case strings.HasPrefix(l, "numeric"), strings.HasPrefix(l, "decimal"),
+		strings.HasPrefix(l, "double"), strings.HasPrefix(l, "real"),
+		strings.HasPrefix(l, "float"), strings.HasPrefix(l, "money"):
+		return "num"
+	case strings.HasPrefix(l, "bool"), strings.HasPrefix(l, "bit"):
+		return "bool"
+	case l == "":
+		return ""
+	}
+	return l
 }
 
 // buildDBTool bygger query_database-verktøyet for en tenant/bruker. Hvis
 // onlyConnID er satt, begrenses verktøyet til den ene tilkoblingen (brukes
 // av agent-scheduleren, som kjører uten en HTTP-sesjon).
 func (s *Server) buildDBTool(tenantID, userID, onlyConnID string) *dbToolCtx {
+	return s.buildDBToolFocused(tenantID, userID, onlyConnID, "")
+}
+
+// buildDBToolFocused tar med brukerens melding: på store baser avgjør den
+// hvilke tabeller som vises med kolonner (se relevantTables).
+func (s *Server) buildDBToolFocused(tenantID, userID, onlyConnID, focus string) *dbToolCtx {
 	conns, err := s.store.ListConnections(tenantID)
 	if err != nil || len(conns) == 0 {
 		return nil
@@ -96,11 +194,24 @@ func (s *Server) buildDBTool(tenantID, userID, onlyConnID string) *dbToolCtx {
 		// Tett format: én linje per tabell «navn(kol type, …)», beholder all
 		// info men kutter punktlister/innrykk/linjeskift = færre tokens.
 		fmt.Fprintf(&schema, "Database %q (id=%s, %s):\n", c.Name, c.ID, c.Driver)
+		// Store baser: send kolonnene for de mest relevante tabellene, og bare
+		// NAVNET på resten. Med 50 tabeller ville hele skjemaet vært titusener
+		// av tegn i hver melding — modellen kan be om resten ved å spørre.
+		detailed := relevantTables(tables, focus)
 		for _, tb := range tables {
 			allowed = append(allowed, tb.Name)
+			if detailed != nil && !detailed[tb.Name] {
+				// Kun navnet: modellen ser at tabellen finnes.
+				fmt.Fprintf(&schema, "%s(…)", tb.Name)
+				if tb.Description != "" {
+					fmt.Fprintf(&schema, " — %s", tb.Description)
+				}
+				schema.WriteString("\n")
+				continue
+			}
 			cols := make([]string, 0, len(tb.ColumnList))
 			for _, col := range tb.ColumnList {
-				s := col.Name + " " + col.Type
+				s := col.Name + " " + shortType(col.Type)
 				if col.Description != "" {
 					s += " (" + col.Description + ")"
 				}

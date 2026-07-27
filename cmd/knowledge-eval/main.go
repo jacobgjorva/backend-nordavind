@@ -46,6 +46,8 @@ type evalCase struct {
 
 const tenant = "eval-tenant"
 
+var noNoise = flag.Bool("no-noise", false, "kjør uten støylappene (gammel baseline)")
+
 func main() {
 	verbose := flag.Bool("verbose", false, "vis hver spørring")
 	min := flag.Float64("min", 0, "rød (exit 1) under denne treffraten, 0 = kun rapport")
@@ -83,6 +85,13 @@ func main() {
 	ctx := context.Background()
 
 	fixtures := readJSONL[fixture]("internal/api/testdata/knowledge-fixtures.jsonl")
+	// Støy: uten den måler vi henting i en base på 26 lapper, mens prod har
+	// hundrevis. Da fylles budsjettet av naboer, og tallene her ville sagt
+	// «792 tegn» mens virkeligheten sender 4 000.
+	if !*noNoise {
+		fixtures = append(fixtures,
+			readJSONL[fixture]("internal/api/testdata/knowledge-noise.jsonl")...)
+	}
 	cases := readJSONL[evalCase]("internal/api/testdata/knowledge-eval.jsonl")
 
 	// Seed: embed og lagre nøyaktig slik prod-veiene gjør (fakta via
