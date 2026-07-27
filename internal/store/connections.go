@@ -163,19 +163,22 @@ func (s *Store) DeleteConnection(tenantID, id string) error {
 	}
 	defer tx.Rollback()
 
+	// Barna FØRST: connection_tables har fremmednøkkel til connections, og
+	// Postgres håndhever den — forelder-først ga FK-brudd og 500 ved hver
+	// sletting (SQLite hadde FK av, så feilen var usynlig frem til
+	// migreringen). connection_views manglet dessuten helt fra lista, som er
+	// grunnen til de foreldreløse utsnittene i eldre baser.
+	for _, t := range []string{"connection_tables", "connection_columns", "connection_access", "connection_links", "connection_views"} {
+		if _, err := tx.Exec(`DELETE FROM `+t+` WHERE connection_id = ?`, id); err != nil {
+			return err
+		}
+	}
 	res, err := tx.Exec(`DELETE FROM connections WHERE id = ? AND tenant_id = ?`, id, tenantID)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
-	}
-	// Radestimat kom etter tabellen — idempotent påfyll for eldre baser.
-	s.db.Exec(`ALTER TABLE connection_tables ADD COLUMN est_rows BIGINT NOT NULL DEFAULT 0`)
-	for _, t := range []string{"connection_tables", "connection_columns", "connection_access", "connection_links"} {
-		if _, err := tx.Exec(`DELETE FROM `+t+` WHERE connection_id = ?`, id); err != nil {
-			return err
-		}
 	}
 	return tx.Commit()
 }
