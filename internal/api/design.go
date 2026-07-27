@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -51,15 +52,52 @@ func (s *Server) designSystem(ctx context.Context, kit design.Kit, doc design.Do
 	if names := design.Names(); len(names) > 1 {
 		b.WriteString("Andre kitt: " + strings.Join(names, ", ") + "\n")
 	}
-	// Databaseskjemaet er dyrt (tusenvis av tokens) og følger derfor bare med
-	// når dokumentet faktisk kan vise tall — ikke til en plakat om aper.
-	if kit.HasDataLayouts() {
-		if dbCtx := s.dbToolContext(ctx); dbCtx != nil && dbCtx.schema != "" {
-			b.WriteString("\nDatabaseskjema (kun for graf-/tall-flater; " +
-				"skriv SQL relativ til CURRENT_DATE):\n" + dbCtx.schema)
-		}
+	// Databaseskjemaet er det dyreste vi kan sende (tusenvis av tokens) og
+	// følger derfor bare med når dokumentet FAKTISK har en flate som venter på
+	// en spørring. Ved nybygg lager modellen graf-flatene uten SQL, og koden
+	// ber om spørringene i én fokusert runde etterpå (dataFollowup) — da
+	// betaler en ren tekstpresentasjon aldri for skjemaet.
+	if len(doc.NeedsSQL()) > 0 {
+		b.WriteString(s.dbSchemaBlock(ctx))
 	}
 	return b.String()
+}
+
+// dbSchemaBlock er databaseskjemaet slik designflyten ser det.
+func (s *Server) dbSchemaBlock(ctx context.Context) string {
+	dbCtx := s.dbToolContext(ctx)
+	if dbCtx == nil || dbCtx.schema == "" {
+		return ""
+	}
+	return "\nDatabaseskjema (skriv SQL relativ til CURRENT_DATE, aldri " +
+		"hardkodede datoer, og oppgi connection_id):\n" + dbCtx.schema
+}
+
+// dataFollowup er runden som fyller spørringene: den kommer KUN når modellen
+// har laget flater med graf eller nøkkeltall, og bærer skjemaet alene — ikke
+// katalogen, ikke resten av dokumentet.
+func (s *Server) dataFollowup(ctx context.Context, slug string) (string, bool) {
+	doc, ok := s.loadDoc(ctx, slug)
+	if !ok {
+		return "", false
+	}
+	pending := doc.NeedsSQL()
+	if len(pending) == 0 {
+		return "", false
+	}
+	schema := s.dbSchemaBlock(ctx)
+	if schema == "" {
+		return "", false
+	}
+	var b strings.Builder
+	b.WriteString("Disse flatene mangler spørring:\n")
+	for _, sf := range pending {
+		fmt.Fprintf(&b, "- %s (%s)\n", sf.ID, sf.Layout)
+	}
+	b.WriteString("Fyll dem med ETT patch-kall per flate: sett connection_id, " +
+		"sql, og x/y der grafen trenger det. Ikke rør noe annet.\n")
+	b.WriteString(schema)
+	return b.String(), true
 }
 
 // surfaceProps er feltene en flate kan ha. Verdiene valideres mot kittets

@@ -383,6 +383,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// Kode-håndhevet søkeinnsats: «fant ikke» etter bare ett søk godtas aldri —
 	// modellen sendes tilbake for flere vinkler (én gang).
 	searchNudged := false
+	// Designlerret: compose har kjørt denne turen, så flater som venter på en
+	// spørring skal få den i én fokusert runde (dataFollowup).
+	composed := false
 	// Kildekontroll: alt verktøyene returnerer denne turen, ordrett — prosaen
 	// måles mot dette før den vises (grounding.go).
 	var toolResults []string
@@ -859,6 +862,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				switch c.Name {
 				case "compose":
 					result = s.runCompose(ctx, designSlug, c.Args.String())
+					composed = true
+					// compose ER hele dokumentet: et nytt kall ville bare bygd
+					// det samme på nytt (modellen gjorde det tre ganger og
+					// tredoblet regningen). Koden stenger døren.
+					full["tool_choice"] = "none"
 				case "patch":
 					result = s.runDesignPatch(ctx, designSlug, c.Args.String())
 				default:
@@ -908,6 +916,24 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		})
 		msgs = append(msgs, toolMsgs...)
 		full["messages"] = msgs
+
+		// Lerretet ER svaret: er dokumentet bygget og ingen flater venter på
+		// tall, avslutter koden turen her. Å sende hele historikken opp igjen
+		// bare for å få et «Ok» tilbake er en hel runde betalt for ingenting.
+		if composed && designSlug != "" {
+			if ask, need := s.dataFollowup(ctx, designSlug); need {
+				msgs, _ := full["messages"].([]any)
+				full["messages"] = append(msgs, map[string]any{"role": "user", "content": ask})
+				full["tool_choice"] = map[string]any{
+					"type": "function", "function": map[string]any{"name": "patch"}}
+				step, _ := json.Marshal(map[string]any{"nordavind_step": "Kobler på tallene"})
+				emit("data: " + string(step))
+				composed = false
+				continue
+			}
+			emit("data: [DONE]")
+			return
+		}
 
 		// Tvungen verktøybruk gjelder KUN første runde (presentasjonsflyten):
 		// minst én endring skal skje, men modellen skal kunne stoppe etterpå.

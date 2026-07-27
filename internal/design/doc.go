@@ -343,6 +343,36 @@ func fromDeck(spec map[string]any) Doc {
 	return d
 }
 
+// NeedsSQL gir flatene som har en visualisering uten spørring — de eneste
+// som trenger databaseskjemaet. Er listen tom, skal skjemaet aldri sendes.
+func (d Doc) NeedsSQL() []Surface {
+	var out []Surface
+	for _, s := range d.Surfaces {
+		for _, f := range []string{"widget", "widgets"} {
+			switch v := s.Fields[f].(type) {
+			case map[string]any:
+				if missingSQL(v) {
+					out = append(out, s)
+				}
+			case []any:
+				for _, w := range v {
+					if m, ok := w.(map[string]any); ok && missingSQL(m) {
+						out = append(out, s)
+						break
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
+func missingSQL(w map[string]any) bool {
+	sql, _ := w["sql"].(string)
+	conn, _ := w["connection_id"].(string)
+	return strings.TrimSpace(sql) == "" || strings.TrimSpace(conn) == ""
+}
+
 // State er dokumentet slik modellen ser det ved redigering: én linje per
 // flate med id, layout og en kort forhåndsvisning. Kort med vilje.
 func (d Doc) State() string {

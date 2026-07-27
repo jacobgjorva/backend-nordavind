@@ -198,7 +198,11 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	patched, full, pickedModel := withRoutingDefaults(body)
 
 	// Intent-motoren: shadow logger bare; on styrer flyten.
-	if _, widgetMode := full["nordavind_widget"]; !widgetMode {
+	// Et åpent designlerret eier turen selv: instruksen gjelder dokumentet,
+	// og skal aldri kapres av ruting (den svarte «skriv /presentasjon» på
+	// meldinger som kom fra lerretet).
+	_, designMode := full["nordavind_design"]
+	if _, widgetMode := full["nordavind_widget"]; !widgetMode && !designMode {
 		if _, connMode := full["nordavind_connector"]; !connMode {
 			if setup, _ := full["nordavind_agent_setup"].(bool); !setup {
 				if user, ok := r.Context().Value(userKey).(store.User); ok {
