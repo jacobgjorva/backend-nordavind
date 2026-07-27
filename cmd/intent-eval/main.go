@@ -100,6 +100,13 @@ func main() {
 	var unclearWant, unclearHit, unclearFalse int
 	for _, c := range cases {
 		d := engine.Resolve(context.Background(), c.Text, true)
+		// Ett omforsøk på degraderte kall. Uten dette forsvant tilfeller ut av
+		// nevneren når Scaleway-embeddingen timet ut, og settet krympet fra
+		// kjøring til kjøring (131, 130, 126) — vi målte aldri hele suiten,
+		// og de tregeste tilfellene falt systematisk ut først.
+		if d.Degraded {
+			d = engine.Resolve(context.Background(), c.Text, true)
+		}
 		lat = append(lat, d.Elapsed)
 		methods[d.Method]++
 		norm := func(k string) string {
