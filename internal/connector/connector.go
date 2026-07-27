@@ -269,13 +269,42 @@ func CTENames(query string) map[string]bool {
 	return names
 }
 
+// sqlKeywords er ord som kan følge en tabellreferanse uten å være alias.
+// Trengs for at ekspansjonen ikke skal sluke WHERE/GROUP/… som aliasnavn.
+var sqlKeywords = map[string]bool{
+	"where": true, "group": true, "order": true, "having": true, "limit": true,
+	"on": true, "join": true, "inner": true, "left": true, "right": true,
+	"cross": true, "full": true, "outer": true, "union": true, "as": true,
+	"and": true, "or": true, "when": true, "then": true, "else": true,
+	"offset": true, "fetch": true, "top": true, "select": true, "set": true,
+}
+
 // ExpandViews bytter FROM/JOIN-referanser til kuraterte utsnitt med
 // utsnittets SQL som subquery. Modellen kan dermed bruke utsnittsnavnet uten
 // at råtabellene bak trenger å være tillatt for fri spørring.
+//
+// Alias bevares: «FROM v_Sales_query s» må bli «FROM (…) AS s», ikke
+// «FROM (…) AS v_Sales_query s» — det siste er ugyldig SQL, og modellen
+// bruker alias i nesten hver JOIN. Målt i prod: «Incorrect syntax near 's'»
+// på en helt gyldig spørring, uten at noen kunne se hvorfor.
 func ExpandViews(query string, views map[string]string) string {
 	for name, sql := range views {
-		re := regexp.MustCompile(`(?i)\b(from|join)\s+` + regexp.QuoteMeta(name) + `\b`)
-		query = re.ReplaceAllString(query, "$1 ("+sql+") AS "+name)
+		re := regexp.MustCompile(`(?i)\b(from|join)\s+` + regexp.QuoteMeta(name) +
+			`(?:\s+as)?(\s+[a-zA-Z_][a-zA-Z0-9_]*)?\b`)
+		query = re.ReplaceAllStringFunc(query, func(m string) string {
+			g := re.FindStringSubmatch(m)
+			alias := strings.TrimSpace(g[2])
+			// Et «alias» som er et SQL-nøkkelord er ikke et alias — behold det
+			// som etterfølgende tekst og bruk utsnittsnavnet.
+			if alias == "" || sqlKeywords[strings.ToLower(alias)] {
+				tail := ""
+				if alias != "" {
+					tail = " " + alias
+				}
+				return g[1] + " (" + sql + ") AS " + name + tail
+			}
+			return g[1] + " (" + sql + ") AS " + alias
+		})
 	}
 	return query
 }
