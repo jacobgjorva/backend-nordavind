@@ -25,6 +25,10 @@ type dbConn struct {
 	// views: kuraterte utsnitt (navn → SQL). Kjøres ved server-side
 	// ekspansjon — råtabellene bak er IKKE fritt spørrbare.
 	views map[string]string
+	// columns: tabellnavn → kolonnenavn. Brukes til å gi modellen de FAKTISKE
+	// kolonnene når en spørring bommer, i stedet for bare «does not exist».
+	// Uten dette gjettet den samme feil om igjen (målt tre ganger på rad).
+	columns map[string][]string
 }
 
 // dbToolContext bygger query_database-verktøyet for innlogget bruker.
@@ -158,6 +162,9 @@ func (s *Server) buildDBToolFocused(tenantID, userID, onlyConnID, focus string) 
 	t := &dbToolCtx{conns: map[string]dbConn{}}
 	var schema strings.Builder
 	for _, c := range conns {
+		// Kolonnene per tabell for denne tilkoblingen — grunnlaget for presise
+		// feilmeldinger når modellen bommer på et kolonnenavn.
+		colIndex := map[string][]string{}
 		if onlyConnID != "" && c.ID != onlyConnID {
 			continue
 		}
@@ -232,6 +239,9 @@ func (s *Server) buildDBToolFocused(tenantID, userID, onlyConnID, focus string) 
 				}
 				cols = append(cols, s)
 			}
+			for _, col := range tb.ColumnList {
+				colIndex[strings.ToLower(tb.Name)] = append(colIndex[strings.ToLower(tb.Name)], col.Name)
+			}
 			fmt.Fprintf(&schema, "%s(%s)", tb.Name, strings.Join(cols, ", "))
 			if n := rowHint(tb.Rows); n != "" {
 				schema.WriteString(" " + n)
@@ -273,7 +283,7 @@ func (s *Server) buildDBToolFocused(tenantID, userID, onlyConnID, focus string) 
 			}
 			allowed = kept
 		}
-		t.conns[c.ID] = dbConn{conn: c, creds: creds, allowed: allowed, views: viewMap}
+		t.conns[c.ID] = dbConn{conn: c, creds: creds, allowed: allowed, views: viewMap, columns: colIndex}
 	}
 	if len(t.conns) == 0 {
 		s.log.Warn("db-verktøy: ingen brukbare koblinger, modellen får ingen database", "tenant", tenantID, "user", userID, "onlyConnID", onlyConnID)
@@ -380,13 +390,16 @@ func (t *dbToolCtx) connectionList() string {
 }
 
 // runDBQuery utfører et query_database-kall fra modellen.
-func (s *Server) runDBQuery(ctx context.Context, t *dbToolCtx, connID, query string) string {
+// runDBQuery kjører modellens spørring og returnerer et TYPET utfall. Ved bom
+// prøver den selv neste vei (nærmeste navn, tabell-lista) før modellen ser
+// svaret — se dbstrategy.go for hvorfor.
+func (s *Server) runDBQuery(ctx context.Context, t *dbToolCtx, connID, query string) dbAttempt {
 	if t == nil {
-		return "Ingen database er tilgjengelig."
+		return dbAttempt{outcome: dbFailed, sql: query, text: "Ingen database er tilgjengelig."}
 	}
 	dc, resolvedID, ok, msg := t.resolveConn(connID, query)
 	if !ok {
-		return msg
+		return dbAttempt{outcome: dbNoAccess, sql: query, text: msg}
 	}
 	if resolvedID != connID {
 		s.log.Info("db-spørring rutet om", "fra", connID, "til", resolvedID)
@@ -395,7 +408,8 @@ func (s *Server) runDBQuery(ctx context.Context, t *dbToolCtx, connID, query str
 	db, err := connector.Open(ctx, dc.creds)
 	if err != nil {
 		s.log.Warn("db-tilkobling feilet", "err", err)
-		return "Kunne ikke koble til databasen: " + err.Error()
+		return dbAttempt{outcome: dbFailed, sql: query, conn: dc.conn.Name,
+			text: "Kunne ikke koble til databasen: " + err.Error()}
 	}
 	defer db.Close()
 
@@ -407,6 +421,10 @@ func (s *Server) runDBQuery(ctx context.Context, t *dbToolCtx, connID, query str
 		msg := "Spørringen feilet: " + err.Error()
 		if strings.Contains(err.Error(), "ikke tilgjengelig") {
 			msg += "\nDenne databasen (" + dc.conn.Name + ") har: " + strings.Join(dc.allowed, ", ")
+		}
+		// Konkret retting i stedet for en rå databasefeil (dbstrategy.go).
+		if hint := sqlFixHint(err.Error(), query, dc); hint != "" {
+			msg += "\n" + hint
 		}
 		// Timeout betyr nesten alltid at spørringen skannet hele tabellen.
 		// Uten konkret veiledning prøver modellen det SAMME på nytt — vi så
@@ -425,10 +443,59 @@ func (s *Server) runDBQuery(ctx context.Context, t *dbToolCtx, connID, query str
 				"Klarer du ikke gjøre den lettere, si til brukeren at spørringen " +
 				"er for tung — ikke gjenta den samme spørringen."
 		}
-		return msg
+		outcome := dbFailed
+		if strings.Contains(err.Error(), "ikke tilgjengelig") {
+			outcome = dbNoAccess
+		}
+		return dbAttempt{outcome: outcome, sql: query, conn: dc.conn.Name, text: msg}
 	}
 	s.log.Info("db-spørring", "connection", dc.conn.Name, "rader", len(rows))
 
+	att := dbAttempt{outcome: dbOK, sql: query, conn: dc.conn.Name, cols: cols, rows: rows}
+	if len(rows) == 0 {
+		att.outcome = dbEmpty
+	}
+
+	// Strategi: bommet et fritekstfilter, slå opp nærmeste verdi FØR modellen
+	// rekker å konkludere med at noe «ikke finnes». Ett lett prefikskall.
+	if att.outcome == dbEmpty {
+		if col, needle, hits := s.nearestValues(ctx, db, dc, query); len(hits) > 0 {
+			att.note = fmt.Sprintf("Ingen rader for %q i %s. Nærmeste verdier som FINNES: %s. "+
+				"Kjør spørringen på nytt med den riktige, og fortell brukeren hvilken du brukte.",
+				needle, col, strings.Join(quoteAll(hits), ", "))
+			s.log.Info("db-strategi: nærmeste verdier", "søkte", needle, "fant", strings.Join(hits, ", "))
+		}
+	}
+
+	// Strategi: sorterte vi på en kolonne som er lik i hele resultatet, er
+	// rekkefølgen meningsløs. Det skal sies, ikke pyntes over.
+	if att.outcome == dbOK {
+		if col, val := constantColumn(cols, rows); col != "" {
+			shown := val
+			if shown == "" {
+				shown = "tom"
+			}
+			att.note = fmt.Sprintf("MERK: %s er %s i alle radene, så den kolonnen skiller ikke "+
+				"radene fra hverandre. Si det til brukeren i stedet for å presentere rekkefølgen "+
+				"som en rangering.", col, shown)
+			s.log.Info("db-strategi: konstant kolonne", "kolonne", col, "verdi", val)
+		}
+	}
+
 	out, _ := json.Marshal(map[string]any{"columns": cols, "rows": rows, "row_count": len(rows)})
-	return string(out)
+	att.text = string(out)
+	if att.note != "" {
+		att.text += "\n\n" + att.note
+	}
+	return att
+}
+
+// quoteAll setter anførselstegn rundt hver verdi så modellen ser dem som
+// konkrete strenger å bruke, ikke som løpende tekst.
+func quoteAll(vals []string) []string {
+	out := make([]string, 0, len(vals))
+	for _, v := range vals {
+		out = append(out, "\""+v+"\"")
+	}
+	return out
 }

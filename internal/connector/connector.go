@@ -250,6 +250,23 @@ func ReferencedTables(query string) []string {
 	return out
 }
 
+// cteNameRe fanger navnene i en WITH-klausul (WITH navn AS ( … )), inkludert
+// påfølgende ledd etter komma.
+var cteNameRe = regexp.MustCompile(`(?is)\b([a-z_][a-z0-9_]*)\s+as\s*\(`)
+
+// CTENames er navnene en spørring definerer selv i WITH-klausuler. De er ikke
+// tabeller i basen og skal derfor alltid regnes som tillatte referanser —
+// uten dette avviser tilgangskontrollen enhver sammensatt spørring, og
+// modellen mister det eneste verktøyet den har for flerstegs-beregninger
+// («andel av de ti største kundene» feilet på nettopp dette).
+func CTENames(query string) map[string]bool {
+	names := map[string]bool{}
+	for _, m := range cteNameRe.FindAllStringSubmatch(query, -1) {
+		names[strings.ToLower(m[1])] = true
+	}
+	return names
+}
+
 // ExpandViews bytter FROM/JOIN-referanser til kuraterte utsnitt med
 // utsnittets SQL som subquery. Modellen kan dermed bruke utsnittsnavnet uten
 // at råtabellene bak trenger å være tillatt for fri spørring.
@@ -272,6 +289,10 @@ func SafeQueryViewsN(ctx context.Context, db *sql.DB, driver, query string, allo
 	}
 	for name := range views {
 		visible[strings.ToLower(name)] = true
+	}
+	// Spørringens egne WITH-ledd er ikke tabeller i basen.
+	for name := range CTENames(query) {
+		visible[name] = true
 	}
 	for _, r := range ReferencedTables(query) {
 		if !visible[r] {
@@ -320,8 +341,8 @@ func SafeQueryN(ctx context.Context, db *sql.DB, driver, query string, allowed [
 		allowedSet[strings.ToLower(t)] = true
 	}
 	// CTE-navn regnes som tillatte referanser.
-	for _, m := range regexp.MustCompile(`(?i)\b([a-zA-Z_][a-zA-Z0-9_]*)\s+as\s*\(`).FindAllStringSubmatch(q, -1) {
-		allowedSet[strings.ToLower(m[1])] = true
+	for name := range CTENames(q) {
+		allowedSet[name] = true
 	}
 	for _, m := range tableRefRe.FindAllStringSubmatch(stripFnFrom(q), -1) {
 		ref := strings.ToLower(strings.Trim(m[1], `"`))

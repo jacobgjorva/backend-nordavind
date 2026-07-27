@@ -166,6 +166,39 @@ func (n *narrator) after(tool, result string) {
 	n.say(step.after(n, parseNarrRes(result)), step.kind)
 }
 
+// afterDB er `after` for databasekall, der utfallet er kjent eksakt. Uten
+// dette måtte narrasjonen gjette fra resultatteksten, og den gjettet feil:
+// «tabellen er ikke tilgjengelig» ble meldt som «null rader», altså en
+// usannhet om hva som skjedde.
+func (n *narrator) afterDB(a dbAttempt, raw string) {
+	if n == nil || !n.on {
+		return
+	}
+	switch a.outcome {
+	case dbNoAccess:
+		n.say(n.pick(
+			"Den tabellen har jeg ikke tilgang til. Ser hva jeg faktisk har.",
+			"Ikke tilgang der. Prøver med det jeg har.",
+		), kindDB)
+		return
+	case dbFailed:
+		n.say(n.pick(
+			"Spørringen gikk ikke gjennom. Prøver en annen vei.",
+			"Det kallet feilet. Omformulerer.",
+		), kindDB)
+		return
+	}
+	// Fant koden en nærmeste verdi, er DET funnet — ikke at raden manglet.
+	if a.note != "" && a.outcome == dbEmpty {
+		n.say(n.pick(
+			"Ingen treff på det navnet, men noe ligner. Prøver på nytt.",
+			"Traff ikke, men jeg ser hva det sannsynligvis het. Kjører om.",
+		), kindDB)
+		return
+	}
+	n.after("query_database", raw)
+}
+
 // afterHits er `after` for verktøy der kalleren allerede vet antallet og det
 // er mer sannferdig enn å telle i resultatteksten (f.eks. antall søkekilder).
 func (n *narrator) afterHits(tool string, hits int) {

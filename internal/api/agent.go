@@ -549,6 +549,10 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// overstyres svaret i kode — modellen diktet en «nyligste salgsrad» etter
 	// tre timeouts.
 	dbAttempted, dbSucceeded := false, false
+	// Alle databaseforsøk i turen, med typet utfall. Grunnlaget for
+	// kvalitetsporten: har vi noe håndfast, eller skylder vi brukeren en
+	// ærlig redegjørelse? (dbstrategy.go)
+	var attempts []dbAttempt
 	// Kode-håndhevet søkeinnsats: «fant ikke» etter bare ett søk godtas aldri —
 	// modellen sendes tilbake for flere vinkler (én gang).
 	searchNudged := false
@@ -664,11 +668,15 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				emit("data: " + string(step))
 				continue
 			}
-			// Datavern: databasen ble forsøkt men ga aldri ett eneste svar —
-			// da finnes det ingen tall å gjengi. Ærlig feilmelding i kode i
-			// stedet for modellens tekst (som kan være fabrikkert).
+			// Kvalitetsporten: databasen ble forsøkt, men turen ga aldri én
+			// eneste rad. Da finnes det ingen tall å gjengi, og modellens
+			// tekst kan være fabrikkert. I stedet for den gamle faste
+			// «svarte ikke i tide» (som oftest var usant — basen svarte
+			// kjapt, på noe vi ikke hadde tilgang til) bygger vi en ærlig
+			// redegjørelse av hva som FAKTISK skjedde, hva vi har, og hva vi
+			// trenger fra brukeren. Se dbstrategy.go.
 			if dbAttempted && !dbSucceeded {
-				emit(contentSSE("Databasen svarte ikke i tide på dette, så jeg har ingen tall å gi deg akkurat nå — prøv igjen om et lite øyeblikk."))
+				emit(contentSSE(explainAttempts(attempts, availableTables(dbCtx))))
 				emit("data: [DONE]")
 				return
 			}
@@ -918,16 +926,20 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 						"eller svar brukeren med det du har."
 				} else {
 					ranQueries[key] = true
-					result = s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL)
+					att := s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL)
+					result = att.text
+					// Hele turens forsøkshistorikk: kvalitetsporten bruker den
+					// til å avgjøre om vi faktisk har noe håndfast å svare med.
+					attempts = append(attempts, att)
+					if att.ok() {
+						lastDBResult = att.text
+						lastDBSQL, lastDBConn = args.SQL, args.ConnectionID
+					}
 				}
 				stopWait()
-				narr.after(c.Name, result)
+				narr.afterDB(lastAttempt(attempts), result)
 				dbAttempted = true
-				if strings.HasPrefix(strings.TrimSpace(result), "{") {
-					dbSucceeded = true
-					lastDBResult = result
-					lastDBSQL, lastDBConn = args.SQL, args.ConnectionID
-				}
+				dbSucceeded = dbSucceeded || anyOK(attempts)
 				// Send spørringen som metadata så tabellen i svaret kan tilby
 				// live Excel-kobling (frontend fester den til meldingen).
 				if strings.TrimSpace(args.SQL) != "" {

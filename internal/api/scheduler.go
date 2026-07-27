@@ -353,7 +353,7 @@ func (s *Server) executeAgent(ctx context.Context, a store.Agent) (string, int, 
 			var result string
 			switch c.name {
 			case "query_database":
-				result = s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL)
+				result = s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL).text
 			case "send_mail":
 				if err := s.sendAgentMail(a, args.ToName, args.ToEmail, args.Subject, args.Body); err != nil {
 					result = "Kunne ikke sende: " + err.Error()

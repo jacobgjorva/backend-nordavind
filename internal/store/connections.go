@@ -102,6 +102,12 @@ func (s *Store) migrateConnections() error {
 	}
 	// Eldre dev-databaser mangler col_type — legg til om nødvendig.
 	s.db.Exec(`ALTER TABLE connection_columns ADD COLUMN col_type TEXT NOT NULL DEFAULT ''`)
+	// Radestimat kom etter tabellen. MÅ stå her, i oppstartsmigreringen:
+	// lå den bare i DeleteConnection fikk en base som aldri hadde slettet en
+	// tilkobling aldri kolonnen, ConnectionTables feilet, og hele databasen
+	// ble stille droppet fra verktøyet — assistenten lette i OneDrive etter
+	// kundedata i stedet.
+	s.db.Exec(`ALTER TABLE connection_tables ADD COLUMN est_rows BIGINT NOT NULL DEFAULT 0`)
 	return nil
 }
 

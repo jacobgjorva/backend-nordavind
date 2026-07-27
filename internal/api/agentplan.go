@@ -512,7 +512,7 @@ func (s *Server) buildAgentPlan(ctx context.Context, agentID string) {
 			var result string
 			switch c.name {
 			case "query_database":
-				result = s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL)
+				result = s.runDBQuery(ctx, dbCtx, args.ConnectionID, args.SQL).text
 			case "fetch_url":
 				result = s.runFetchURL(ctx, args.URL)
 			default:
@@ -582,9 +582,9 @@ func (s *Server) validatePlan(ctx context.Context, dbCtx *dbToolCtx, rawArgs str
 				continue
 			}
 			res := s.runDBQuery(ctx, dbCtx, st.ConnectionID, st.SQL)
-			if planQueryFailed(res) {
+			if !res.ok() {
 				problems = append(problems, fmt.Sprintf("Steg %d (%s) feilet ved prøvekjøring: %s",
-					n, st.Label, truncate(res, 600)))
+					n, st.Label, truncate(res.text, 600)))
 			}
 		case "fetch":
 			if strings.TrimSpace(st.URL) == "" {
@@ -640,14 +640,14 @@ func (s *Server) validateChart(ctx context.Context, dbCtx *dbToolCtx, c *agentCh
 	}
 
 	res := s.runDBQuery(ctx, dbCtx, c.ConnectionID, c.SQL)
-	if planQueryFailed(res) {
-		return append(problems, "Grafens spørring feilet ved prøvekjøring: "+truncate(res, 600))
+	if !res.ok() {
+		return append(problems, "Grafens spørring feilet ved prøvekjøring: "+truncate(res.text, 600))
 	}
 	var out struct {
 		Columns []string   `json:"columns"`
 		Rows    [][]string `json:"rows"`
 	}
-	if err := json.Unmarshal([]byte(res), &out); err != nil {
+	if err := json.Unmarshal([]byte(res.text), &out); err != nil {
 		return append(problems, "Kunne ikke lese grafens data: "+err.Error())
 	}
 	if len(out.Rows) == 0 {
@@ -858,8 +858,9 @@ func (s *Server) runPlanSteps(ctx context.Context, a store.Agent, plan agentPlan
 		kind := strings.ToLower(strings.TrimSpace(st.Kind))
 		switch kind {
 		case "sql":
-			res = s.runDBQuery(ctx, dbCtx, st.ConnectionID, st.SQL)
-			if planQueryFailed(res) {
+			resAtt := s.runDBQuery(ctx, dbCtx, st.ConnectionID, st.SQL)
+			res = resAtt.text
+			if !resAtt.ok() {
 				out.failed++
 			}
 		case "fetch":
