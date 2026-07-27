@@ -999,7 +999,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				searches++
 				var sources []sourceRef
 				stopWait := emitAfter(emit, 4*time.Second, "Søker dypere")
-				result, sources = s.runWebSearch(ctx, args.Query)
+				result, sources = s.runWebSearchFor(ctx, args.Query, recentTurn(full))
 				stopWait()
 				if len(sources) > 0 {
 					// Kildene sendes som metadata til frontend — de skal ikke stå i svaret.
@@ -1285,10 +1285,28 @@ func (s *Server) runFetchURL(ctx context.Context, url string) string {
 // treff koster null oppstrøms. Ved embedding-feil: fail-open til gammel
 // full-side-oppførsel — riktig svar er pri 1.
 func (s *Server) runWebSearch(ctx context.Context, query string) (string, []sourceRef) {
+	return s.runWebSearchFor(ctx, query, "")
+}
+
+// runWebSearchFor er søket med brukerens FAKTISKE spørsmål tilgjengelig.
+//
+// Søkestrengen modellen skriver er en forespørsel til søkemotoren, ikke et
+// uttrykk for hva brukeren lurer på: «Hva var ordet i 2025?» i en samtale om
+// Norge ble til søket «Årets ord 2025», og da rangerte danske avsnitt like
+// høyt som norske. Relevans måles derfor mot spørsmålet OG søkestrengen —
+// konteksten vi allerede har, brukt der valget faktisk tas. Tom intent
+// (rutiner, planlagte agenter) oppfører seg nøyaktig som før.
+func (s *Server) runWebSearchFor(ctx context.Context, query, intentText string) (string, []sourceRef) {
 	if strings.TrimSpace(query) == "" {
 		return "Tomt søk.", nil
 	}
-	if cached, refs, ok := searchCacheGet(query); ok {
+	// Cachenøkkelen må bære begge: samme søkestreng i to ulike samtaler kan
+	// fortjene ulike utdrag.
+	cacheKey := query
+	if intentText != "" {
+		cacheKey = query + "\x00" + intentText
+	}
+	if cached, refs, ok := searchCacheGet(cacheKey); ok {
 		s.log.Info("websøk", "query", query, "cache", true)
 		return cached, refs
 	}
@@ -1309,8 +1327,15 @@ func (s *Server) runWebSearch(ctx context.Context, query string) (string, []sour
 		refs = append(refs, sourceRef{Title: r.Title, URL: r.URL})
 	}
 
+	// Relevans-vektoren: brukerens spørsmål veier tyngst, søkestrengen bærer
+	// begrepene som faktisk står på sidene. Sammen fanger de både HVA det
+	// spørres om og HVILKEN sammenheng det står i.
+	relevance := query
+	if intentText != "" {
+		relevance = intentText + "\n" + query
+	}
 	var context string
-	queryVec, qErr := s.embedCached(ctx, query)
+	queryVec, qErr := s.embedCached(ctx, relevance)
 	if qErr == nil {
 		if picked, rErr := rankExcerpts(ctx, s.embedBatch, queryVec, pages); rErr == nil && len(picked) > 0 {
 			context = formatExcerptContext(query, results, picked)
@@ -1330,7 +1355,7 @@ func (s *Server) runWebSearch(ctx context.Context, query string) (string, []sour
 	}
 	context += "\nTrenger du mer enn dette: kall fetch_url på den mest relevante kilden."
 	s.log.Info("websøk", "query", query, "treff", len(results), "tegn", len(context))
-	searchCachePut(query, context, refs)
+	searchCachePut(cacheKey, context, refs)
 	return context, refs
 }
 

@@ -101,3 +101,56 @@ func TestSearchCacheTTLAndReset(t *testing.T) {
 		t.Fatal("tomt resultat ble cachet")
 	}
 }
+
+// Arkitektur-regresjonen: relevans skal måles mot brukerens spørsmål, ikke
+// bare søkestrengen. «Hva var ordet i 2025?» i en samtale om Norge ble til
+// søket «Årets ord 2025» — og da rangerte danske avsnitt like høyt.
+func TestRelevanceUsesConversationNotJustQuery(t *testing.T) {
+	// Fake-embedder som modellerer semantikk grovt: en vektor per «tema».
+	// [norsk, dansk, generisk]
+	embedFn := func(_ context.Context, texts []string) ([][]float32, error) {
+		out := make([][]float32, len(texts))
+		for i, tx := range texts {
+			out[i] = vecFor(tx)
+		}
+		return out, nil
+	}
+	pages := []string{
+		"Årets ord i Norge er tekoligark, kåret av Språkrådet.",
+		"Årets ord i Danmark er jernmarker, kåret av Dansk Sprognævn.",
+	}
+
+	// Kun søkestrengen: ingen preferanse — dansk kan vinne.
+	bare := vecFor("Årets ord 2025")
+	pickedBare, err := rankExcerpts(context.Background(), embedFn, bare, pages)
+	if err != nil || len(pickedBare) == 0 {
+		t.Fatal("rangering feilet")
+	}
+
+	// Med samtalen (Norge nevnt): norsk avsnitt skal vinne.
+	withCtx := vecFor("Det var ett år hvor årets ord var KI i Norge\nÅrets ord 2025")
+	picked, err := rankExcerpts(context.Background(), embedFn, withCtx, pages)
+	if err != nil || len(picked) == 0 {
+		t.Fatal("rangering feilet")
+	}
+	if !strings.Contains(picked[0].text, "Norge") {
+		t.Fatalf("samtalekonteksten styrte ikke relevansen — toppen ble: %q", picked[0].text)
+	}
+}
+
+// vecFor: grov temavektor [norsk, dansk, generisk] for testformål.
+func vecFor(s string) []float32 {
+	l := strings.ToLower(s)
+	var no, dk float32
+	for _, w := range []string{"norge", "norsk", "språkrådet", "tekoligark"} {
+		if strings.Contains(l, w) {
+			no += 1
+		}
+	}
+	for _, w := range []string{"danmark", "dansk", "sprognævn", "jernmarker"} {
+		if strings.Contains(l, w) {
+			dk += 1
+		}
+	}
+	return []float32{no, dk, 1}
+}
