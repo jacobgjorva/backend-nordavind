@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"sync"
 	"sync/atomic"
 
@@ -95,12 +96,54 @@ func (s *Server) embedCached(ctx context.Context, text string) ([]float32, error
 	return vec, nil
 }
 
+// hedgeAfter er hvor lenge vi venter på det første embedding-kallet før vi
+// sender ett til i parallell. Leverandøren har lang, TILFELDIG hale (målt
+// 0,5-21 s fra prod på identiske kall), og halen rammer sjelden to kall
+// samtidig. Vi bruker det første svaret som kommer.
+const hedgeAfter = 400 * time.Millisecond
+
 func (s *Server) embed(ctx context.Context, text string) ([]float32, error) {
-	vecs, err := s.embedBatch(ctx, []string{text})
-	if err != nil {
-		return nil, err
+	type res struct {
+		vec []float32
+		err error
 	}
-	return vecs[0], nil
+	out := make(chan res, 2)
+	call := func() {
+		vecs, err := s.embedBatch(ctx, []string{text})
+		if err != nil {
+			out <- res{nil, err}
+			return
+		}
+		out <- res{vecs[0], nil}
+	}
+	go call()
+
+	timer := time.NewTimer(hedgeAfter)
+	defer timer.Stop()
+	var firstErr error
+	for pending := 1; pending > 0; {
+		select {
+		case <-timer.C:
+			// Første kall drøyer: send ett til og ta det som svarer først.
+			go call()
+			pending++
+			timer.Stop()
+		case r := <-out:
+			pending--
+			if r.err == nil {
+				return r.vec, nil
+			}
+			if firstErr == nil {
+				firstErr = r.err
+			}
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	return nil, firstErr
 }
 
 // embedBatch embedder mange tekster i ETT kall (utdragslaget rangerer opptil
@@ -382,7 +425,21 @@ func (s *Server) knowledgeContext(ctx context.Context, tenantID, query string) s
 // mot den lokale indeksen. Samme format og budsjett som den vanlige veien, og
 // samme enslig-ord-vern — ett tilfeldig felles ord er støy, ikke kunnskap.
 func (s *Server) keywordContext(tenantID, query string) string {
-	ids, _ := s.store.SearchNotesFTS(tenantID, contentTokens(query), candDepth)
+	toks := contentTokens(query)
+	ids, _ := s.store.SearchNotesFTS(tenantID, toks, candDepth)
+	// Norsk skriver sammensatt: «møte» står inne i «Mandagsmøte» og fanges
+	// ikke av ordbasert søk. Delstrengtreffene legges bak ordtreffene.
+	if sub, err := s.store.SearchNotesSubstring(tenantID, toks, candDepth); err == nil {
+		seen := map[string]bool{}
+		for _, id := range ids {
+			seen[id] = true
+		}
+		for _, id := range sub {
+			if !seen[id] {
+				ids = append(ids, id)
+			}
+		}
+	}
 	if len(ids) == 0 {
 		return ""
 	}

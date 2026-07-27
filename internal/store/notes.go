@@ -184,6 +184,52 @@ func (s *Store) SearchNotesFTS(tenantID string, tokens []string, limit int) ([]s
 	return ids, rows.Err()
 }
 
+// SearchNotesSubstring finner lapper der et søkeord står INNE i et ord.
+// Norsk skriver sammensatt: «møte» finnes ikke som eget token i
+// «Mandagsmøte», så ren ordmatching bommer på nettopp de spørsmålene folk
+// stiller. Kjører lokalt i basen — ingen nettverkskall, ingen tokens.
+func (s *Store) SearchNotesSubstring(tenantID string, tokens []string, limit int) ([]string, error) {
+	if len(tokens) == 0 {
+		return nil, nil
+	}
+	// Bare ord med litt tyngde: korte biter treffer alt.
+	var terms []string
+	for _, t := range tokens {
+		if len([]rune(t)) >= 4 {
+			terms = append(terms, t)
+		}
+	}
+	if len(terms) == 0 {
+		return nil, nil
+	}
+	where := make([]string, len(terms))
+	args := []any{tenantID}
+	for i, t := range terms {
+		// lower() på begge sider: virker likt i SQLite og Postgres.
+		where[i] = "(lower(text) LIKE ? OR lower(context) LIKE ?)"
+		low := strings.ToLower(t)
+		args = append(args, "%"+low+"%", "%"+low+"%")
+	}
+	args = append(args, limit)
+	rows, err := s.db.Query(
+		`SELECT id FROM knowledge_notes
+		 WHERE tenant_id = ? AND status = 'accepted' AND (`+strings.Join(where, " OR ")+`)
+		 ORDER BY created_at DESC LIMIT ?`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // TopNotesByEmbedding er pgvector-hentingen: topp-k aksepterte lapper etter
 // cosinelikhet, med likheten returnert. Kun Postgres — SQLite-stien laster
 // alle lapper og regner i Go (AcceptedNotes).

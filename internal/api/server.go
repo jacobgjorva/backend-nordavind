@@ -323,7 +323,12 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 // routingBudget er maksimal tid ruting + kunnskapsoppslag får bruke FORAN
 // modellen. Typisk lander begge på 200-500 ms; ved treghet fail-open til
 // fri chat i stedet for å forsinke svaret.
-const routingBudget = 900 * time.Millisecond
+// Tidsbudsjettet for ruting OG kunnskapsoppslag. Hevet fra 900 ms fordi
+// leverandørens embedding-hale (målt 0,5-21 s fra prod) gjorde at begge falt
+// bort på helt vanlige spørsmål. Det hedgede kallet (se embed) gjør at det
+// normale tilfellet fortsatt svarer på noen hundre millisekunder — taket
+// rammer bare de virkelig trege turene, og fail-open gjelder som før.
+const routingBudget = 1800 * time.Millisecond
 
 // withRoutingDefaults gjør to ting: løser "auto" til konkret modell ut fra
 // spørsmålets kompleksitet, og sorterer leverandører på throughput hvis
