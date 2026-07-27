@@ -23,7 +23,11 @@ import (
 // betalte for hele historikken på nytt for hver eneste slide.
 
 const designSystemBase = "Du lager et dokument på et designlerret. " +
-	"IKKE svar med prat — utfør ved å kalle verktøyet. " +
+	"IKKE svar med prat — utfør ved å kalle verktøyene. " +
+	"Er du usikker på et faktum, et sitat, et navn eller et tall: SLÅ DET OPP " +
+	"først (web_search/fetch_url for verden, query_database for bedriftens " +
+	"egne tall, m365_search for filer). Gjett aldri — feil på en slide er verre " +
+	"enn en runde ekstra. " +
 	"Du velger blant ferdige flate-typer og fyller feltene deres; " +
 	"du bestemmer aldri farger, plassering eller typografi. " +
 	"«!» betyr påkrevd felt. Hold tekstene korte — de skal leses på avstand."
@@ -36,11 +40,12 @@ const designSystemCompose = "\nBygg HELE dokumentet i ETT compose-kall: " +
 	"Skal en flate vise tall fra databasen, sett bare type og tittel på " +
 	"visualiseringen — spørringen får du fylle etterpå, når du har sett skjemaet."
 
-const designSystemEdit = "\nDokumentet finnes allerede — gjør KUN det brukeren ber om nå. " +
-	"patch endrer én flate (oppgi id); felt du ikke nevner står urørt, og tom " +
-	"streng fjerner et felt. action=add/remove/move endrer selve rekkefølgen. " +
-	"restyle bytter kitt eller stil-tokens. Brukeren kan ha rettet tekst selv " +
-	"på lerretet: bygg aldri dokumentet på nytt for å endre én ting."
+const designSystemEdit = "\nDokumentet finnes allerede — gjør KUN det brukeren ber om nå, " +
+	"på ÉN flate. Endre aldri flater brukeren ikke har nevnt, og legg aldri til " +
+	"noe på eget initiativ. patch endrer én flate (oppgi id); felt du ikke nevner " +
+	"står urørt, og tom streng fjerner et felt. action=add/remove/move endrer " +
+	"rekkefølgen. restyle bytter kitt eller stil-tokens. Brukeren kan ha rettet " +
+	"tekst selv på lerretet: bygg aldri dokumentet på nytt for å endre én ting."
 
 // designSystem er systemteksten for turen. Katalogen sendes KUN ved nybygg;
 // ved redigering holder tilstanden og den aktuelle layouten.
@@ -135,6 +140,21 @@ func surfaceProps(withSQL bool) map[string]any {
 		"widget":  visual,
 		"widgets": map[string]any{"type": "array", "items": visual},
 	}
+}
+
+// researchTools er kunnskapsverktøyene designflyten låner fra fri chat:
+// nettsøk, sidelesing, database og M365 — alt brukeren ellers har tilgang
+// til. Uten dem gjetter modellen på fakta den ikke kan vite (den satte et
+// oppdiktet sitat på en slide), og et dokument med feil i er verdiløst.
+func (s *Server) researchTools(ctx context.Context, dbCtx *dbToolCtx) []any {
+	tools := []any{webSearchTool, fetchURLTool}
+	if dbCtx != nil {
+		tools = append(tools, dbCtx.tool, showTableTool)
+	}
+	if _, ok := s.m365Connected(ctx); ok {
+		tools = append(tools, m365SearchTool, m365ReadTool)
+	}
+	return tools
 }
 
 // designTools er de tre verktøyene. Layout-nøklene kommer fra kittet, så nye
@@ -302,8 +322,10 @@ func (s *Server) runCompose(ctx context.Context, slug, rawArgs string) string {
 	return rep.String()
 }
 
-// runDesignPatch utfører én redigering.
-func (s *Server) runDesignPatch(ctx context.Context, slug, rawArgs string) string {
+// runDesignPatch utfører redigeringen. multi tillater flere flater i ett kall
+// og settes KUN av data-runden, der koden selv ber om det: ellers ryddet
+// modellen gjerne i flater brukeren aldri nevnte.
+func (s *Server) runDesignPatch(ctx context.Context, slug, rawArgs string, multi bool) string {
 	user, ok := ctx.Value(userKey).(store.User)
 	if !ok {
 		return "Ikke innlogget."
@@ -314,6 +336,11 @@ func (s *Server) runDesignPatch(ctx context.Context, slug, rawArgs string) strin
 	}
 	if len(ops) == 0 {
 		return "patch krever minst én endring."
+	}
+	dropped := 0
+	if !multi && len(ops) > 1 {
+		dropped = len(ops) - 1
+		ops = ops[:1]
 	}
 	kit, doc := s.docKit(ctx, slug)
 	var all design.Report
@@ -328,6 +355,10 @@ func (s *Server) runDesignPatch(ctx context.Context, slug, rawArgs string) strin
 	}
 	if !s.saveDoc(user, slug, doc) {
 		return "Kunne ikke lagre."
+	}
+	if dropped > 0 {
+		return all.String() + fmt.Sprintf(". %d andre endringer ble IKKE utført: "+
+			"brukeren ba om én ting, og flater som ikke er nevnt skal stå urørt.", dropped)
 	}
 	return all.String()
 }

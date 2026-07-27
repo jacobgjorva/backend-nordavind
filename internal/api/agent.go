@@ -327,15 +327,13 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			// mene om meldingen. Tomt dokument tvinges til compose — hele
 			// utkastet i ett kall; ellers må turen i det minste endre noe.
 			// Koden håndhever det, ikke en formulering i prompten.
-			full["tools"] = designTools(designKit)
-			if len(designDoc.Surfaces) == 0 {
-				full["tool_choice"] = map[string]any{
-					"type":     "function",
-					"function": map[string]any{"name": "compose"},
-				}
-			} else {
-				full["tool_choice"] = "required"
-			}
+			// Design-verktøyene + kunnskapsverktøyene: modellen skal kunne
+			// slå opp fakta før den skriver dem på en flate.
+			full["tools"] = append(designTools(designKit), s.researchTools(ctx, dbCtx)...)
+			// Minst ett verktøykall, men IKKE låst til compose: modellen skal
+			// kunne slå opp fakta først og bygge etterpå. Turen avsluttes i
+			// kode når dokumentet faktisk er bygget.
+			full["tool_choice"] = "required"
 		} else if widgetSlug != "" {
 			// Widget-editor: KUN set_widget. Uten query_database/web_search kan
 			// ikke modellen svare på dataspørsmål — den må skrive SQL-en inn i
@@ -974,7 +972,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					// tredoblet regningen). Koden stenger døren.
 					full["tool_choice"] = "none"
 				case "patch":
-					result = s.runDesignPatch(ctx, designSlug, c.Args.String())
+					result = s.runDesignPatch(ctx, designSlug, c.Args.String(), dataAsked)
 					// Ett patch-kall holder: verktøyet tar alle endringene i
 					// ops. Uten denne sperren gjentok modellen samme endring
 					// flere ganger og la inn duplikater.
