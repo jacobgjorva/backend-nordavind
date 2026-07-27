@@ -44,6 +44,15 @@ func (s *Server) handleKnowledgeGraph(w http.ResponseWriter, r *http.Request) {
 	if edges == nil {
 		edges = []store.KnowledgeEdge{}
 	}
+	// Hjernen tegnes i SAMME graf: entiteter blir noder, påstander mellom to
+	// entiteter blir kanter, og påstander med en ren verdi («48 timer før
+	// levering») legges på entitetens linje. Uten dette er hjernen usynlig
+	// for den som skal rette den.
+	if s.cfg.BrainMode == "on" {
+		bn, be := s.brainGraph(user.TenantID)
+		nodes = append(nodes, bn...)
+		edges = append(edges, be...)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"nodes": nodes, "edges": edges})
 }

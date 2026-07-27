@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"sort"
 	"strings"
 	"time"
 
@@ -253,6 +254,60 @@ func multiValuedPredicate(p string) bool {
 		return true
 	}
 	return false
+}
+
+// brainGraph gir hjernen i grafvisningens format. Verdipåstander får ingen
+// egen node — de ville fylt lerretet med løse bokser; de vises på entiteten
+// de gjelder.
+func (s *Server) brainGraph(tenantID string) ([]store.KnowledgeNode, []store.KnowledgeEdge) {
+	ents, err := s.store.EntitiesByKind(tenantID, "")
+	if err != nil || len(ents) == 0 {
+		return nil, nil
+	}
+	ids := make([]string, 0, len(ents))
+	for _, e := range ents {
+		ids = append(ids, e.ID)
+	}
+	claims, err := s.store.ClaimsAbout(tenantID, ids, false)
+	if err != nil {
+		return nil, nil
+	}
+	facts := map[string][]string{}
+	var edges []store.KnowledgeEdge
+	for _, c := range claims {
+		if c.ObjectID != "" {
+			edges = append(edges, store.KnowledgeEdge{
+				FromID: c.SubjectID, ToID: c.ObjectID, Relation: c.Predicate,
+			})
+			continue
+		}
+		line := c.Predicate + " " + c.ObjectText
+		if len(c.Qualifiers) > 0 {
+			var qs []string
+			for k, v := range c.Qualifiers {
+				qs = append(qs, k+": "+v)
+			}
+			sort.Strings(qs)
+			line += " (" + strings.Join(qs, ", ") + ")"
+		}
+		facts[c.SubjectID] = append(facts[c.SubjectID], line)
+	}
+	nodes := make([]store.KnowledgeNode, 0, len(ents))
+	for _, e := range ents {
+		summary := e.Kind
+		if len(e.Aliases) > 0 {
+			summary += " (også: " + strings.Join(e.Aliases, ", ") + ")"
+		}
+		if f := facts[e.ID]; len(f) > 0 {
+			sort.Strings(f)
+			summary += " — " + strings.Join(f, "; ")
+		}
+		nodes = append(nodes, store.KnowledgeNode{
+			ID: e.ID, Type: e.Kind, Title: e.Name, Summary: summary,
+			Status: "accepted", CreatedAt: e.Created,
+		})
+	}
+	return nodes, edges
 }
 
 // learnFromExchange lærer av en ferdig utveksling, i bakgrunnen. Terskelen
