@@ -1,4 +1,13 @@
-# Overlevering: assistentkvalitet (oppdatert 2026-07-28, 01:00)
+# Overlevering: assistentkvalitet
+
+HUSETS STEMME PÅ (2026-07-28, Jacob-godkjent, deployet): answerStyle omskrevet
+til eierskap («du eier oppgaven … avslutt med hva du ville gjort videre, aldri
+tilbud om hjelp»), ANSWER_STYLE default on, «ingen oppfølgingstilbud»-forbudet
+fjernet fra coreSystem. Storm-eskalering ved målt svikt (kapitulasjonsvakt og
+degenerert/tomt svar → router.HeavyModel). Kjent kalibrering igjen: «hva
+nå»-leddet hoppes fortsatt over i noen svar, og grepet peker tidvis på
+brukeren der modellen burde utført det selv — mål mot ekte bruk før mer.
+ (oppdatert 2026-07-28, 01:00)
 
 ## BEGGE KLASSENE LUKKET (2026-07-28, 01:45, deployet)
 
