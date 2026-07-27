@@ -21,6 +21,10 @@ echo "== Kopierer til serveren =="
 rsync -az /tmp/nordavind-server "$SERVER":/opt/nordavind/server.new
 rsync -az --delete "$FRONTEND_DIR/dist/" "$SERVER":/opt/nordavind/frontend/
 
+echo "== SearXNG-konfig (compose up er no-op uten endringer) =="
+rsync -az "$BACKEND_DIR/deploy/searxng/compose.yml" "$SERVER":/opt/nordavind/searxng/compose.yml
+ssh "$SERVER" 'cd /opt/nordavind/searxng && docker compose up -d --quiet-pull 2>/dev/null || true'
+
 echo "== Bytter binær og restarter =="
 ssh "$SERVER" '
   mv /opt/nordavind/server.new /opt/nordavind/server &&

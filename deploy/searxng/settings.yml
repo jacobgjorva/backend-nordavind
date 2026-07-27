@@ -1,0 +1,41 @@
+# SearXNG-konfig for Nordavind. Bygger på standardoppsettet; kun avvikene
+# står her. VIKTIG: `json` i formats — uten den svarer API-et 403, som er
+# den vanligste feilkilden ved oppsett.
+use_default_settings: true
+
+server:
+  # Byttes av setup.sh ved installasjon (sed) — aldri sjekk inn ekte nøkkel.
+  secret_key: "CHANGE_ME_AT_SETUP"
+  limiter: false # kun loopback-trafikk fra egen backend — limiter gir bare falske avslag
+
+search:
+  formats:
+    - html
+    - json # backendens API-kontrakt (searxng.go)
+  safe_search: 1
+
+valkey:
+  url: valkey://valkey:6379/0
+
+# Motorspredning: ingen enkeltmotor skal bære volumet. Google nedvektet —
+# strengest på scraping; mister vi den, bærer de andre søket videre
+# (unresponsive_engines logges av backenden som blokkeringsmetrikk).
+engines:
+  - name: mojeek
+    weight: 1.3
+    disabled: false
+  - name: brave
+    weight: 1.2
+    disabled: false
+  - name: startpage
+    weight: 1.0
+    disabled: false
+  - name: wikipedia
+    weight: 1.0
+    disabled: false
+  - name: google
+    weight: 0.3
+    disabled: false
+  - name: duckduckgo
+    weight: 0.8
+    disabled: false

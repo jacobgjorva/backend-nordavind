@@ -61,7 +61,7 @@ func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 		// Ingen total timeout: streaming-svar kan stå åpne lenge.
 		client:   &http.Client{Timeout: 0},
 		log:      log,
-		search:   search.NewClient(),
+		search:   search.NewClient(cfg.SearxURL),
 		store:    st,
 		pricing:  newPricing(),
 		rates:    &usdNok{},
@@ -69,6 +69,11 @@ func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 
 		planBuilding: map[string]bool{},
 		runActive:    map[string]bool{},
+	}
+	// Blokkeringsovervåking: motorer SearXNG melder som døde logges — dette
+	// er metrikken som avgjør når IP-pool/vekting må justeres.
+	s.search.Downed = func(engines []string) {
+		s.log.Warn("søkemotorer nede i SearXNG", "engines", strings.Join(engines, ","))
 	}
 	s.startScheduler(context.Background())
 	s.initIntentEngine()

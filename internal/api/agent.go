@@ -1271,29 +1271,57 @@ func (s *Server) runFetchURL(ctx context.Context, url string) string {
 }
 
 // runWebSearch utfører søk + sidehenting og formaterer kildekontekst.
+// Utdragsmotoren (excerpt.go) velger de mest relevante avsnittene; cache-
+// treff koster null oppstrøms. Ved embedding-feil: fail-open til gammel
+// full-side-oppførsel — riktig svar er pri 1.
 func (s *Server) runWebSearch(ctx context.Context, query string) (string, []sourceRef) {
 	if strings.TrimSpace(query) == "" {
 		return "Tomt søk.", nil
+	}
+	if cached, refs, ok := searchCacheGet(query); ok {
+		s.log.Info("websøk", "query", query, "cache", true)
+		return cached, refs
 	}
 	results, err := s.search.Search(ctx, query)
 	if err != nil || len(results) == 0 {
 		s.log.Warn("websøk feilet", "query", query, "err", err)
 		return "Søket ga ingen resultater.", nil
 	}
-	if len(results) > 3 {
-		results = results[:3]
+	if len(results) > excerptPages {
+		results = results[:excerptPages]
 	}
 	// Alltid full sidehenting: snippet-søket ga feilkoblinger (24AI-saken) —
 	// korrekthet vinner over fart, Jacobs beslutning 2026-07-26.
-	pages := s.search.FetchPages(ctx, results, 2800)
-	s.log.Info("websøk", "query", query, "treff", len(results))
+	pages := s.search.FetchPages(ctx, results, excerptChars)
 
 	refs := make([]sourceRef, 0, len(results))
 	for _, r := range results {
 		refs = append(refs, sourceRef{Title: r.Title, URL: r.URL})
 	}
-	return search.FormatContext(query, results, pages) +
-		"\nTrenger du mer enn dette: kall fetch_url på den mest relevante kilden.", refs
+
+	var context string
+	queryVec, qErr := s.embedCached(ctx, query)
+	if qErr == nil {
+		if picked, rErr := rankExcerpts(ctx, s.embedBatch, queryVec, pages); rErr == nil && len(picked) > 0 {
+			context = formatExcerptContext(query, results, picked)
+		}
+	}
+	if context == "" {
+		// Fail-open: rangeringen feilet — send sidene som før (trunkert).
+		for i, p := range pages {
+			if r := []rune(p); len(r) > 2800 {
+				pages[i] = string(r[:2800])
+			}
+		}
+		if len(results) > 3 {
+			results, pages, refs = results[:3], pages[:3], refs[:3]
+		}
+		context = search.FormatContext(query, results, pages)
+	}
+	context += "\nTrenger du mer enn dette: kall fetch_url på den mest relevante kilden."
+	s.log.Info("websøk", "query", query, "treff", len(results), "tegn", len(context))
+	searchCachePut(query, context, refs)
+	return context, refs
 }
 
 // flowNeedsDB: flyten lover databaseverktøy i flyt-tabellen.

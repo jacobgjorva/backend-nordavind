@@ -12,13 +12,25 @@ import (
 	"time"
 )
 
-// Client søker via DuckDuckGos HTML-endepunkt — gratis, ingen API-nøkkel.
+// Client søker via self-hostet SearXNG (primær, se searxng.go) med
+// DuckDuckGos HTML-endepunkt som fallback — gratis, ingen API-nøkkel.
 type Client struct {
-	http *http.Client
+	http     *http.Client
+	searxURL string // tom = hopp rett til DDG (lokal dev uten SearXNG)
+	ddgURL   string // overstyres kun i test
+	// Downed kalles med motornavn SearXNG melder som døde/blokkerte —
+	// blokkeringsovervåking uten at denne pakken kjenner loggeren.
+	Downed func(engines []string)
 }
 
-func NewClient() *Client {
-	return &Client{http: &http.Client{Timeout: 8 * time.Second}}
+// NewClient lager søkeklienten. searxURL fra SEARXNG_URL; tom streng gir
+// ren DDG-oppførsel (fail-open, null friksjon for utviklere uten SearXNG).
+func NewClient(searxURL string) *Client {
+	return &Client{
+		http:     &http.Client{Timeout: 8 * time.Second},
+		searxURL: strings.TrimSuffix(searxURL, "/"),
+		ddgURL:   "https://html.duckduckgo.com/html/",
+	}
 }
 
 type Result struct {
@@ -33,8 +45,25 @@ var (
 	reTags    = regexp.MustCompile(`<[^>]+>`)
 )
 
+// Search: SearXNG når konfigurert, ellers (eller ved feil) DDG. Fail-open —
+// et dødt SearXNG skal aldri ta med seg websøket i fallet.
 func (c *Client) Search(ctx context.Context, query string) ([]Result, error) {
-	u := "https://html.duckduckgo.com/html/?q=" + url.QueryEscape(query)
+	if c.searxURL != "" {
+		results, down, err := c.searxSearch(ctx, query)
+		if len(down) > 0 && c.Downed != nil {
+			c.Downed(down)
+		}
+		if err == nil {
+			return results, nil
+		}
+		// Fall gjennom til DDG med feilen kun som kontekst i loggen hos kalleren.
+	}
+	return c.searchDDG(ctx, query)
+}
+
+// searchDDG er den gamle DuckDuckGo-scrapingen — beholdt uendret som fallback.
+func (c *Client) searchDDG(ctx context.Context, query string) ([]Result, error) {
+	u := c.ddgURL + "?q=" + url.QueryEscape(query)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err

@@ -11,14 +11,14 @@ import (
 // KnowledgeNode er én atomær bransje-fakta i tenantens kunnskapsgraf.
 // Status styrer governance: kun "accepted" noder brukes av AI-en.
 type KnowledgeNode struct {
-	ID        string    `json:"id"`
-	Type      string    `json:"type"`    // entitet | term | prosess | regel
-	Title     string    `json:"title"`   // kort navn
-	Summary   string    `json:"summary"` // én linje
-	Status    string    `json:"status"`  // pending | accepted | rejected
-	ChatID    string    `json:"chat_id,omitempty"`
-	UserID    string    `json:"user_id,omitempty"`
-	UserEmail string    `json:"user_email,omitempty"`
+	ID        string     `json:"id"`
+	Type      string     `json:"type"`    // entitet | term | prosess | regel
+	Title     string     `json:"title"`   // kort navn
+	Summary   string     `json:"summary"` // én linje
+	Status    string     `json:"status"`  // pending | accepted | rejected
+	ChatID    string     `json:"chat_id,omitempty"`
+	UserID    string     `json:"user_id,omitempty"`
+	UserEmail string     `json:"user_email,omitempty"`
 	CreatedAt time.Time  `json:"created_at"`
 	Hits      int        `json:"hits"`                  // retrieval-treff (fra lappen)
 	LastHitAt *time.Time `json:"last_hit_at,omitempty"` // sist hentet
