@@ -1,6 +1,17 @@
 # Overlevering: assistentkvalitet (oppdatert 2026-07-28 natt)
 
-## ÅPEN SAK — start her: hybrid-vegring (strømpris × salg)
+## HYBRID-SAKEN LØST (2026-07-28 natt)
+
+«Korrelasjon mellom strømpris og salgene» virker nå ende-til-ende i ÉN tur:
+db-spørring + websøk + fetch + korrelasjonssvar. Rotårsaken var IKKE
+modellvegring: min flows.go-endring traff export_excel i stedet for
+data_question (replace-first på identisk Tools-linje), så verktøyet manglet
+faktisk. Avslørt av den nye permanente «tur-verktøy»-loggen (agent.go) — én
+linje per tur med verktøynavnene. LÆRDOM: sjekk den loggen FØR enhver
+vegring-diagnose. Bekreftelses-injeksjonen (affirmativeRe) står og er nyttig
+uansett.
+
+## Historikk: hybrid-vegring (strømpris × salg)
 
 «Korrelasjon mellom strømpris og salgene i 2025» feiler fortsatt: modellen
 henter salgstallene, men NEKTER å bruke web_search for strømprisene — ber

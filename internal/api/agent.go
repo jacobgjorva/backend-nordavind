@@ -572,6 +572,23 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		narr.say(ack.text, ack.kind)
 	}
 
+	// Én linje per tur: hvilke verktøy modellen faktisk fikk. Uten denne var
+	// det umulig å skille «verktøyet mangler» fra «modellen vegrer» — vi
+	// diagnostiserte hybrid-vegringen blindt.
+	if ts, ok := full["tools"].([]any); ok {
+		var names []string
+		for _, t := range ts {
+			if m, ok := t.(map[string]any); ok {
+				if f, ok := m["function"].(map[string]any); ok {
+					if n, ok := f["name"].(string); ok {
+						names = append(names, n)
+					}
+				}
+			}
+		}
+		s.log.Info("tur-verktøy", "flyt", flowKey, "verktøy", strings.Join(names, ","))
+	}
+
 	start := time.Now()
 	var promptTokens, completionTokens, searches int
 	usedTool := false // om noen verktøy (søk/lese/db) er kjørt — styrer tom-svar-vernet

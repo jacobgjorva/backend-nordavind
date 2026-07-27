@@ -123,7 +123,7 @@ var Flows = map[string]Flow{
 		Knowledge: true,
 		// Modellen henter dataene; eksportkortet appendes GARANTERT i kode
 		// (aldri «vil du at jeg skal eksportere?»).
-		Tools:    []string{ToolQueryDatabase, ToolShowTable, ToolWebSearch, ToolFetchURL},
+		Tools:    []string{ToolQueryDatabase, ToolShowTable},
 		Model:    "mid",
 		MaxChars: 150,
 		Fallback: FreeChatKey,
@@ -137,8 +137,11 @@ var Flows = map[string]Flow{
 		// et tall fra basen. Sparer også kontekst på den flyten som kjører
 		// oftest.
 		Knowledge: false,
-		Tools:     []string{ToolQueryDatabase, ToolShowTable},
-		Model:     "mid",
+		// Web-verktøyene er MED: flyter snevrer FOKUS, aldri EVNE. Hybride
+		// spørsmål (interne tall × ekstern virkelighet, «korrelasjon mellom
+		// strømpris og salgene») var umulige uten.
+		Tools: []string{ToolQueryDatabase, ToolShowTable, ToolWebSearch, ToolFetchURL},
+		Model: "mid",
 		// show_table var en egen flyt til 2026-07-27, med nøyaktig samme
 		// verktøy, modell, sticky og fallback — kun MaxChars skilte dem. Og
 		// tabellen rendres uansett av tableIntent() i kode, uavhengig av
