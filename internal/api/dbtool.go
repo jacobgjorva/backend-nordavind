@@ -97,6 +97,18 @@ func relevantTables(tables []store.TableConfig, focus string) map[string]bool {
 	return out
 }
 
+// rowHint viser tabellstørrelsen kompakt. Bare STORE tabeller merkes —
+// poenget er å advare, ikke å fylle skjemaet med tall.
+func rowHint(rows int64) string {
+	switch {
+	case rows >= 1_000_000:
+		return fmt.Sprintf("[~%dM rader: aggreger, aldri fritekstsøk]", rows/1_000_000)
+	case rows >= 100_000:
+		return fmt.Sprintf("[~%dk rader: filtrer alltid]", rows/1000)
+	}
+	return ""
+}
+
 // shortType kutter SQL-typenavn til det modellen faktisk trenger å vite.
 // «timestamp with time zone» er 25 tegn i hver eneste melding; «ts» sier det
 // samme for den som skal skrive en WHERE-klausul.
@@ -203,6 +215,9 @@ func (s *Server) buildDBToolFocused(tenantID, userID, onlyConnID, focus string) 
 			if detailed != nil && !detailed[tb.Name] {
 				// Kun navnet: modellen ser at tabellen finnes.
 				fmt.Fprintf(&schema, "%s(…)", tb.Name)
+				if n := rowHint(tb.Rows); n != "" {
+					schema.WriteString(" " + n)
+				}
 				if tb.Description != "" {
 					fmt.Fprintf(&schema, " — %s", tb.Description)
 				}
@@ -218,6 +233,9 @@ func (s *Server) buildDBToolFocused(tenantID, userID, onlyConnID, focus string) 
 				cols = append(cols, s)
 			}
 			fmt.Fprintf(&schema, "%s(%s)", tb.Name, strings.Join(cols, ", "))
+			if n := rowHint(tb.Rows); n != "" {
+				schema.WriteString(" " + n)
+			}
 			if tb.Description != "" {
 				fmt.Fprintf(&schema, " — %s", tb.Description)
 			}
@@ -269,7 +287,12 @@ func (s *Server) buildDBToolFocused(tenantID, userID, onlyConnID, focus string) 
 			"name": "query_database",
 			"description": "Kjør en SQL SELECT-spørring mot bedriftens interne database. Bruk denne " +
 				"for alle spørsmål om bedriftens egne data. Kun SELECT; maks 100 rader returneres. " +
-				"Bruk JOIN-nøklene under ved behov.\n\n" + schema.String(),
+				"Bruk JOIN-nøklene under ved behov.\n" +
+				"Skriv LETTE spørringer — tabellene er store og kjøres mot kundens " +
+				"driftsbase: konkrete kolonner (aldri SELECT *), alltid radgrense, " +
+				"tidsfilter når det finnes datofelt, og aggreger med SUM/COUNT + " +
+				"GROUP BY i stedet for å hente rader. Fritekstsøk: søk i ÉN kolonne, " +
+				"og unngå ledende jokertegn ('%tekst%') på store tabeller.\n\n" + schema.String(),
 			"parameters": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -384,6 +407,23 @@ func (s *Server) runDBQuery(ctx context.Context, t *dbToolCtx, connID, query str
 		msg := "Spørringen feilet: " + err.Error()
 		if strings.Contains(err.Error(), "ikke tilgjengelig") {
 			msg += "\nDenne databasen (" + dc.conn.Name + ") har: " + strings.Join(dc.allowed, ", ")
+		}
+		// Timeout betyr nesten alltid at spørringen skannet hele tabellen.
+		// Uten konkret veiledning prøver modellen det SAMME på nytt — vi så
+		// tre identiske forsøk på rad i prod.
+		if strings.Contains(err.Error(), "deadline exceeded") ||
+			strings.Contains(err.Error(), "timeout") {
+			msg = "Spørringen brukte for lang tid og ble avbrutt. Den skannet " +
+				"trolig hele tabellen. Prøv IGJEN med en lettere variant:\n" +
+				"- velg konkrete kolonner, aldri SELECT *\n" +
+				"- begrens alltid antall rader (TOP 100 / LIMIT 100)\n" +
+				"- legg på et tidsfilter når tabellen har datofelt (siste 12 mnd)\n" +
+				"- unngå LIKE '%tekst%' over flere kolonner; søk i ÉN kolonne, " +
+				"helst med prefiks ('tekst%')\n" +
+				"- er tabellen stor, aggreger (SUM/COUNT + GROUP BY) i stedet " +
+				"for å hente rader\n" +
+				"Klarer du ikke gjøre den lettere, si til brukeren at spørringen " +
+				"er for tung — ikke gjenta den samme spørringen."
 		}
 		return msg
 	}
