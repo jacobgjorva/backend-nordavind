@@ -442,6 +442,44 @@ func (s *Server) handleCreateDesign(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"chat_id": chat.ID, "slug": wg.Slug, "kit": kit.Name})
 }
 
+// handleDesignMeta er brukerens egne valg på lerretet: uttrykk, tittel og
+// stil. Samme vei som modellens restyle, så de aldri kan komme i utakt.
+func (s *Server) handleDesignMeta(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Kit   string            `json:"kit"`
+		Title string            `json:"title"`
+		Style map[string]string `json:"style"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "ugyldig kropp", http.StatusBadRequest)
+		return
+	}
+	slug := r.PathValue("slug")
+	doc, found := s.docFor(user, slug)
+	if !found {
+		http.Error(w, "ikke funnet", http.StatusNotFound)
+		return
+	}
+	if req.Kit != "" && req.Kit != doc.Kit {
+		design.Restyle(design.Get(doc.Kit), design.Get(req.Kit), &doc)
+	}
+	if req.Title != "" {
+		doc.Title = req.Title
+	}
+	if req.Style != nil {
+		doc.Style = req.Style
+	}
+	if !s.saveDoc(user, slug, doc) {
+		http.Error(w, "kunne ikke lagre", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleDesignKits gir galleriet: alle kitt med tokens, bilder og layouts.
 func (s *Server) handleDesignKits(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.user(w, r); !ok {

@@ -174,6 +174,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/design/kits", s.requireAuth(s.handleDesignKits))
 	mux.HandleFunc("POST /v1/designs", s.requireAuth(s.handleCreateDesign))
 	mux.HandleFunc("POST /v1/designs/{slug}/patch", s.requireAuth(s.handleDesignPatch))
+	mux.HandleFunc("POST /v1/designs/{slug}/meta", s.requireAuth(s.handleDesignMeta))
 	mux.HandleFunc("GET /v1/chats/{chatId}/agent", s.requireAuth(s.handleAgentByChat))
 	mux.HandleFunc("PATCH /v1/agents/{id}", s.requireAuth(s.handleSetAgentEnabled))
 	mux.HandleFunc("PUT /v1/agents/{id}", s.requireAuth(s.handleUpdateAgent))
