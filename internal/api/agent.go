@@ -15,6 +15,23 @@ import (
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
 
+// affirmativeRe: brukerens korte «ja, gjør det» — lest fra BRUKERTEKST, samme
+// presedens som tableIntent og deepMarkers. Aldri brukt på modellens tekst.
+var affirmativeRe = regexp.MustCompile(`(?i)^(ja|jepp|ok|okei|greit|kjør|gjør det|ja takk|yes|sett i gang|kjør på)[.!, ]*(gjør det|kjør|takk)?[.!]*$`)
+
+// prevAssistantAskedQuestion: endte forrige assistentsvar med et spørsmål?
+func prevAssistantAskedQuestion(full map[string]any) bool {
+	msgs, _ := full["messages"].([]any)
+	for i := len(msgs) - 2; i >= 0; i-- {
+		m, ok := msgs[i].(map[string]any)
+		if !ok || m["role"] != "assistant" {
+			continue
+		}
+		return strings.HasSuffix(strings.TrimSpace(messageText(m["content"])), "?")
+	}
+	return false
+}
+
 // Modellen bestemmer selv når den trenger nettet — ingen forhåndsdommer.
 // widgetSlugRe plukker slugen ut av runWidgetOp-kvitteringen.
 var widgetSlugRe = regexp.MustCompile(`slug=([a-z0-9-]+)`)
@@ -519,6 +536,20 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		if flusher != nil {
 			flusher.Flush()
 		}
+	}
+
+	// Bekreftelses-fella: modellen tilbød noe («Vil du at jeg …?»), brukeren
+	// sa ja — og modellen stilte samme spørsmål på nytt (målt to runder på
+	// rad om strømpriser den hadde verktøy til å hente). Faktatrigger:
+	// forrige assistentsvar endte med «?», brukeren svarte kort bekreftende.
+	// Samme presedens som datatilgangs-overstyringen: deterministisk
+	// kontekst-instruks i kode, aldri formulerings-sniffing på modellen.
+	if !setup && widgetSlug == "" && !connectorMode && !planning &&
+		affirmativeRe.MatchString(strings.TrimSpace(lastUserText(full))) &&
+		prevAssistantAskedQuestion(full) {
+		injectSystem(full, "Brukeren har nettopp BEKREFTET forslaget ditt. Ikke still nye "+
+			"spørsmål og ikke be om data på nytt — UTFØR det du tilbød nå, med verktøyene "+
+			"du har (websøk henter eksterne tall som priser og kurser).")
 	}
 
 	// Arbeidsnarrasjonen (narrate.go): deterministiske fremdriftssteg i kode,

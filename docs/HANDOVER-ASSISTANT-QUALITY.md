@@ -1,4 +1,26 @@
-# Overlevering: assistentkvalitet (2026-07-27, oppdatert kveld)
+# Overlevering: assistentkvalitet (oppdatert 2026-07-28 natt)
+
+## ÅPEN SAK — start her: hybrid-vegring (strømpris × salg)
+
+«Korrelasjon mellom strømpris og salgene i 2025» feiler fortsatt: modellen
+henter salgstallene, men NEKTER å bruke web_search for strømprisene — ber
+brukeren om en kilde, selv etter «Ja, gjør det». Det som ER gjort og verifisert:
+data_question-flyten har nå web_search+fetch_url (flows.go — flyter snevrer
+FOKUS, aldri EVNE), og en bekreftelses-injeksjon (agent.go, affirmativeRe +
+prevAssistantAskedQuestion) sier «brukeren har bekreftet — utfør». Begge
+utilstrekkelige: mistral-medium søker ikke.
+
+IKKE VERIFISERT ennå: at web_search-verktøyet faktisk står i full["tools"] på
+sticky data_question-turer — flowTools() ser riktig ut, men ingen logg beviser
+det. FØRSTE STEG: logg verktøynavnene per tur (eller les 422-loggens tools=)
+og bekreft. Hvis verktøyet er der, er neste kandidat tool_choice-tvang på
+web_search når bekreftelses-fella utløses (samme mekanisme som searchNudged,
+agent.go) — vurdert men ikke bygget: risikerer feilsøk når «ja» besvarer et
+oppklaringsspørsmål. Reproduser med /tmp/hybrid2.json-mønsteret (to turer).
+
+Testsuiter: scratchpad/mjod.json (10 klasser, Mjødhallen), hard.json (Kunder).
+Lokalt: Mjødhallen ERP er PRIMÆR (PUT /v1/connections/{id}/primary).
+
 
 ## Status etter kveldsrunden
 

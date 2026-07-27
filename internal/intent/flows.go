@@ -123,7 +123,7 @@ var Flows = map[string]Flow{
 		Knowledge: true,
 		// Modellen henter dataene; eksportkortet appendes GARANTERT i kode
 		// (aldri «vil du at jeg skal eksportere?»).
-		Tools:    []string{ToolQueryDatabase, ToolShowTable},
+		Tools:    []string{ToolQueryDatabase, ToolShowTable, ToolWebSearch, ToolFetchURL},
 		Model:    "mid",
 		MaxChars: 150,
 		Fallback: FreeChatKey,
@@ -145,6 +145,14 @@ var Flows = map[string]Flow{
 		// hvilken flyt ruteren valgte. Skillet fantes altså ikke, men ruteren
 		// måtte gjette på det og bommet i fire av elleve tilfeller.
 		// Svarlengden avgjøres nå av om en tabell FAKTISK ble vist.
+		//
+		// Websøk er MED (2026-07-28): flyter snevrer FOKUS, aldri EVNE.
+		// «Korrelasjon mellom strømpris og salgene» er et datasporsmål som
+		// trenger nettet for den ene halvparten — uten web_search svarte
+		// modellen sant at den ikke kunne, og sticky holdt den fast selv da
+		// brukeren eksplisitt sa «du kan finne dem på nettet». Kvalitet over
+		// tokens (Jacobs prioritering); web-verktøyene koster få tokens,
+		// i motsetning til db-skjemaet.
 		MaxChars: 300, // tette tallsvar
 		Fallback: FreeChatKey,
 		Sticky:   true, // oppfølgingsspørsmål («sikker?») skal beholde db-verktøyene
