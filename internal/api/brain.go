@@ -20,10 +20,11 @@ import (
 // er fortsatt råteksten som siteres; påstandene er destillatet som kan
 // resonneres med. Ryker hjernen, faller alt tilbake til dagens oppførsel.
 
-// brainModel: uttrekk krever at modellen holder styr på entiteter og et
-// lukket vokabular samtidig. Det er en tyngre jobb enn den gamle
-// «tre løse noder», og kjøres uansett i bakgrunnen — aldri i svarløyfa.
-const brainModel = "mistral-medium-3.5-128b"
+// brainModel: uttrekket kjører på HVER utveksling som passerer filteret, så
+// modellvalget avgjør hva hjernen koster i drift. Den lille klarer jobben
+// fordi vokabularet er lukket og koden kaster alt som ikke holder mål —
+// modellen skal gjenkjenne, ikke resonnere.
+const brainModel = "mistral-small-3.2-24b-instruct-2506"
 
 // ExtractToBrain leser en tekst og lagrer det som holder mål. Returnerer
 // antall påstander og prosedyrer som ble lagret.
@@ -398,7 +399,7 @@ func (s *Server) learnFromExchange(ctx context.Context, chatID, question, answer
 		return
 	}
 	q := strings.TrimSpace(question)
-	if len([]rune(q)) < 25 {
+	if !worthLearning(q) {
 		return
 	}
 	user, ok := ctx.Value(userKey).(store.User)
@@ -417,6 +418,44 @@ func (s *Server) learnFromExchange(ctx context.Context, chatID, question, answer
 		}
 		s.ExtractToBrain(bg, user.TenantID, user.ID, q+"\n\n(AI svarte: "+answer+")", "chat", src)
 	}()
+}
+
+// worthLearning er det billige filteret foran uttrekket. Et rent spørsmål
+// inneholder sjelden et faktum å lære, og et modellkall på hver melding er
+// den største driftskostnaden hjernen har. Ingen modell, ingen nettverk —
+// bare tekst.
+func worthLearning(q string) bool {
+	if len([]rune(q)) < 25 {
+		return false
+	}
+	low := strings.ToLower(q)
+	// Spørsmål lærer oss ingenting — med mindre de også bærer en påstand
+	// («Ola er ansvarlig for X, når møter jeg ham?»).
+	if strings.HasSuffix(strings.TrimSpace(low), "?") && !strings.Contains(low, ",") {
+		return false
+	}
+	// «Husk at …» er en eksplisitt beskjed om å lære — den slipper alltid.
+	for _, w := range []string{"husk ", "noter ", "notér ", "merk deg "} {
+		if strings.HasPrefix(low, w) {
+			return true
+		}
+	}
+	for _, w := range []string{"hva ", "hvem ", "hvilken ", "hvilke ", "hvordan ",
+		"hvorfor ", "når ", "hvor ", "kan du ", "kan vi ", "vis meg", "lag ", "finn "} {
+		if strings.HasPrefix(low, w) {
+			return false
+		}
+	}
+	// Påstander har et verb som knytter to ting sammen. Uten et slikt ord er
+	// det sjelden noe å trekke ut.
+	for _, w := range []string{" er ", " har ", " skal ", " bruker ", " eier ",
+		" jobber ", " rapporterer ", " ansvarlig ", " møter ", " leverer ",
+		" godkjenner ", " gjelder ", " krever ", " koster ", " sender "} {
+		if strings.Contains(low, w) {
+			return true
+		}
+	}
+	return false
 }
 
 // brainContext er hjernens bidrag til svaret: entitetene spørsmålet nevner,

@@ -25,6 +25,7 @@ type Config struct {
 	AllowedOrigins  []string // CORS-origins for frontend (kommaseparert i env)
 	DBPath          string   // SQLite-fil for tenants/brukere/sesjoner
 	AuthRequired    bool     // krev innlogging på chat/extract (default på; sett AUTH_REQUIRED=false kun i dev)
+	AnswerStyle     string   // husets svarstil i chat: "off" (default) | "on"
 	BrainMode       string   // hjernen (påstandsgrafen): "off" (default) | "on"
 	IntentMode      string   // intent-motoren: "off" (default) | "shadow" (rut + logg, endrer ingenting)
 	SearxURL        string   // SEARXNG_URL: self-hostet søkeinstans; tom = DuckDuckGo-fallback (lokal dev)
@@ -61,6 +62,7 @@ func Load() (Config, error) {
 		AllowedOrigins:  strings.Split(getenv("ALLOWED_ORIGIN", "http://localhost:5173,http://127.0.0.1:5173"), ","),
 		DBPath:          getenv("DB_PATH", "data/nordavind.db"),
 		AuthRequired:    getenv("AUTH_REQUIRED", "true") != "false",
+		AnswerStyle:     getenv("ANSWER_STYLE", "off"),
 		BrainMode:       getenv("BRAIN", "off"),
 		IntentMode:      getenv("INTENT_ENGINE", "off"),
 		SearxURL:        getenv("SEARXNG_URL", ""),

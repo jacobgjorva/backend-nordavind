@@ -192,6 +192,17 @@ const deepResearchSystem = "GRUNDIG MODUS er på. Grundigheten ligger i ARBEIDET
 	"det som endrer beslutningen. All research-jobben er gjort for å gjøre disse få setningene RIKTIGE og " +
 	"skarpe, ikke for å fylle svaret."
 
+// answerStyle er husets stemme i vanlig chat. Uten den svarer modellen bare
+// på det som ble spurt om, og aldri på behovet bak — brukeren må selv vite
+// hvilket oppfølgingsspørsmål som var det viktige.
+//
+// Tre ledd, i denne rekkefølgen, og bare når de har innhold: svaret, den ene
+// detaljen som endrer beslutningen, ett konkret neste steg. Aldri fyll.
+const answerStyle = "Svar rett på sak i første setning. Legg til én kort setning med det som " +
+	"faktisk endrer beslutningen (risiko, kostnad, frist, feil premiss) HVIS du har noe ekte, " +
+	"og avslutt gjerne med ett konkret neste steg. Hopp over ledd du ikke har innhold til, " +
+	"og gjenta deg aldri.\n\n"
+
 // injectSystem legger en instruks til samtalens system-melding — føyer til
 // den første system-meldingen hvis den finnes, ellers settes en ny fremst.
 func injectSystem(full map[string]any, text string) {
@@ -443,6 +454,16 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		injectSystem(full, "VIKTIG: Brukeren HAR datatilgang akkurat nå (query_database er tilgjengelig "+
 			"med skjemaet i verktøyet). Eventuelle påstander tidligere i samtalen om manglende tilgang "+
 			"eller databasefeil er UTDATERTE — ignorer dem, kjør spørringen og svar med ferske tall.")
+	}
+
+	// Husets stemme: kun vanlig chat. Widget-, design- og agent-flytene har
+	// egne, strengere kontrakter der prat er feil.
+	//
+	// AV inntil den er målt: den nye søkemotoren endret svarkvaliteten, og
+	// stilen skal vurderes mot den — ikke mot slik det var før.
+	if s.cfg.AnswerStyle == "on" &&
+		!setup && widgetSlug == "" && designSlug == "" && !connectorMode && !planning && editID == "" {
+		injectSystem(full, answerStyle)
 	}
 
 	// Grundig modus: vanlig chat (ikke oppsett/widget/agent-redigering) der
