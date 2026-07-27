@@ -29,7 +29,7 @@ func TestSearxSearchParsesResultsAndDownedEngines(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient(srv.URL)
+	c := NewClient(srv.URL, "")
 	var downed []string
 	c.Downed = func(e []string) { downed = e }
 
@@ -59,7 +59,7 @@ func TestSearxFallsBackToDDG(t *testing.T) {
 	}))
 	defer ddg.Close()
 
-	c := NewClient(searx.URL)
+	c := NewClient(searx.URL, "")
 	c.ddgURL = ddg.URL + "/"
 	results, err := c.Search(context.Background(), "hva som helst")
 	if err != nil {
@@ -77,7 +77,7 @@ func TestEmptySearxURLGoesStraightToDDG(t *testing.T) {
 	}))
 	defer ddg.Close()
 
-	c := NewClient("")
+	c := NewClient("", "")
 	c.ddgURL = ddg.URL + "/"
 	results, err := c.Search(context.Background(), "x")
 	if err != nil || len(results) != 1 {

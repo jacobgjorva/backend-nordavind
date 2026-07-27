@@ -15,11 +15,13 @@ import (
 // Client søker via self-hostet SearXNG (primær, se searxng.go) med
 // DuckDuckGos HTML-endepunkt som fallback — gratis, ingen API-nøkkel.
 type Client struct {
-	http     *http.Client
-	searxURL string // tom = hopp rett til DDG (lokal dev uten SearXNG)
-	ddgURL   string // overstyres kun i test
-	wikiNO   string // Wikipedia bokmål (overstyres kun i test)
-	wikiEN   string // Wikipedia engelsk — fallback når bokmål er tomt
+	http      *http.Client
+	searxURL  string // tom = hopp rett til DDG (lokal dev uten SearXNG)
+	ddgURL    string // overstyres kun i test
+	wikiNO    string // Wikipedia bokmål (overstyres kun i test)
+	wikiEN    string // Wikipedia engelsk — fallback når bokmål er tomt
+	serperKey string // SERPER_API_KEY; tom = Serper av
+	serperURL string // overstyres kun i test
 	// Downed kalles med motornavn SearXNG melder som døde/blokkerte —
 	// blokkeringsovervåking uten at denne pakken kjenner loggeren.
 	Downed func(engines []string)
@@ -27,13 +29,17 @@ type Client struct {
 
 // NewClient lager søkeklienten. searxURL fra SEARXNG_URL; tom streng gir
 // ren DDG-oppførsel (fail-open, null friksjon for utviklere uten SearXNG).
-func NewClient(searxURL string) *Client {
+// serperKey fra SERPER_API_KEY; satt = Serper brukes først (omgår
+// IP-blokkeringen), tom = uendret oppførsel.
+func NewClient(searxURL, serperKey string) *Client {
 	return &Client{
-		http:     &http.Client{Timeout: 8 * time.Second},
-		searxURL: strings.TrimSuffix(searxURL, "/"),
-		ddgURL:   "https://html.duckduckgo.com/html/",
-		wikiNO:   "https://no.wikipedia.org/w/api.php",
-		wikiEN:   "https://en.wikipedia.org/w/api.php",
+		serperKey: serperKey,
+		serperURL: serperEndpoint,
+		http:      &http.Client{Timeout: 8 * time.Second},
+		searxURL:  strings.TrimSuffix(searxURL, "/"),
+		ddgURL:    "https://html.duckduckgo.com/html/",
+		wikiNO:    "https://no.wikipedia.org/w/api.php",
+		wikiEN:    "https://en.wikipedia.org/w/api.php",
 	}
 }
 
@@ -49,9 +55,16 @@ var (
 	reTags    = regexp.MustCompile(`<[^>]+>`)
 )
 
-// Search: SearXNG når konfigurert, ellers (eller ved feil) DDG. Fail-open —
-// et dødt SearXNG skal aldri ta med seg websøket i fallet.
+// Search: Serper først når nøkkel er satt (eneste vei som ikke blokkeres av
+// IP-en vår), så SearXNG, så DDG. Fail-open hele veien — en død kilde skal
+// aldri ta med seg websøket i fallet.
 func (c *Client) Search(ctx context.Context, query string) ([]Result, error) {
+	if c.serperKey != "" {
+		if results, err := c.serperSearch(ctx, query); err == nil && len(results) > 0 {
+			return results, nil
+		}
+		// Feil eller tomt: fall videre til SearXNG/DDG.
+	}
 	if c.searxURL != "" {
 		results, down, err := c.searxSearch(ctx, query)
 		if len(down) > 0 && c.Downed != nil {

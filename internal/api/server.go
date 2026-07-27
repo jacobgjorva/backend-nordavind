@@ -61,7 +61,7 @@ func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 		// Ingen total timeout: streaming-svar kan stå åpne lenge.
 		client:   &http.Client{Timeout: 0},
 		log:      log,
-		search:   search.NewClient(cfg.SearxURL),
+		search:   search.NewClient(cfg.SearxURL, cfg.SerperKey),
 		store:    st,
 		pricing:  newPricing(),
 		rates:    &usdNok{},

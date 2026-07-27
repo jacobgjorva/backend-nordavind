@@ -27,7 +27,7 @@ func TestWikiSearchParsesAndStripsHTML(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient("")
+	c := NewClient("", "")
 	c.wikiNO = srv.URL + "/w/api.php"
 	got := c.WikiSearch(context.Background(), "Erna Solberg")
 
@@ -56,7 +56,7 @@ func TestWikiSearchFallsBackToEnglish(t *testing.T) {
 	}))
 	defer en.Close()
 
-	c := NewClient("")
+	c := NewClient("", "")
 	c.wikiNO = empty.URL + "/w/api.php"
 	c.wikiEN = en.URL + "/w/api.php"
 	got := c.WikiSearch(context.Background(), "data labeling")
@@ -71,7 +71,7 @@ func TestWikiSearchFailsSoft(t *testing.T) {
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer down.Close()
-	c := NewClient("")
+	c := NewClient("", "")
 	c.wikiNO, c.wikiEN = down.URL+"/w/api.php", down.URL+"/w/api.php"
 	if got := c.WikiSearch(context.Background(), "hva som helst"); got != nil {
 		t.Fatalf("ville hatt tom liste ved 429, fikk %+v", got)

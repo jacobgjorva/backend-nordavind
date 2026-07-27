@@ -28,6 +28,7 @@ type Config struct {
 	BrainMode       string   // hjernen (påstandsgrafen): "off" (default) | "on"
 	IntentMode      string   // intent-motoren: "off" (default) | "shadow" (rut + logg, endrer ingenting)
 	SearxURL        string   // SEARXNG_URL: self-hostet søkeinstans; tom = DuckDuckGo-fallback (lokal dev)
+	SerperKey       string   // SERPER_API_KEY: Googles resultater via API; tom = av. Omgår IP-blokkeringen
 
 	// MIDLERTIDIG: hardkodet e-postkonto til /mail (env). Flyttes til
 	// Connector-siden på produksjonsnivå senere.
@@ -63,6 +64,7 @@ func Load() (Config, error) {
 		BrainMode:       getenv("BRAIN", "off"),
 		IntentMode:      getenv("INTENT_ENGINE", "off"),
 		SearxURL:        getenv("SEARXNG_URL", ""),
+		SerperKey:       getenv("SERPER_API_KEY", ""),
 		Mail: MailConfig{
 			Email:     os.Getenv("MAIL_EMAIL"),
 			IMAPHost:  os.Getenv("MAIL_IMAP_HOST"),
