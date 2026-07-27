@@ -339,7 +339,7 @@ func parseOps(raw []byte) ([]design.Op, error) {
 		Ops []design.Op `json:"ops"`
 	}
 	if err := json.Unmarshal(raw, &batch); err == nil && len(batch.Ops) > 0 {
-		return batch.Ops, nil
+		return normalizeOps(batch.Ops), nil
 	}
 	var one design.Op
 	if err := json.Unmarshal(raw, &one); err != nil {
@@ -348,7 +348,25 @@ func parseOps(raw []byte) ([]design.Op, error) {
 	if one.ID == "" && one.Action == "" && len(one.Fields) == 0 {
 		return nil, nil
 	}
-	return []design.Op{one}, nil
+	return normalizeOps([]design.Op{one}), nil
+}
+
+// normalizeOps retter opp formen modellen faktisk bruker: den legger gjerne
+// «layout» blant feltene i stedet for på operasjonen. Da ble hele flaten
+// avvist som «ukjent layout» og brukeren så ingenting skje — koden løfter
+// den ut i stedet for å være streng på plasseringen.
+func normalizeOps(ops []design.Op) []design.Op {
+	for i := range ops {
+		op := &ops[i]
+		if op.Layout != "" || op.Fields == nil {
+			continue
+		}
+		if l, ok := op.Fields["layout"].(string); ok && l != "" {
+			op.Layout = l
+			delete(op.Fields, "layout")
+		}
+	}
+	return ops
 }
 
 // runRestyle bytter kitt, tittel eller stil-tokens.

@@ -869,9 +869,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					full["tool_choice"] = "none"
 				case "patch":
 					result = s.runDesignPatch(ctx, designSlug, c.Args.String())
-					// Data-runden er ferdig når patchene er lagret: lerretet er
-					// svaret, og turen avsluttes i kode.
-					dataFilled = dataAsked
+					// Ett patch-kall holder: verktøyet tar alle endringene i
+					// ops. Uten denne sperren gjentok modellen samme endring
+					// flere ganger og la inn duplikater.
+					dataFilled = true
+					full["tool_choice"] = "none"
 				default:
 					result = s.runRestyle(ctx, designSlug, c.Args.String())
 				}
