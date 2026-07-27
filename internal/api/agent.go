@@ -510,8 +510,15 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	tableShown := false
 	var lastCols []string
 	var lastRows [][]string
+	// Hjernen lærer av utvekslingen når turen er over. Backend gjør dette
+	// selv: klienten skal ikke måtte huske å be om det, og hjernen skal
+	// vokse av vanlig bruk — ikke bare når noen trykker på et ikon.
+	userMsg := lastUserText(full)
+	lastAnswer := ""
+	learnFrom := chatID
 	defer func() {
 		s.recordUsage(ctx, full, promptTokens, completionTokens, searches, time.Since(start))
+		s.learnFromExchange(ctx, learnFrom, userMsg, lastAnswer)
 	}()
 
 	for round := 0; round <= roundCap; round++ {
@@ -548,6 +555,9 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			gate = newSentenceGate(groundingBasis(full, toolResults))
 		}
 		calls, usage, content := s.relayRound(resp, emit, streamThis, gate)
+		if content != "" {
+			lastAnswer = content
+		}
 		// Tvunget verktøyvalg gjelder kun én runde.
 		delete(full, "tool_choice")
 		resp.Body.Close()

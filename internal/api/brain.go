@@ -255,6 +255,36 @@ func multiValuedPredicate(p string) bool {
 	return false
 }
 
+// learnFromExchange lærer av en ferdig utveksling, i bakgrunnen. Terskelen
+// er lengde alene: en påstand som «Ola er ansvarlig for Vestland Fisk» har
+// ingen av markørene den gamle kunnskaps-gaten ser etter, og er nettopp det
+// hjernen skal fange.
+func (s *Server) learnFromExchange(ctx context.Context, chatID, question, answer string) {
+	if s.cfg.BrainMode != "on" {
+		return
+	}
+	q := strings.TrimSpace(question)
+	if len([]rune(q)) < 25 {
+		return
+	}
+	user, ok := ctx.Value(userKey).(store.User)
+	if !ok || user.TenantID == "" {
+		return
+	}
+	go func() {
+		bg, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		bg = context.WithValue(bg, userKey, user)
+		// Kilden må alltid peke på noe: uten chat-id brukes brukeren, så en
+		// påstand aldri blir stående uten opphav.
+		src := chatID
+		if src == "" {
+			src = "bruker:" + user.ID
+		}
+		s.ExtractToBrain(bg, user.TenantID, user.ID, q+"\n\n(AI svarte: "+answer+")", "chat", src)
+	}()
+}
+
 // brainContext er hjernens bidrag til svaret: entitetene spørsmålet nevner,
 // traversert to hopp ut. Tomt når ingenting kjennes igjen — da står dagens
 // lappe-henting alene, som før.
@@ -278,7 +308,8 @@ func (s *Server) brainContext(ctx context.Context, tenantID, userID, query strin
 	paths := g.Expand(seeds, 2, time.Now())
 	out := g.Render(paths, brainMaxLines)
 	if out != "" {
-		s.log.Info("hjerne brukt", "entiteter", len(seeds), "påstander", len(g.Claims))
+		s.log.Info("hjerne brukt", "entiteter", len(seeds), "påstander", len(g.Claims),
+			"tekst", strings.ReplaceAll(out, "\n", " | "))
 	}
 	return out
 }
@@ -323,22 +354,51 @@ func (s *Server) entitiesInQuery(tenantID, query string) []string {
 		return nil
 	}
 	q := strings.ToLower(query)
+	words := map[string]bool{}
+	for _, w := range strings.FieldsFunc(q, func(r rune) bool {
+		return !('a' <= r && r <= 'z' || '0' <= r && r <= '9' ||
+			r == 'æ' || r == 'ø' || r == 'å')
+	}) {
+		words[w] = true
+	}
 	var ids []string
 	for _, e := range ents {
-		names := append([]string{e.Name}, e.Aliases...)
-		for _, n := range names {
-			n = strings.ToLower(strings.TrimSpace(n))
-			// Korte navn må stå som eget ord for å unngå tilfeldige treff.
-			if n == "" || len([]rune(n)) < 3 {
-				continue
-			}
-			if strings.Contains(q, n) {
+		if matchesEntity(q, words, e.Name) {
+			ids = append(ids, e.ID)
+			continue
+		}
+		for _, a := range e.Aliases {
+			if matchesEntity(q, words, a) {
 				ids = append(ids, e.ID)
 				break
 			}
 		}
 	}
 	return ids
+}
+
+// matchesEntity treffer både hele navnet og et enkeltnavn: folk skriver
+// «Ola», ikke «Ola Berg». Delene må stå som EGNE ord i spørsmålet, ellers
+// ville «Nes» truffet «nesten».
+func matchesEntity(query string, words map[string]bool, name string) bool {
+	n := strings.ToLower(strings.TrimSpace(name))
+	if n == "" || len([]rune(n)) < 3 {
+		return false
+	}
+	if strings.Contains(query, n) {
+		return true
+	}
+	parts := strings.Fields(n)
+	if len(parts) < 2 {
+		return false
+	}
+	for _, p := range parts {
+		// Bare distinkte deler: korte ord som «as» og «og» treffer alt.
+		if len([]rune(p)) >= 4 && words[p] {
+			return true
+		}
+	}
+	return false
 }
 
 // loadGraph henter utsnittet traverseringen trenger: påstandene rundt
