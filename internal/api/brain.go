@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -256,6 +258,83 @@ func multiValuedPredicate(p string) bool {
 	return false
 }
 
+// handleEntitySearch er @-nevningens oppslag: entiteter som starter med det
+// brukeren har skrevet. Snarvei, ikke forutsetning — automatisk gjenkjenning
+// er fortsatt hovedveien inn i hjernen.
+func (s *Server) handleEntitySearch(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+	ents, err := s.store.EntitiesByKind(user.TenantID, "")
+	if err != nil {
+		writeJSON(w, map[string]any{"entities": []any{}})
+		return
+	}
+	type hit struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		Kind string `json:"kind"`
+	}
+	out := []hit{}
+	for _, e := range ents {
+		if q != "" && !matchesPrefix(e, q) {
+			continue
+		}
+		out = append(out, hit{ID: e.ID, Name: e.Name, Kind: e.Kind})
+		if len(out) >= 8 {
+			break
+		}
+	}
+	writeJSON(w, map[string]any{"entities": out})
+}
+
+// matchesPrefix treffer på navn, navnedel eller alias.
+func matchesPrefix(e store.Entity, q string) bool {
+	for _, n := range append([]string{e.Name}, e.Aliases...) {
+		l := strings.ToLower(n)
+		if strings.HasPrefix(l, q) {
+			return true
+		}
+		for _, part := range strings.Fields(l) {
+			if strings.HasPrefix(part, q) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// mentionRe plukker @-nevninger: «@Ola Berg» eller «@Vestland Fisk».
+var mentionRe = regexp.MustCompile(`@([\p{L}][\p{L}0-9.-]*(?: [\p{L}][\p{L}0-9.-]*)?)`)
+
+// mentionedEntities finner entitetene brukeren har pekt ut eksplisitt.
+// Returnerer også navnene som IKKE ble funnet — de er kandidater til å bli
+// nye entiteter, og et signal om hva folk faktisk snakker om.
+func (s *Server) mentionedEntities(tenantID, text string) (ids []string, unknown []string) {
+	for _, m := range mentionRe.FindAllStringSubmatch(text, -1) {
+		name := strings.TrimSpace(m[1])
+		if name == "" {
+			continue
+		}
+		e, err := s.store.EntityByName(tenantID, name)
+		if err == nil && e.ID != "" {
+			ids = append(ids, e.ID)
+			continue
+		}
+		// Prøv første ord: «@Ola» skal treffe «Ola Berg».
+		if first := strings.Fields(name)[0]; first != name {
+			if e, err := s.store.EntityByName(tenantID, first); err == nil && e.ID != "" {
+				ids = append(ids, e.ID)
+				continue
+			}
+		}
+		unknown = append(unknown, name)
+	}
+	return ids, unknown
+}
+
 // brainGraph gir hjernen i grafvisningens format. Verdipåstander får ingen
 // egen node — de ville fylt lerretet med løse bokser; de vises på entiteten
 // de gjelder.
@@ -345,6 +424,19 @@ func (s *Server) learnFromExchange(ctx context.Context, chatID, question, answer
 // lappe-henting alene, som før.
 func (s *Server) brainContext(ctx context.Context, tenantID, userID, query string) string {
 	seeds := s.entitiesInQuery(tenantID, query)
+	// Eksplisitte @-nevninger er entydige og vinner over gjetting: de peker
+	// på en id, ikke på et navn som kan være skrevet feil.
+	if tagged, unknown := s.mentionedEntities(tenantID, query); len(tagged) > 0 || len(unknown) > 0 {
+		for _, id := range tagged {
+			if !contains(seeds, id) {
+				seeds = append(seeds, id)
+			}
+		}
+		if len(unknown) > 0 {
+			// Brukeren pekte på noe hjernen ikke kjenner — verdt å vite.
+			s.log.Info("hjerne: ukjent nevning", "navn", strings.Join(unknown, ", "))
+		}
+	}
 	// «sjefen min», «kunden vår», «jeg» — personlige spørsmål peker på den
 	// som spør, og da er brukerens egen entitet utgangspunktet. Uten dette
 	// finner hjernen ingenting med mindre navnet står i spørsmålet.

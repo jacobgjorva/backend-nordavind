@@ -150,6 +150,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /v1/documents/{id}", s.requireAuth(s.handleDeleteDocument))
 	mux.HandleFunc("GET /v1/knowledge/pending", s.requireAdmin(s.handleListPending))
 	mux.HandleFunc("GET /v1/knowledge/graph", s.requireAuth(s.handleKnowledgeGraph))
+	mux.HandleFunc("GET /v1/entities", s.requireAuth(s.handleEntitySearch))
 	mux.HandleFunc("POST /v1/knowledge/{id}/accept", s.requireAdmin(s.handleAcceptNode))
 	mux.HandleFunc("POST /v1/knowledge/{id}/reject", s.requireAdmin(s.handleRejectNode))
 	mux.HandleFunc("PUT /v1/knowledge/{id}", s.requireAdmin(s.handleUpdateNode))
