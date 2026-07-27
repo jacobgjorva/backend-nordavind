@@ -246,7 +246,9 @@ func hasImageMessage(full map[string]any) bool {
 // m.fl.). Reasoning og modell-chunks streames til klienten underveis via
 // relayRound; når modellen begynner på selve svaret, pipes resten rått gjennom.
 func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full map[string]any) {
-	dbCtx := s.dbToolContext(ctx)
+	// Fokus: brukerens melding styrer hvilke tabeller som vises med kolonner
+	// når basen er stor.
+	dbCtx := s.dbToolContextFor(ctx, lastUserText(full))
 
 	// Agent-oppsett: /agent-flyten settes av frontend. Vi legger inn en
 	// setup-instruks og administrasjonsverktøyene. Flagget må fjernes før
