@@ -139,18 +139,15 @@ var Flows = map[string]Flow{
 		Knowledge: false,
 		Tools:     []string{ToolQueryDatabase, ToolShowTable},
 		Model:     "mid",
-		MaxChars:  300, // tette tallsvar
-		Fallback:  FreeChatKey,
-		Sticky:    true, // oppfølgingsspørsmål («sikker?») skal beholde db-verktøyene
-	},
-	"show_table": {
-		// Samme grunn som data_question: tabellen skal komme fra basen.
-		Knowledge: false,
-		Tools:     []string{ToolQueryDatabase, ToolShowTable},
-		Model:     "mid",
-		MaxChars:  150, // tabellen er svaret; maks én ledsagende setning
-		Fallback:  FreeChatKey,
-		Sticky:    true,
+		// show_table var en egen flyt til 2026-07-27, med nøyaktig samme
+		// verktøy, modell, sticky og fallback — kun MaxChars skilte dem. Og
+		// tabellen rendres uansett av tableIntent() i kode, uavhengig av
+		// hvilken flyt ruteren valgte. Skillet fantes altså ikke, men ruteren
+		// måtte gjette på det og bommet i fire av elleve tilfeller.
+		// Svarlengden avgjøres nå av om en tabell FAKTISK ble vist.
+		MaxChars: 300, // tette tallsvar
+		Fallback: FreeChatKey,
+		Sticky:   true, // oppfølgingsspørsmål («sikker?») skal beholde db-verktøyene
 	},
 
 	"usage_stats":      {Deterministic: true, Fallback: FreeChatKey}, // /forbruk-panelet

@@ -14,8 +14,8 @@
 {"text": "legg denne i OneDrive med live kobling", "want": "export_excel"}
 {"text": "hvor mye omsatte vi for i juni?", "want": "data_question"}
 {"text": "hvem er største kunden vår?", "want": "data_question"}
-{"text": "trenger en tabell med de 10 nyligste ordrene", "want": "show_table"}
-{"text": "list opp alle ordre fra ACKES", "want": "show_table"}
+{"text": "trenger en tabell med de 10 nyligste ordrene", "want": "data_question"}
+{"text": "list opp alle ordre fra ACKES", "want": "data_question"}
 {"text": "hvor mye tokens har vi brukt denne måneden?", "want": "usage_stats"}
 {"text": "hva koster AI-bruken oss?", "want": "usage_stats"}
 {"text": "inviter kari@family.no", "want": "manage_users"}
@@ -108,7 +108,7 @@
 {"text": "gjør stolpene grønne i widgeten", "want": "edit_widget"}
 {"text": "eksporter tabellen til Excel", "want": "export_excel"}
 {"text": "hva er dagens strømpris i Oslo?", "want": "web_fact"}
-{"text": "vis meg de nyeste ordrene våre", "want": "show_table"}
+{"text": "vis meg de nyeste ordrene våre", "want": "data_question"}
 {"text": "hvor mange kunder fikk vi i juni?", "want": "data_question"}
 {"text": "lag en graf over omsetningen per måned", "want": "create_widget"}
 {"text": "finn kontrakten med Fjellheim i filene mine", "want": "m365_files"}

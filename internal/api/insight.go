@@ -538,6 +538,14 @@ func (n *narrator) deliverInsight(emit func(string), in insight, answer string, 
 	}
 	// Plassbudsjettet fra flyt-tabellen. Dette er første gang MaxChars faktisk
 	// gjør en jobb — til nå havnet den bare i en loggsetning.
+	//
+	// Ble en tabell vist, ER tabellen svaret, og prosaen skal være kort. Det
+	// var hele forskjellen mellom de tidligere flytene data_question og
+	// show_table; nå avledes den av hva som faktisk skjedde i stedet for av
+	// hva ruteren gjettet på forhånd.
+	if listShown && limit > 150 {
+		limit = 150
+	}
 	if limit > 0 && len([]rune(answer))+len([]rune(s))+1 > limit {
 		return
 	}

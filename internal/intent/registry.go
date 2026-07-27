@@ -132,12 +132,8 @@ var Registry = []Intent{
 			"hvor mye har vi solgt av et produkt denne måneden?",
 			"har jeg tilgang til dataene våre?",
 			"hvilke data har jeg tilgang til?",
-		},
-	},
-	{
-		Key:         "show_table",
-		Description: "Be om en tabell eller liste over rader fra bedriftens database",
-		Examples: []string{
+			// Fra den tidligere show_table-flyten: samme flyt nå, men
+			// formuleringene må fortsatt kjennes igjen som datasporsmål.
 			"trenger en tabell med de 10 nyligste ordrene",
 			"list opp alle ordre fra ACKES",
 			"vis kundene som tabell",
