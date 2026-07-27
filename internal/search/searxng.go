@@ -17,8 +17,15 @@ import (
 // searxSearch spør SearXNG-instansen og returnerer treff + navnene på motorer
 // som ikke svarte (helsemetrikk for blokkeringsovervåking).
 func (c *Client) searxSearch(ctx context.Context, query string) ([]Result, []string, error) {
+	// language=all: spørringens EGET språk styrer treffene. Et påtvunget
+	// nb-NO-filter ga ingen gevinst, bare støy — målt: på engelske spørringer
+	// blandet det inn irrelevante norske sider («Exams and AI – Kunnskapsbasen»)
+	// og skjulte de faktiske kildene, mens norske spørringer (styringsrenten,
+	// arbeidsmiljøloven, Språkrådet) traff like godt eller BEDRE uten det.
+	// Modellen velger allerede språk når den skriver søkestrengen; det er
+	// signalet vi skal følge, ikke overstyre.
 	u := c.searxURL + "/search?q=" + url.QueryEscape(query) +
-		"&format=json&language=nb-NO&safesearch=1"
+		"&format=json&language=all&safesearch=1"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, nil, err
