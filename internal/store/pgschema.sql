@@ -392,3 +392,50 @@ CREATE TABLE IF NOT EXISTS intent_decisions (
     created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_intent_decisions_created ON intent_decisions (created_at);
+
+-- Hjernen: entiteter, påstander og prosedyrer. Lappe-skuffen står urørt som
+-- råtekst for sitering; dette er destillatet som kan traverseres.
+CREATE TABLE IF NOT EXISTS entities (
+    id         text PRIMARY KEY,
+    tenant_id  text NOT NULL,
+    kind       text NOT NULL,
+    name       text NOT NULL,
+    aliases    text NOT NULL DEFAULT '[]',
+    embedding  text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    last_seen  timestamptz
+);
+CREATE INDEX IF NOT EXISTS idx_entities_tenant ON entities (tenant_id, kind);
+
+CREATE TABLE IF NOT EXISTS claims (
+    id          text PRIMARY KEY,
+    tenant_id   text NOT NULL,
+    subject_id  text NOT NULL,
+    predicate   text NOT NULL,
+    object_id   text NOT NULL DEFAULT '',
+    object_text text NOT NULL DEFAULT '',
+    qualifiers  text NOT NULL DEFAULT '{}',
+    confidence  real NOT NULL DEFAULT 1,
+    valid_from  timestamptz NOT NULL DEFAULT now(),
+    valid_to    timestamptz,
+    source_kind text NOT NULL DEFAULT '',
+    source_id   text NOT NULL DEFAULT '',
+    stated_by   text NOT NULL DEFAULT '',
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_claims_subject ON claims (tenant_id, subject_id);
+CREATE INDEX IF NOT EXISTS idx_claims_object ON claims (tenant_id, object_id);
+
+CREATE TABLE IF NOT EXISTS procedures (
+    id          text PRIMARY KEY,
+    tenant_id   text NOT NULL,
+    name        text NOT NULL,
+    trigger_txt text NOT NULL DEFAULT '',
+    steps       text NOT NULL DEFAULT '[]',
+    valid_from  timestamptz NOT NULL DEFAULT now(),
+    valid_to    timestamptz,
+    source_kind text NOT NULL DEFAULT '',
+    source_id   text NOT NULL DEFAULT '',
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_procedures_tenant ON procedures (tenant_id);
