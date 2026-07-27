@@ -120,6 +120,11 @@ func (s *Server) handleAppendChatMessage(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "intern feil", http.StatusInternalServerError)
 		return
 	}
+	// Sammendraget vedlikeholdes når svaret er komplett (assistent sist) —
+	// billig sjekk, selve komprimeringen går i bakgrunnen på lettmodellen.
+	if m.Role == "assistant" {
+		s.maybeUpdateChatSummary(r.PathValue("id"), user)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -17,6 +17,9 @@ type ScalewayEmbedder struct {
 	APIKey  string
 	Model   string
 	Client  *http.Client
+	// OnUsage kalles med tokenforbruket for hvert kall (ctx bærer brukeren).
+	// nil = ingen telling. Motoren skal aldri vite HVORDAN det telles.
+	OnUsage func(ctx context.Context, model string, promptTokens, completionTokens int)
 }
 
 func (s *ScalewayEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
@@ -42,9 +45,15 @@ func (s *ScalewayEmbedder) Embed(ctx context.Context, texts []string) ([][]float
 			Index     int       `json:"index"`
 			Embedding []float32 `json:"embedding"`
 		} `json:"data"`
+		Usage struct {
+			PromptTokens int `json:"prompt_tokens"`
+		} `json:"usage"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, err
+	}
+	if s.OnUsage != nil {
+		s.OnUsage(ctx, s.Model, out.Usage.PromptTokens, 0)
 	}
 	if len(out.Data) != len(texts) {
 		return nil, fmt.Errorf("embeddings-kall: fikk %d vektorer for %d tekster", len(out.Data), len(texts))
@@ -67,6 +76,8 @@ type ScalewayJudge struct {
 	APIKey  string
 	Model   string
 	Client  *http.Client
+	// OnUsage: se ScalewayEmbedder.
+	OnUsage func(ctx context.Context, model string, promptTokens, completionTokens int)
 }
 
 func (s *ScalewayJudge) Pick(ctx context.Context, message string, keys []string) (string, error) {
@@ -76,13 +87,22 @@ func (s *ScalewayJudge) Pick(ctx context.Context, message string, keys []string)
 	b.WriteString("Velg hvilken flyt brukerens melding gjelder. " +
 		"Velg etter HANDLINGEN brukeren ber om, ikke temaet: " +
 		"«varsle meg når kursen …» er en rutine (handling: overvåke), ikke et faktaspørsmål, " +
-		"og «lag en graf over oljeprisen» er en widget (handling: lage graf).\n")
+		"og «lag en graf over oljeprisen» er en widget (handling: lage graf). " +
+		"Et UTSAGN som bare forteller/lærer bort noe om bedriften («hos oss gjør vi …», «husk at …») " +
+		"ber ikke om noen handling — det er teach_fact, aldri paneler, opplasting eller dataflyt.\n")
 	for _, k := range keys {
 		switch {
 		case k == FreeChatKey:
 			fmt.Fprintf(&b, "- %s: ingen av disse — vanlig samtale, tekstarbeid på innhold brukeren gir, eller sammensatte ønsker\n", k)
-		case k == AskKey:
-			fmt.Fprintf(&b, "- %s: du er REELT i tvil mellom to flyter og en feilgjetning ville vært irriterende — brukeren får da ett kort oppklaringsspørsmål. Bruk sjelden.\n", k)
+		case k == UnclearKey:
+			// Kriterium, ikke styrkegrad: «bruk sjelden» uten kjennetegn er
+			// nettopp det som gjorde forgjengeren død i praksis.
+			fmt.Fprintf(&b, "- %s: meldingen kan ikke besvares som den står, fordi den viser til noe som "+
+				"ikke er nevnt i den — «ordet», «den», «det året», «dem», «han», «den saken» — og som du "+
+				"ikke kan gjette. Dette gjelder OGSÅ når resten av meldingen ser ut som et vanlig "+
+				"spørsmål om dato, tall eller fakta: mangler det ledd som sier HVA det spørres om, er "+
+				"svaret umulig og flyten uklart. Velg dette FØR du gjetter et tema. Velg det ALDRI når "+
+				"meldingen gir mening alene.\n", k)
 		default:
 			if in, ok := byKey[k]; ok {
 				fmt.Fprintf(&b, "- %s: %s\n", k, in.Description)
@@ -126,9 +146,16 @@ func (s *ScalewayJudge) Pick(ctx context.Context, message string, keys []string)
 				Content string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
+		Usage struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+		} `json:"usage"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return "", err
+	}
+	if s.OnUsage != nil {
+		s.OnUsage(ctx, s.Model, out.Usage.PromptTokens, out.Usage.CompletionTokens)
 	}
 	if len(out.Choices) == 0 {
 		return "", fmt.Errorf("dommer-kall: tomt svar")

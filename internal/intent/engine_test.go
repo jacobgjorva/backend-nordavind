@@ -91,9 +91,9 @@ func TestJudgeOnTie(t *testing.T) {
 	if d.Method != MethodJudge || d.Key != "smalltalk" {
 		t.Fatalf("ville ha judge smalltalk, fikk %+v", d)
 	}
-	// Dommeren skal få hele det rollefiltrerte registeret + fri chat + usikker.
-	if len(j.seen) != len(Registry)+1 || j.seen[len(j.seen)-1] != AskKey {
-		t.Fatalf("dommeren skal få hele registeret + %s + %s, fikk %v", FreeChatKey, AskKey, j.seen)
+	// Dommeren skal få hele det rollefiltrerte registeret + fri chat + uklart.
+	if len(j.seen) != len(Registry)+1 || j.seen[len(j.seen)-1] != UnclearKey {
+		t.Fatalf("dommeren skal få hele registeret + %s + %s, fikk %v", FreeChatKey, UnclearKey, j.seen)
 	}
 }
 
@@ -230,22 +230,14 @@ func TestFlowTableCoversRegistry(t *testing.T) {
 }
 
 func TestFlowForFallsBackToFreeChat(t *testing.T) {
-	if k, _ := FlowFor(Decision{Method: MethodMulti}); k != FreeChatKey {
-		t.Fatalf("multi skal gi fri chat, fikk %s", k)
+	if k, _ := FlowFor(Decision{Method: MethodNone}); k != FreeChatKey {
+		t.Fatalf("none skal gi fri chat, fikk %s", k)
 	}
 	if k, _ := FlowFor(Decision{Key: "finnes_ikke"}); k != FreeChatKey {
 		t.Fatalf("ukjent nøkkel skal gi fri chat, fikk %s", k)
 	}
 	if k, _ := FlowFor(Decision{Key: "data_question", Method: MethodDirect}); k != "data_question" {
 		t.Fatalf("ville ha data_question, fikk %s", k)
-	}
-}
-
-func TestAskLabelsCoverRegistry(t *testing.T) {
-	for _, in := range Registry {
-		if AskLabels[in.Key] == "" {
-			t.Errorf("intent %s mangler AskLabel", in.Key)
-		}
 	}
 }
 
@@ -266,5 +258,37 @@ func TestDeterministicDirectNeedsJudge(t *testing.T) {
 	d = e.Resolve(context.Background(), "koble til basen", true)
 	if d.Method != MethodDirect || d.Key != "connect_database" {
 		t.Fatalf("bekreftet direktetreff skulle vært direct, fikk %+v", d)
+	}
+}
+
+// Uklart er en helt vanlig dommer-valgt flyt — ingen særtilfelle-metode.
+func TestJudgePicksUnclear(t *testing.T) {
+	em := registryStub()
+	em.vecs["hva ble den satt til?"] = []float32{0.5, 0.5, 0.5}
+	e := buildEngine(t, em, &stubJudge{pick: UnclearKey})
+	d := e.Resolve(context.Background(), "hva ble den satt til?", true)
+	if d.Key != UnclearKey || d.Method != MethodJudge {
+		t.Fatalf("ville ha judge/%s, fikk %+v", UnclearKey, d)
+	}
+}
+
+// Kontrakten som gjør oppklaring strukturell: uten verktøy KAN modellen ikke
+// søke seg til en gjetning. Ryker denne, ryker hele mekanismen.
+func TestUnclearFlowHasNoTools(t *testing.T) {
+	f, ok := Flows[UnclearKey]
+	if !ok {
+		t.Fatal("uklart mangler i flyt-tabellen")
+	}
+	if len(f.Tools) != 0 {
+		t.Fatalf("uklart skal ikke ha verktøy, har %v", f.Tools)
+	}
+	if f.Knowledge || f.Deterministic || f.Sticky {
+		t.Fatalf("uklart skal være en ren samtale-flyt: %+v", f)
+	}
+	if f.Fallback != FreeChatKey {
+		t.Fatalf("uklart skal falle tilbake til fri chat, fikk %q", f.Fallback)
+	}
+	if k, _ := FlowFor(Decision{Key: UnclearKey, Method: MethodJudge}); k != UnclearKey {
+		t.Fatalf("FlowFor mistet uklart, fikk %s", k)
 	}
 }

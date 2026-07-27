@@ -90,13 +90,18 @@ func (s *Server) initIntentEngine() {
 	if s.cfg.IntentMode != "shadow" && s.cfg.IntentMode != "on" {
 		return
 	}
+	countIntent := func(ctx context.Context, model string, in, out int) {
+		s.countLLM(ctx, model, "intent", in, out)
+	}
 	embedder := &intent.ScalewayEmbedder{
 		BaseURL: s.cfg.UpstreamBaseURL, APIKey: s.cfg.UpstreamAPIKey,
 		Model: "qwen3-embedding-8b", Client: s.client,
+		OnUsage: countIntent,
 	}
 	judge := &intent.ScalewayJudge{
 		BaseURL: s.cfg.UpstreamBaseURL, APIKey: s.cfg.UpstreamAPIKey,
 		Model: router.MidModel, Client: s.client,
+		OnUsage: countIntent,
 	}
 	go func() {
 		for attempt := 1; ; attempt++ {
@@ -173,9 +178,16 @@ var deterministicPanels = map[string]string{
 	"manage_connections": "tilkoblinger",
 }
 
-// flowModel mapper flyt-radens modellnivå til router-konstantene.
-func flowModel(level string) string {
+// flowModel mapper flyt-radens modellnivå til router-konstantene. "light"
+// er bak LIGHT_TIER-bryteren: av (default) ruter de lette flytene til mid
+// som før — piloten skal kunne skrus av i prod uten deploy av ny kode.
+func (s *Server) flowModel(level string) string {
 	switch level {
+	case "light":
+		if s.cfg.LightTier {
+			return router.LightModel
+		}
+		return router.MidModel
 	case "heavy":
 		return router.HeavyModel
 	case "top":
@@ -224,14 +236,16 @@ func (s *Server) applyIntent(ctx context.Context, user store.User, full map[stri
 			if pk, pf := intent.FlowFor(pd); pf.Sticky && pd.Key != "" {
 				d = intent.Decision{Key: pk, Method: intent.MethodSticky,
 					Candidates: d.Candidates, Elapsed: d.Elapsed + pd.Elapsed}
-			} else if d.Method == intent.MethodAsk || d.Method == intent.MethodNone ||
-				d.Method == intent.MethodMulti || d.Key == "smalltalk" {
+			} else if d.Key == intent.UnclearKey || d.Method == intent.MethodNone ||
+				d.Key == "smalltalk" {
 				// Midt i en vanlig samtale: en RETNINGSLØS kort oppfølging
-				// (ask/none/multi/smalltalk) skal FORTSETTE samtalen (fri
-				// chat, alle verktøy) — aldri kapres av panel eller
+				// (uklart/none/smalltalk) skal FORTSETTE samtalen (fri chat,
+				// alle verktøy) — aldri kapres av panel eller
 				// oppklaringsspørsmål («restartet, men fungerer ikke» fikk
-				// «vil du sette opp M365 …?»). Et tydelig dommer-valg av
-				// konkret flyt beholdes.
+				// «vil du sette opp M365 …?»). Tråden kan redde en kort
+				// melding; det er FØRSTE melding og lange meldinger uten
+				// forhistorie som trenger oppklaring. Et tydelig dommer-valg
+				// av konkret flyt beholdes.
 				d = intent.Decision{Method: intent.MethodSticky,
 					Candidates: d.Candidates, Elapsed: d.Elapsed + pd.Elapsed}
 			}
@@ -247,16 +261,6 @@ func (s *Server) applyIntent(ctx context.Context, user store.User, full map[stri
 			s.log.Warn("intent: kunne ikke logge avgjørelse", "err", err)
 		}
 	}()
-	// Dommeren er reelt i tvil: still ett kort oppklaringsspørsmål bygget av
-	// toppkandidatenes merkelapper — ren tekst, ingen gjetning.
-	if d.Method == intent.MethodAsk && len(d.Candidates) >= 2 {
-		a := intent.AskLabels[d.Candidates[0].Key]
-		b := intent.AskLabels[d.Candidates[1].Key]
-		if a != "" && b != "" && a != b {
-			return "Bare så jeg treffer riktig: vil du " + a + ", eller " + b + "?", nil
-		}
-	}
-
 	key, flow := intent.FlowFor(d)
 	s.log.Info("intent", "key", key, "method", d.Method, "ms", d.Elapsed.Milliseconds())
 
@@ -282,7 +286,7 @@ func (s *Server) applyIntent(ctx context.Context, user store.User, full map[stri
 		if flow.MaxChars > 0 {
 			full[flowMaxField] = flow.MaxChars
 		}
-		full["model"] = flowModel(flow.Model)
+		full["model"] = s.flowModel(flow.Model)
 	}
 }
 

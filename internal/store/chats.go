@@ -64,6 +64,7 @@ func (s *Store) migrateChats() error {
 		`ALTER TABLE chats ADD COLUMN folder_id TEXT NOT NULL DEFAULT ''`,
 		// Designlerret: slugen til dokumentet chatten redigerer.
 		`ALTER TABLE chats ADD COLUMN design_slug TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE chats ADD COLUMN summary TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.db.Exec(col); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column") {
@@ -264,6 +265,53 @@ func (s *Store) ChatMessages(chatID, userID string) ([]ChatMessage, error) {
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// LastAnswerHadSources sier om det siste assistentsvaret i samtalen bygde på
+// websøk. Da ligger kildene alt i tråden, og et oppfølgingsspørsmål kan
+// besvares ved å resonnere over dem i stedet for å søke på nytt.
+func (s *Store) LastAnswerHadSources(chatID, userID string) (bool, error) {
+	if err := s.chatOwned(chatID, userID); err != nil {
+		return false, err
+	}
+	var sources string
+	err := s.db.QueryRow(
+		`SELECT sources FROM chat_messages WHERE chat_id = ? AND role = 'assistant'
+		 ORDER BY id DESC LIMIT 1`, chatID,
+	).Scan(&sources)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return strings.TrimSpace(sources) != "" && sources != "[]", err
+}
+
+// ChatSummary henter det rullerende samtalesammendraget (tomt om intet).
+func (s *Store) ChatSummary(chatID, userID string) (string, error) {
+	if err := s.chatOwned(chatID, userID); err != nil {
+		return "", err
+	}
+	var sum string
+	err := s.db.QueryRow(`SELECT summary FROM chats WHERE id = ?`, chatID).Scan(&sum)
+	return sum, err
+}
+
+// SetChatSummary lagrer det rullerende sammendraget for samtalen.
+func (s *Store) SetChatSummary(chatID, userID, summary string) error {
+	if err := s.chatOwned(chatID, userID); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`UPDATE chats SET summary = ? WHERE id = ?`, summary, chatID)
+	return err
+}
+
+// ChatSize er antall meldinger og samlet tegnvolum — styrer når sammendraget
+// trengs, uten å laste meldingsinnholdet.
+func (s *Store) ChatSize(chatID string) (n, chars int, err error) {
+	err = s.db.QueryRow(
+		`SELECT COUNT(*), COALESCE(SUM(LENGTH(content)), 0) FROM chat_messages WHERE chat_id = ?`,
+		chatID,
+	).Scan(&n, &chars)
+	return n, chars, err
 }
 
 // AppendMessage legger en melding til en samtale brukeren eier.

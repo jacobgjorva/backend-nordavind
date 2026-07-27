@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 )
 
@@ -103,6 +104,11 @@ func (s *Server) relayRound(resp *http.Response, emit func(string), streamConten
 			safe, rest, blocks := splitToolCallText(pending.String())
 			pending.Reset()
 			pending.WriteString(rest)
+			// Utagget verktøykall midt i prosaen: klipp det og alt etter.
+			if cut := cutBareToolCall(safe); cut != safe {
+				safe = cut
+				pending.Reset() // resten av svaret er verktøysyntaks, ikke tekst
+			}
 			visible.WriteString(safe)
 			for _, b := range blocks {
 				if name, args := parseTextualToolCall(b); name != "" {
@@ -160,6 +166,48 @@ func newSSEScanner(r io.Reader) *bufio.Scanner {
 const tcOpen = "<tool_call>"
 const tcClose = "</tool_call>"
 
+// Verktøykall uten tagger: småmodellene skriver av og til kallet rått inn i
+// prosaen («… var «tekoligark»fetch_url{"url": …»). Mønsteret verktøynavn
+// umiddelbart etterfulgt av { finnes aldri i naturlig norsk tekst, så alt
+// fra og med treffet klippes bort — resten av svaret er uansett tapt.
+var bareToolCallRe = regexp.MustCompile(
+	`(web_search|fetch_url|query_database|show_table|m365_search|m365_read|` +
+		`mail_search|mail_read|mail_compose|set_widget|set_slide|set_deck|` +
+		`contact_person|list_agents|update_agent|setup_routine)\s*\{`)
+
+// cutBareToolCall klipper et utagget verktøykall og alt etter det.
+func cutBareToolCall(s string) string {
+	if loc := bareToolCallRe.FindStringIndex(s); loc != nil {
+		return strings.TrimRight(s[:loc[0]], " \t\n")
+	}
+	return s
+}
+
+var toolNames = []string{
+	"web_search", "fetch_url", "query_database", "show_table", "m365_search",
+	"m365_read", "mail_search", "mail_read", "mail_compose", "set_widget",
+	"set_slide", "set_deck", "contact_person", "list_agents", "update_agent",
+	"setup_routine",
+}
+
+// bareToolCallPrefix gir lengden på halen av s som kan være starten på et
+// utagget verktøykall — den holdes igjen til neste chunk avgjør saken.
+func bareToolCallPrefix(s string) int {
+	best := 0
+	for _, name := range toolNames {
+		for k := len(name); k > 0; k-- {
+			if k <= best {
+				break
+			}
+			if strings.HasSuffix(s, name[:k]) {
+				best = k
+				break
+			}
+		}
+	}
+	return best
+}
+
 // splitToolCallText deler bufret innhold i (trygt innhold å sende, rest å
 // holde igjen, komplette <tool_call>-blokker uten tagger). Resten holdes
 // igjen når den kan være starten på en ny (u)lukket tag.
@@ -170,6 +218,11 @@ func splitToolCallText(buf string) (safe, rest string, blocks []string) {
 		if i < 0 {
 			// Ingen åpningstag: send alt bortsett fra en mulig delvis tag-hale.
 			keep := partialSuffix(buf, tcOpen)
+			// … og en mulig begynnelse på et utagget verktøykall («…fetch_ur»),
+			// som ellers ville rukket å bli streamet før { avslørte den.
+			if k := bareToolCallPrefix(buf[:len(buf)-keep]); k > keep {
+				keep = k
+			}
 			out.WriteString(buf[:len(buf)-keep])
 			return out.String(), buf[len(buf)-keep:], blocks
 		}

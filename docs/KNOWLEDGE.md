@@ -103,3 +103,24 @@ G3 REDUSERER tokens og embed-kall. G2 koster null ekstra nettverkskall
 (kantene ligger i SQLite). G5 er ett embed-kall ved accept (skjer sjelden).
 Migrering: engangs-backfill som kobler eksisterende dokument-biter til
 dok-noder (dataene finnes allerede i `documents`/`document_chunks`).
+
+## Governance v2 — bekreftelse ved kilden (avtalt med Jacob 2026-07-26)
+
+Admin-forhåndsgodkjenning skalerer ikke og admin har ikke fasiten. Ny modell:
+
+- **Chat-uttrekk bekreftes av KILDEN i øyeblikket**: den som lærte bort noe
+  får ett klikk i chatten («Skal jeg huske dette?» — samme mønster som
+  lagre-forslaget). Ja = accepted med proveniens (hvem/når/chat); nei/ignorert
+  = forkastes. Ingen admin-kø.
+- **Dokumenter går rett inn**: opplastingen er allerede en bevisst handling;
+  biter og uttrukne noder blir accepted med dokumentet som proveniens.
+- **Dublettvakten kjører automatisk** ved innlemming (terskel 0.75, målt):
+  nær-dublett → nyeste erstatter, gammel arkiveres (angre mulig).
+- **Grafen endrer rolle**: fra godkjenningskø til redigerings- og opprydnings-
+  verktøy — søk, rediger, slett, koble; editoren for hele den interne
+  konteksten.
+- **Selvkuraterende kvalitet**: retrieval-treff telles per lapp; lapper som
+  aldri hentes over lang tid falmer i grafen og foreslås fjernet. Kvalitet
+  vedlikeholdes av bruk, ikke av en kø.
+
+Pending/accept-flyten fases ut når klikk-bekreftelsen i chat er på plass.

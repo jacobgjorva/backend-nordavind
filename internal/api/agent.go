@@ -103,6 +103,68 @@ func tableIntent(text string) bool {
 	return false
 }
 
+// connectIntent er sann når meldingen handler om å koble til en datakilde.
+// Styrer om connector-verktøyene (~1,8k tegn) legges ved i vanlig chat.
+// Bevisst romslig: å bomme koster et verktøy modellen skulle hatt, og det
+// veier tyngre enn tokenene — derfor treffer den også bekreftelser («ja, gjør
+// det») rett etter at assistenten selv har brakt tilkobling på bane.
+var connectIntent = matchAny(
+	"koble", "kobling", "tilkobl", "connect", "database", "databasen", "sql server",
+	"postgres", "mysql", "mssql", "datakilde", "integrasjon", "sharepoint",
+	"onedrive", "microsoft", "m365", "office 365", "azure", "app-registrering",
+	"client secret", "tilgang til data",
+)
+
+// composeIntent er sann når brukeren vil SENDE noe — mail_compose er det
+// største enkeltverktøyet og trengs ikke for å lese eller søke i e-post.
+var composeIntent = matchAny(
+	"send", "sende", "sender", "svar på", "svare på", "videresend", "vidersend",
+	"skriv til", "skriv en mail", "skriv en e-post", "mail til", "e-post til",
+	"epost til", "kontakt", "gi beskjed", "varsle", "purre", "purring",
+	"utkast", "compose", "cc", "vedlegg",
+)
+
+// matchAny bygger et enkelt nøkkelord-filter (samme mønster som tableIntent).
+func matchAny(words ...string) func(string) bool {
+	return func(text string) bool {
+		lower := strings.ToLower(text)
+		for _, w := range words {
+			if strings.Contains(lower, w) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// recentTurn er siste brukermelding pluss forrige assistentsvar. Verktøy som
+// legges ved etter nøkkelord må se begge: brakte assistenten tilkobling eller
+// utsending på bane, holder det at brukeren svarer «ja, gjør det».
+func recentTurn(full map[string]any) string {
+	msgs, _ := full["messages"].([]any)
+	var b strings.Builder
+	seenUser := false
+	for i := len(msgs) - 1; i >= 0 && b.Len() < 4000; i-- {
+		m, ok := msgs[i].(map[string]any)
+		if !ok {
+			continue
+		}
+		role, _ := m["role"].(string)
+		if role != "user" && role != "assistant" {
+			continue
+		}
+		if role == "user" && seenUser {
+			break // lenger tilbake enn forrige tur er ikke relevant
+		}
+		if c, ok := m["content"].(string); ok {
+			b.WriteString(c)
+			b.WriteString(" ")
+		}
+		seenUser = seenUser || role == "user"
+	}
+	return b.String()
+}
+
 // deepIntent er sann når siste brukermelding ber om grundig/uforstyrret arbeid.
 func deepIntent(full map[string]any) bool {
 	lower := strings.ToLower(lastUserText(full))
@@ -180,6 +242,24 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// forespørselen sendes videre til upstream.
 	setup, _ := full["nordavind_agent_setup"].(bool)
 	delete(full, "nordavind_agent_setup")
+	// Samtale-identitet + klipp-flagg fra frontend: når historikken er kuttet
+	// mot tegnbudsjettet, injiseres det rullerende sammendraget som kontekst.
+	// Feltene skal aldri videre upstream.
+	chatID, _ := full["nordavind_chat"].(string)
+	clipped, _ := full["nordavind_clipped"].(bool)
+	delete(full, "nordavind_chat")
+	delete(full, "nordavind_clipped")
+	// Klientvern: stol aldri på at klienten holdt budsjettet — monstermeldinger
+	// i historikken klippes uansett (siste brukermelding fredes).
+	trimChatHistory(full)
+	if chatID != "" && clipped {
+		if user, ok := ctx.Value(userKey).(store.User); ok {
+			if sum, err := s.store.ChatSummary(chatID, user.ID); err == nil && strings.TrimSpace(sum) != "" {
+				injectSystem(full, "Tidligere i samtalen (sammendrag — bruk som bakgrunnskontekst, "+
+					"ikke som verktøydata): "+sum)
+			}
+		}
+	}
 	// Flyt-kontrakten (intent-modus): leses ut her, skal aldri videre upstream.
 	flowKey, _ := full[flowKeyField].(string)
 	answerLimit := answerCharLimit(full)
@@ -280,6 +360,22 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			if tools, ok := s.flowTools(ctx, flowKey, dbCtx); ok {
 				if len(tools) > 0 {
 					full["tools"] = tools
+					// web_fact ER definisjonen «spørsmål om verden utenfor» —
+					// da skal svaret komme fra nettet, ikke fra hukommelsen.
+					// Uten tvang svarte modellen i blinde og ble stanset av
+					// kildekontrollen etterpå, med et halvt svar som resultat.
+					//
+					// MEN: bar tvang gjør assistenten dum. «Så da er det ikke
+					// annonsert noe for 2026 enda?» er en SLUTNING fra kilder
+					// som alt står i tråden — da skal den få resonnere, ikke
+					// søke i blinde og rapportere tomhet. Tilstanden avgjør:
+					// hadde forrige svar kilder, er tvangen unødvendig.
+					if flowKey == "web_fact" && !s.answerHasSources(ctx, chatID) {
+						full["tool_choice"] = map[string]any{
+							"type":     "function",
+							"function": map[string]any{"name": "web_search"},
+						}
+					}
 				} else {
 					delete(full, "tools")
 				}
@@ -313,12 +409,22 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			}
 			// Admin kan opprette tilkoblinger rett fra vanlig chat — ingen egen
 			// connector-chat. Verktøybeskrivelsene bærer veiledningen.
-			if user, ok := ctx.Value(userKey).(store.User); ok && user.Role == "admin" {
+			// TOKEN: settet er ~1,8k tegn og dekker en sjelden engangshandling
+			// — det legges kun ved når meldingen faktisk peker dit, ikke på
+			// hver eneste melding en admin skriver.
+			if user, ok := ctx.Value(userKey).(store.User); ok && user.Role == "admin" &&
+				connectIntent(recentTurn(full)) {
 				tools = append(tools, connectorAgentTools()...)
 			}
 			// M365-verktøy (filer + e-post) kun når brukeren har koblet til.
 			if _, ok := s.m365Connected(ctx); ok {
-				tools = append(tools, m365SearchTool, m365ReadTool, mailSearchTool, mailReadTool, mailComposeTool)
+				tools = append(tools, m365SearchTool, m365ReadTool, mailSearchTool, mailReadTool)
+				// TOKEN: mail_compose er det største enkeltverktøyet (~1,2k
+				// tegn) og trengs kun når noe skal SENDES. Søk og lesing av
+				// e-post ligger fortsatt alltid inne.
+				if composeIntent(recentTurn(full)) {
+					tools = append(tools, mailComposeTool)
+				}
 			}
 			// Eskalerings-verktøy (registeret ligger i verktøy-beskrivelsen).
 			if user, ok := ctx.Value(userKey).(store.User); ok {
@@ -888,7 +994,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				searches++
 				var sources []sourceRef
 				stopWait := emitAfter(emit, 4*time.Second, "Søker dypere")
-				result, sources = s.runWebSearch(ctx, args.Query)
+				result, sources = s.runWebSearchFor(ctx, args.Query, recentTurn(full))
 				stopWait()
 				if len(sources) > 0 {
 					// Kildene sendes som metadata til frontend — de skal ikke stå i svaret.
@@ -921,6 +1027,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		})
 		msgs = append(msgs, toolMsgs...)
 		full["messages"] = msgs
+		// TOKEN: uten dette vokser turen kvadratisk — hver runde re-sender
+		// ALLE tidligere verktøyresultater ubeskåret (grundig-modus endte på
+		// 30-50k prompt-tokens per svar). Eldste resultater klippes først;
+		// kildekontrollen mister ingenting, den måler mot toolResults-lista.
+		trimToolHistory(full, toolHistoryBudget)
 
 		// Lerretet ER svaret: er dokumentet bygget og ingen flater venter på
 		// tall, avslutter koden turen her. Å sende hele historikken opp igjen
@@ -953,6 +1064,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			// modellen tydelig om å svare NÅ fra det den har funnet — ikke tomt.
 			full["tool_choice"] = "none"
 			injectSystem(full, backstopNudge)
+			// TOKEN: med tool_choice=none kan katalogen aldri brukes — da skal
+			// den heller ikke betales for. Verktøysettet er ~3k tokens på hver
+			// eneste runde, og siste runde er ren syntese fra det som alt er
+			// hentet (samme grep som streamBackstop og regroundAnswer gjør).
+			delete(full, "tools")
 		}
 	}
 	// Løkka gikk tom for runder uten et rent svar (modellen ville søke videre).
@@ -961,6 +1077,99 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	emit("data: " + string(step))
 	s.streamBackstop(ctx, full, emit, &promptTokens, &completionTokens)
 	emit("data: [DONE]")
+}
+
+// toolHistoryBudget: samlet tak (tegn) på verktøyresultater som bæres videre
+// mellom rundene i én tur. Ferske resultater beholdes alltid uklippet —
+// modellen bruker dem i runden rett etter kallet. Eldre resultater er som
+// regel alt konsumert; de klippes til et hode når budsjettet sprenges.
+const toolHistoryBudget = 20000
+
+// toolTrimHead: hvor mye av et klippet verktøyresultat som beholdes.
+const toolTrimHead = 500
+
+// trimToolHistory holder summen av tool-meldinger i samtalen under budsjettet
+// ved å klippe de ELDSTE først. Vanlige turer (1-3 verktøykall) rører den
+// aldri; den finnes for grundig-modus og søketunge turer der historikken
+// ellers vokser kvadratisk med rundetallet.
+func trimToolHistory(full map[string]any, budget int) {
+	msgs, _ := full["messages"].([]any)
+	type toolRef struct {
+		m    map[string]any
+		size int
+	}
+	// Halen (rundens ferske resultater) er fredet: modellen har ikke lest dem
+	// ennå — de skal alltid frem uklippet i neste kall.
+	tail := len(msgs)
+	for tail > 0 {
+		mm, ok := msgs[tail-1].(map[string]any)
+		if !ok || mm["role"] != "tool" {
+			break
+		}
+		tail--
+	}
+	var refs []toolRef
+	total := 0
+	for _, m := range msgs[:tail] {
+		mm, ok := m.(map[string]any)
+		if !ok || mm["role"] != "tool" {
+			continue
+		}
+		c, _ := mm["content"].(string)
+		refs = append(refs, toolRef{mm, len(c)})
+		total += len(c)
+	}
+	for _, r := range refs {
+		if total <= budget {
+			return
+		}
+		if r.size <= toolTrimHead {
+			continue
+		}
+		c, _ := r.m["content"].(string)
+		if ru := []rune(c); len(ru) > toolTrimHead {
+			r.m["content"] = string(ru[:toolTrimHead]) +
+				"\n…[forkortet for plass — innholdet er alt lest og brukt tidligere i turen]"
+		}
+		total -= r.size - len(r.m["content"].(string))
+	}
+}
+
+// chatMsgCharCap: hardt tak per historikk-melding fra klienten. Frontends
+// budsjett klipper normalt lenge før dette — taket verner mot gamle klienter
+// og tredjeparter som sender hele dokumenter i hver melding.
+const chatMsgCharCap = 20000
+
+// trimChatHistory klipper enkeltmeldinger i klient-historikken over taket
+// (hode + hale, midten ut). Siste brukermelding fredes alltid — det er den
+// aktive turen, og vedlegg der er med vilje.
+func trimChatHistory(full map[string]any) {
+	msgs, _ := full["messages"].([]any)
+	lastUser := -1
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if mm, ok := msgs[i].(map[string]any); ok && mm["role"] == "user" {
+			lastUser = i
+			break
+		}
+	}
+	for i, m := range msgs {
+		if i == lastUser {
+			continue
+		}
+		mm, ok := m.(map[string]any)
+		if !ok || (mm["role"] != "user" && mm["role"] != "assistant") {
+			continue
+		}
+		c, ok := mm["content"].(string)
+		if !ok {
+			continue
+		}
+		if r := []rune(c); len(r) > chatMsgCharCap {
+			half := chatMsgCharCap / 2
+			mm["content"] = string(r[:half]) +
+				"\n…[midten av meldingen utelatt for plass]…\n" + string(r[len(r)-half:])
+		}
+	}
 }
 
 // recordUsage lagrer forbruket for forespørselen. Uinnlogget (dev) logges
@@ -972,6 +1181,7 @@ func (s *Server) recordUsage(ctx context.Context, full map[string]any, promptTok
 	model, _ := full["model"].(string)
 	event := store.UsageEvent{
 		Model:            model,
+		Source:           "chat",
 		PromptTokens:     promptTokens,
 		CompletionTokens: completionTokens,
 		CostUSD:          s.pricing.cost(model, promptTokens, completionTokens),
@@ -1084,30 +1294,98 @@ func (s *Server) runFetchURL(ctx context.Context, url string) string {
 	return text
 }
 
+// answerHasSources: bygde forrige assistentsvar i samtalen på websøk? Da
+// ligger kildene i tråden og oppfølgingsspørsmål trenger ikke tvunget søk.
+// Ukjent chat (agenter, rutiner, uinnlogget) → false, altså uendret tvang.
+func (s *Server) answerHasSources(ctx context.Context, chatID string) bool {
+	if chatID == "" {
+		return false
+	}
+	user, ok := ctx.Value(userKey).(store.User)
+	if !ok {
+		return false
+	}
+	had, err := s.store.LastAnswerHadSources(chatID, user.ID)
+	return err == nil && had
+}
+
 // runWebSearch utfører søk + sidehenting og formaterer kildekontekst.
+// Utdragsmotoren (excerpt.go) velger de mest relevante avsnittene; cache-
+// treff koster null oppstrøms. Ved embedding-feil: fail-open til gammel
+// full-side-oppførsel — riktig svar er pri 1.
 func (s *Server) runWebSearch(ctx context.Context, query string) (string, []sourceRef) {
+	return s.runWebSearchFor(ctx, query, "")
+}
+
+// runWebSearchFor er søket med brukerens FAKTISKE spørsmål tilgjengelig.
+//
+// Søkestrengen modellen skriver er en forespørsel til søkemotoren, ikke et
+// uttrykk for hva brukeren lurer på: «Hva var ordet i 2025?» i en samtale om
+// Norge ble til søket «Årets ord 2025», og da rangerte danske avsnitt like
+// høyt som norske. Relevans måles derfor mot spørsmålet OG søkestrengen —
+// konteksten vi allerede har, brukt der valget faktisk tas. Tom intent
+// (rutiner, planlagte agenter) oppfører seg nøyaktig som før.
+func (s *Server) runWebSearchFor(ctx context.Context, query, intentText string) (string, []sourceRef) {
 	if strings.TrimSpace(query) == "" {
 		return "Tomt søk.", nil
+	}
+	// Cachenøkkelen må bære begge: samme søkestreng i to ulike samtaler kan
+	// fortjene ulike utdrag.
+	cacheKey := query
+	if intentText != "" {
+		cacheKey = query + "\x00" + intentText
+	}
+	if cached, refs, ok := searchCacheGet(cacheKey); ok {
+		s.log.Info("websøk", "query", query, "cache", true)
+		return cached, refs
 	}
 	results, err := s.search.Search(ctx, query)
 	if err != nil || len(results) == 0 {
 		s.log.Warn("websøk feilet", "query", query, "err", err)
 		return "Søket ga ingen resultater.", nil
 	}
-	if len(results) > 3 {
-		results = results[:3]
+	if len(results) > excerptPages {
+		results = results[:excerptPages]
 	}
 	// Alltid full sidehenting: snippet-søket ga feilkoblinger (24AI-saken) —
 	// korrekthet vinner over fart, Jacobs beslutning 2026-07-26.
-	pages := s.search.FetchPages(ctx, results, 2800)
-	s.log.Info("websøk", "query", query, "treff", len(results))
+	pages := s.search.FetchPages(ctx, results, excerptChars)
 
 	refs := make([]sourceRef, 0, len(results))
 	for _, r := range results {
 		refs = append(refs, sourceRef{Title: r.Title, URL: r.URL})
 	}
-	return search.FormatContext(query, results, pages) +
-		"\nTrenger du mer enn dette: kall fetch_url på den mest relevante kilden.", refs
+
+	// Relevans-vektoren: brukerens spørsmål veier tyngst, søkestrengen bærer
+	// begrepene som faktisk står på sidene. Sammen fanger de både HVA det
+	// spørres om og HVILKEN sammenheng det står i.
+	relevance := query
+	if intentText != "" {
+		relevance = intentText + "\n" + query
+	}
+	var context string
+	queryVec, qErr := s.embedCached(ctx, relevance)
+	if qErr == nil {
+		if picked, rErr := rankExcerpts(ctx, s.embedBatch, queryVec, pages); rErr == nil && len(picked) > 0 {
+			context = formatExcerptContext(query, results, picked)
+		}
+	}
+	if context == "" {
+		// Fail-open: rangeringen feilet — send sidene som før (trunkert).
+		for i, p := range pages {
+			if r := []rune(p); len(r) > 2800 {
+				pages[i] = string(r[:2800])
+			}
+		}
+		if len(results) > 3 {
+			results, pages, refs = results[:3], pages[:3], refs[:3]
+		}
+		context = search.FormatContext(query, results, pages)
+	}
+	context += "\nTrenger du mer enn dette: kall fetch_url på den mest relevante kilden."
+	s.log.Info("websøk", "query", query, "treff", len(results), "tegn", len(context))
+	searchCachePut(cacheKey, context, refs)
+	return context, refs
 }
 
 // flowNeedsDB: flyten lover databaseverktøy i flyt-tabellen.

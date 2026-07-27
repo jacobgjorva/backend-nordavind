@@ -62,7 +62,7 @@ const (
 
 // FreeChatKey er den bredeste flyten: dagens chatoppførsel, men med samme
 // grense- og modellkontrakt som alt annet. Motoren ruter hit ved MethodNone,
-// ved sammensatte ønsker (MethodMulti) og som Fallback for alle flyter.
+// ved sammensatte ønsker og som Fallback for alle flyter.
 const FreeChatKey = "free_chat"
 
 // Flows er flyt-tabellen. VEDLIKEHOLD: nye behov = ny rad (og ny intent i
@@ -95,9 +95,12 @@ var Flows = map[string]Flow{
 	},
 
 	"create_widget": {
+		// "light": verktøydisiplinen var feilfri i e2e-test (riktig SQL med
+		// DATE_TRUNC, filter og charttype) — widgeten rendres av koden, og
+		// datavernet stopper diktede tall. 10× billigere enn mid.
 		Knowledge: true,
 		Tools:     []string{ToolSetWidget},
-		Model:     "mid",
+		Model:     "light",
 		MaxChars:  120, // widgeten ER svaret; teksten er kun kvittering
 		Fallback:  FreeChatKey,
 		Sticky:    true, // videre meldinger redigerer samme widget
@@ -105,16 +108,16 @@ var Flows = map[string]Flow{
 	"edit_widget": {
 		Knowledge: true,
 		Tools:     []string{ToolSetWidget},
-		Model:     "mid",
+		Model:     "light",
 		MaxChars:  120,
 		Fallback:  FreeChatKey,
 		Sticky:    true,
 	},
 	"create_presentation": {
-		// Presentasjoner bygges på lerretet, ikke i chat-tråden: her svarer
-		// koden bare med hvordan man åpner det (deckHint i intentwire.go).
-		// Selve byggingen skjer i presentasjonsflyten med set_slide/set_deck,
-		// som slås på av et åpent lerret — aldri av en vanlig melding.
+		// Design bygges på lerretet, ikke i chat-tråden: her svarer koden bare
+		// med hvordan man åpner det (deckHint i intentwire.go). Selve
+		// byggingen skjer med compose/patch, som slås på av et åpent lerret —
+		// aldri av en vanlig melding.
 		Deterministic: true,
 		Fallback:      FreeChatKey,
 	},
@@ -124,15 +127,17 @@ var Flows = map[string]Flow{
 		// Modellen henter dataene; eksportkortet appendes GARANTERT i kode
 		// (aldri «vil du at jeg skal eksportere?»).
 		Tools:    []string{ToolQueryDatabase, ToolShowTable},
-		Model:    "mid",
+		Model:    "light",
 		MaxChars: 150,
 		Fallback: FreeChatKey,
 	},
 
 	"data_question": {
+		// "light": svaret ER tall fra query_database, voktet av datavernet og
+		// kildekontrollen — modellens eneste jobb er å skrive SQL og gjengi.
 		Knowledge: true,
 		Tools:     []string{ToolQueryDatabase, ToolShowTable},
-		Model:     "mid",
+		Model:     "light",
 		MaxChars:  300, // tette tallsvar
 		Fallback:  FreeChatKey,
 		Sticky:    true, // oppfølgingsspørsmål («sikker?») skal beholde db-verktøyene
@@ -140,7 +145,7 @@ var Flows = map[string]Flow{
 	"show_table": {
 		Knowledge: true,
 		Tools:     []string{ToolQueryDatabase, ToolShowTable},
-		Model:     "mid",
+		Model:     "light",
 		MaxChars:  150, // tabellen er svaret; maks én ledsagende setning
 		Fallback:  FreeChatKey,
 		Sticky:    true,
@@ -198,15 +203,37 @@ var Flows = map[string]Flow{
 		Sticky:   true, // e-postdialog: «les den», «hva svarte hun?»
 	},
 
+	// Uklar melding: ingen verktøy. Uten søk og database KAN modellen ikke
+	// gjette seg til et tema — oppklaringsspørsmålet er eneste utvei. Samme
+	// grep som smalltalk: strukturen bærer oppførselen, ikke en instruks.
+	UnclearKey: {
+		Tools:    nil,
+		Model:    "mid", // å se at et referanseledd mangler er dømmekraft
+		MaxChars: 120,   // ett kort spørsmål, ikke en utredning
+		Fallback: FreeChatKey,
+	},
+
 	"web_fact": {
+		// "light": svaret bygges av søkeresultater og voktes av kilde-
+		// kontrollen — småmodellen valgte søk like riktig som medium i test,
+		// til en tidel av prisen. Krever LIGHT_TIER=on, ellers mid.
 		Tools:    []string{ToolWebSearch, ToolFetchURL},
-		Model:    "mid",
+		Model:    "light",
 		MaxChars: 300,
+		Fallback: FreeChatKey,
+	},
+	"teach_fact": {
+		// Lære-utsagn («hos oss …», «husk at …»): brukeren FORTELLER noe.
+		// Ingen verktøy — et db-kall kan ikke skje her, uansett hva modellen
+		// vil; husk-tilbudet (governance v2) fanger selve kunnskapen.
+		Tools:    nil,
+		Model:    "mid",
+		MaxChars: 150, // kort, naturlig kvittering
 		Fallback: FreeChatKey,
 	},
 	"smalltalk": {
 		Tools:    nil, // rent samtalesvar — ingen verktøy å misbruke
-		Model:    "mid",
+		Model:    "light",
 		MaxChars: 150,
 		Fallback: FreeChatKey,
 	},
@@ -220,32 +247,4 @@ func FlowFor(d Decision) (string, Flow) {
 		}
 	}
 	return FreeChatKey, Flows[FreeChatKey]
-}
-
-// AskLabels er korte menneskelige merkelapper per flyt — brukes KUN i
-// oppklaringsspørsmålet når dommeren er reelt i tvil («vil du X eller Y?»).
-var AskLabels = map[string]string{
-	"connect_database":    "koble til en database",
-	"connect_m365":        "sette opp Microsoft 365",
-	"manage_connections":  "administrere tilkoblingene",
-	"create_widget":       "lage en graf",
-	"edit_widget":         "endre en widget",
-	"create_presentation": "lage en presentasjon",
-	"export_excel":        "eksportere til Excel",
-	"data_question":       "få svar fra bedriftens egne tall",
-	"show_table":          "se en tabell med rader",
-	"usage_stats":         "se AI-forbruket",
-	"manage_users":        "administrere brukere",
-	"impersonate_user":    "se appen som en annen bruker",
-	"knowledge_admin":     "se på bedriftskunnskapen",
-	"upload_document":     "lagre et dokument som kunnskap",
-	"contract_review":     "få en kontrakt gjennomgått",
-	"create_routine":      "sette opp en fast rutine",
-	"edit_routine":        "endre en rutine",
-	"employees_admin":     "jobbe med ansattregisteret",
-	"m365_files":          "finne noe i filene dine",
-	"email":               "sjekke e-posten din",
-	"web_fact":            "få et faktasvar fra nettet",
-	"smalltalk":           "bare prate",
-	FreeChatKey:           "ha et råd eller en vurdering",
 }

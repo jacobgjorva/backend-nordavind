@@ -35,7 +35,9 @@ type extractedNode struct {
 	} `json:"relations"`
 }
 
-// handleExtractKnowledge starter uttrekk i bakgrunnen etter en utveksling.
+// handleExtractKnowledge kjører uttrekk etter en utveksling og returnerer
+// FORSLAGENE til klienten (governance v2): kunnskap lagres først når KILDEN
+// bekrefter med ett klikk i chatten — aldri en admin-kø.
 func (s *Server) handleExtractKnowledge(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.user(w, r)
 	if !ok {
@@ -55,9 +57,110 @@ func (s *Server) handleExtractKnowledge(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	// Fyr og glem: brukeren skal ikke vente.
-	go s.runExtraction(user.TenantID, user.ID, req.ChatID, req.Question, req.Answer)
-	w.WriteHeader(http.StatusAccepted)
+	proposals := s.extractProposals(r.Context(), user.TenantID, req.Question, req.Answer)
+	writeJSON(w, map[string]any{"proposals": proposals})
+}
+
+// handleConfirmKnowledge lagrer et bekreftet forslag: accepted node + lapp i
+// retrieval-skuffen, med automatisk dublettvakt (nyeste erstatter).
+func (s *Server) handleConfirmKnowledge(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Type    string `json:"type"`
+		Title   string `json:"title"`
+		Summary string `json:"summary"`
+		ChatID  string `json:"chat_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "ugyldig request", http.StatusBadRequest)
+		return
+	}
+	req.Title = strings.TrimSpace(req.Title)
+	req.Summary = strings.TrimSpace(req.Summary)
+	if req.Title == "" || req.Summary == "" {
+		http.Error(w, "mangler tittel eller innhold", http.StatusBadRequest)
+		return
+	}
+	vec, err := s.embed(r.Context(), req.Title+". "+req.Summary)
+	if err != nil {
+		http.Error(w, "kunne ikke indeksere", http.StatusBadGateway)
+		return
+	}
+	if err := s.ingestFact(user.TenantID, user.ID, req.ChatID, req.Type, req.Title, req.Summary, vec); err != nil {
+		http.Error(w, "kunne ikke lagre", http.StatusInternalServerError)
+		return
+	}
+	s.log.Info("kunnskap bekreftet av kilden", "tittel", req.Title)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleRememberMessage lagrer en chatmelding brukeren eksplisitt vil huske
+// (minnekort-ikonet): destiller til noder der det går, ellers lagres selve
+// meldingen som én lapp — et eksplisitt klikk skal ALLTID gi et minne.
+func (s *Server) handleRememberMessage(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Text   string `json:"text"`
+		ChatID string `json:"chat_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Text) == "" {
+		http.Error(w, "ugyldig request", http.StatusBadRequest)
+		return
+	}
+	text := strings.TrimSpace(req.Text)
+	proposals := s.extractProposals(r.Context(), user.TenantID, text, "")
+	if len(proposals) == 0 {
+		title := text
+		if r := []rune(title); len(r) > 60 {
+			title = string(r[:60]) + "…"
+		}
+		proposals = []extractedNode{{Type: "term", Title: title, Summary: text}}
+	}
+	saved := 0
+	for _, p := range proposals {
+		vec, err := s.embed(r.Context(), p.Title+". "+p.Summary)
+		if err != nil {
+			continue
+		}
+		if err := s.ingestFact(user.TenantID, user.ID, req.ChatID, p.Type, p.Title, p.Summary, vec); err != nil {
+			continue
+		}
+		saved++
+	}
+	if saved == 0 {
+		http.Error(w, "kunne ikke lagre", http.StatusBadGateway)
+		return
+	}
+	s.log.Info("melding lagret til minnet", "noder", saved)
+	writeJSON(w, map[string]any{"saved": saved})
+}
+
+// autoDupThreshold: målt mot ekte aksepterte fakta — distinkte par ligger
+// under 0.58; over 0.75 er det samme faktum i ny form → nyeste erstatter.
+const autoDupThreshold = 0.75
+
+// ingestFact innlemmer et bekreftet faktum: dublettvakten erstatter automatisk
+// en nær-identisk gammel lapp, noden lagres som accepted og speiles til
+// retrieval-skuffen.
+func (s *Server) ingestFact(tenantID, userID, chatID, typ, title, summary string, vec []float32) error {
+	if old, sim, err := s.store.MostSimilarAcceptedFact(tenantID, vec, ""); err == nil && sim >= autoDupThreshold {
+		s.log.Info("dublettvakt: erstatter", "gammel", old.Title, "ny", title, "sim", sim)
+		s.store.DeleteNode(old.ID, tenantID)
+	}
+	node, err := s.store.CreateNode(tenantID, store.KnowledgeNode{
+		Type: typ, Title: title, Summary: summary,
+		Status: "accepted", ChatID: chatID, UserID: userID, Embedding: vec,
+	})
+	if err != nil {
+		return err
+	}
+	return s.store.SyncFactNote(tenantID, node.ID, title, summary, vec)
 }
 
 // extractMarkers er tegn på at brukeren forklarer noe bedriftsinternt (kilden
@@ -66,6 +169,8 @@ var extractMarkers = []string{
 	"vi ", "vår", "våre", "hos oss", "hos meg", "internt", "rutine", "pleier",
 	"kalles", "betyr", " må ", " skal ", "bruker vi", "vi bruker", "regel",
 	"krav", "policy", "prosedyre", "standarden", "alltid", "aldri",
+	// Eksplisitte notiser: brukeren BER om at noe huskes — skal alltid inn.
+	"husk", "noter", "notér", "merk deg", "lagre dette", "skriv deg bak øret",
 }
 
 // worthExtracting gater uttrekk-kallet: kun substansielle meldinger der
@@ -73,10 +178,16 @@ var extractMarkers = []string{
 // Deterministisk forhåndsfilter = sparer det store flertallet av kallene.
 func worthExtracting(question string) bool {
 	q := strings.TrimSpace(question)
+	low := strings.ToLower(q)
+	// Eksplisitt notis: «husk …»/«noter …» er verdt et kall uansett lengde.
+	for _, p := range []string{"husk", "noter", "notér", "merk deg"} {
+		if strings.HasPrefix(low, p) {
+			return len([]rune(q)) >= 12
+		}
+	}
 	if len([]rune(q)) < 40 {
 		return false
 	}
-	low := strings.ToLower(q)
 	for _, m := range extractMarkers {
 		if strings.Contains(low, m) {
 			return true
@@ -85,10 +196,10 @@ func worthExtracting(question string) bool {
 	return false
 }
 
-// runExtraction ber en billig modell foreslå 0–3 pending-noder og lagrer dem
-// med embeddings og relasjoner.
-func (s *Server) runExtraction(tenantID, userID, chatID, question, answer string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+// extractProposals ber en billig modell foreslå 0–3 kunnskaps-noder fra
+// utvekslingen — kun forslag, lagring skjer først ved kildens bekreftelse.
+func (s *Server) extractProposals(ctx context.Context, tenantID, question, answer string) []extractedNode {
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	titles, _ := s.store.NodeTitles(tenantID)
@@ -112,12 +223,12 @@ func (s *Server) runExtraction(tenantID, userID, chatID, question, answer string
 	body, _ := json.Marshal(payload)
 	req, err := s.newUpstreamRequest(ctx, bytes.NewReader(body))
 	if err != nil {
-		return
+		return nil
 	}
 	resp, err := s.client.Do(req)
 	if err != nil {
 		s.log.Warn("uttrekk-kall feilet", "err", err)
-		return
+		return nil
 	}
 	defer resp.Body.Close()
 	var out struct {
@@ -128,49 +239,31 @@ func (s *Server) runExtraction(tenantID, userID, chatID, question, answer string
 		} `json:"choices"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil || len(out.Choices) == 0 {
-		return
+		return nil
 	}
 
 	var parsed struct {
 		Nodes []extractedNode `json:"nodes"`
 	}
 	if err := json.Unmarshal([]byte(extractJSON(out.Choices[0].Message.Content)), &parsed); err != nil {
-		return
+		return nil
 	}
 
+	kept := make([]extractedNode, 0, len(parsed.Nodes))
 	for _, n := range parsed.Nodes {
 		n.Title = strings.TrimSpace(n.Title)
 		n.Summary = strings.TrimSpace(n.Summary)
 		if n.Title == "" || n.Summary == "" {
 			continue
 		}
-		// Hopp over dubletter (tittelmatch).
+		// Hopp over dubletter (tittelmatch) — resten tar dublettvakten ved
+		// bekreftelse.
 		if _, err := s.store.NodeByTitle(tenantID, n.Title); err == nil {
 			continue
 		}
-		vec, err := s.embed(ctx, n.Title+". "+n.Summary)
-		if err != nil {
-			continue
-		}
-		node, err := s.store.CreateNode(tenantID, store.KnowledgeNode{
-			Type: n.Type, Title: n.Title, Summary: n.Summary,
-			Status: "pending", ChatID: chatID, UserID: userID, Embedding: vec,
-		})
-		if err != nil {
-			continue
-		}
-		// Koble relasjoner til eksisterende noder (nye titler kobles når de finnes).
-		for _, rel := range n.Relations {
-			toID, err := s.store.NodeByTitle(tenantID, strings.TrimSpace(rel.To))
-			if err != nil {
-				continue
-			}
-			s.store.AddEdge(tenantID, store.KnowledgeEdge{
-				FromID: node.ID, ToID: toID, Relation: strings.TrimSpace(rel.Relation),
-			})
-		}
-		s.log.Info("kunnskapsnode foreslått", "tittel", n.Title)
+		kept = append(kept, n)
 	}
+	return kept
 }
 
 // docExtractSystem destillerer et dokument til strukturert grafkunnskap (G4 i
@@ -179,15 +272,15 @@ func (s *Server) runExtraction(tenantID, userID, chatID, question, answer string
 // ØNSKET her — dokumentet er allerede godkjent som bedriftskunnskap.
 const docExtractSystem = "Du får en del av et internt bedriftsdokument. Trekk ut den gjenbrukbare " +
 	"STRUKTURERTE kunnskapen: prosedyrer (stegene komprimert, i rekkefølge, i én summary), faste " +
-	"regler og terskler (behold tall ordrett), interne fagtermer med betydning, og ansvar " +
+	"regler og terskler (behold tall ordrett), interne fagtermer med betydning, ferdigheter/skills (hvordan noe gjøres hos oss, stegvis), og ansvar " +
 	"(hvem-gjør-hva). Hopp over ren prosa uten regel- eller prosessverdi, og alt som allerede står i " +
 	"listen over eksisterende noder. Maks 4 per del. Svar KUN med JSON: " +
 	"{\"nodes\":[{\"type\":\"prosess|regel|term|entitet\",\"title\":\"kort navn\",\"summary\":\"presis, selvstendig\"}]}"
 
 // runDocExtraction kjøres i bakgrunnen etter dokumentopplasting: oppretter
 // dok-noden i grafen og destillerer dokumentet seksjon for seksjon til
-// pending-noder med kant til dokumentet. Godkjenning skjer i admin-panelet på
-// de FÅ uttrukne nodene — aldri per råbit.
+// accepted-noder med kant til dokumentet (governance v2: opplastingen er
+// bekreftelsen; dublettvakten kjører automatisk).
 func (s *Server) runDocExtraction(tenantID, userID, docID, title, summary, text string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
@@ -209,7 +302,7 @@ func (s *Server) runDocExtraction(tenantID, userID, docID, title, summary, text 
 		if len(titles) > 0 {
 			existing = strings.Join(titles, "; ")
 		}
-		raw, err := s.llmComplete(ctx, docExtractSystem,
+		raw, err := s.llmComplete(ctx, "kunnskap", docExtractSystem,
 			"Eksisterende noder (ikke dupliser): "+existing+"\n\nDokument: "+title+"\n\n"+section, 600)
 		if err != nil {
 			continue
@@ -233,16 +326,16 @@ func (s *Server) runDocExtraction(tenantID, userID, docID, title, summary, text 
 			if err != nil {
 				continue
 			}
-			node, err := s.store.CreateNode(tenantID, store.KnowledgeNode{
-				Type: n.Type, Title: n.Title, Summary: n.Summary,
-				Status: "pending", UserID: userID, Embedding: vec,
-			})
-			if err != nil {
+			// Governance v2: opplastingen VAR bekreftelsen — rett til accepted,
+			// med dublettvakten i forkant.
+			if err := s.ingestFact(tenantID, userID, "", n.Type, n.Title, n.Summary, vec); err != nil {
 				continue
 			}
-			s.store.AddEdge(tenantID, store.KnowledgeEdge{
-				FromID: node.ID, ToID: docID, Relation: "definert i",
-			})
+			if id, err := s.store.NodeByTitle(tenantID, n.Title); err == nil {
+				s.store.AddEdge(tenantID, store.KnowledgeEdge{
+					FromID: id, ToID: docID, Relation: "definert i",
+				})
+			}
 			created++
 		}
 	}

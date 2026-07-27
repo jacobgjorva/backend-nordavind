@@ -61,14 +61,19 @@ func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 		// Ingen total timeout: streaming-svar kan stå åpne lenge.
 		client:   &http.Client{Timeout: 0},
 		log:      log,
-		search:   search.NewClient(),
+		search:   search.NewClient(cfg.SearxURL),
 		store:    st,
 		pricing:  newPricing(),
 		rates:    &usdNok{},
 		credsKey: key,
 
-		planBuilding:   map[string]bool{},
-		runActive:      map[string]bool{},
+		planBuilding: map[string]bool{},
+		runActive:    map[string]bool{},
+	}
+	// Blokkeringsovervåking: motorer SearXNG melder som døde logges — dette
+	// er metrikken som avgjør når IP-pool/vekting må justeres.
+	s.search.Downed = func(engines []string) {
+		s.log.Warn("søkemotorer nede i SearXNG", "engines", strings.Join(engines, ","))
 	}
 	s.startScheduler(context.Background())
 	s.initIntentEngine()
@@ -134,6 +139,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/chat/completions", s.requireAuth(s.handleChatCompletions))
 	mux.HandleFunc("POST /v1/extract", s.requireAuth(s.handleExtract))
 	mux.HandleFunc("POST /v1/corrections", s.requireAuth(s.handleLogCorrection))
+	mux.HandleFunc("POST /v1/knowledge/edges", s.requireAdmin(s.handleCreateEdge))
+	mux.HandleFunc("POST /v1/knowledge/edges/delete", s.requireAdmin(s.handleDeleteEdge))
+	mux.HandleFunc("POST /v1/knowledge/remember", s.requireAuth(s.handleRememberMessage))
+	mux.HandleFunc("POST /v1/knowledge/confirm", s.requireAuth(s.handleConfirmKnowledge))
 	mux.HandleFunc("POST /v1/knowledge/extract", s.requireAuth(s.handleExtractKnowledge))
 	mux.HandleFunc("POST /v1/documents", s.requireAuth(s.handleCreateDocument))
 	mux.HandleFunc("GET /v1/documents", s.requireAuth(s.handleListDocuments))
@@ -380,24 +389,12 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 					"norske uttrykk, aldri direkte oversatt engelsk slang. Du kan tolke bilder brukeren " +
 					"laster opp via bindersen, si aldri at du ikke kan se bilder.",
 			}
-			// Few-shot: faste eksempel-utvekslinger som VISER svarstilen —
-			// langt mer robust enn instrukser alene for akkurat stil.
-			// Bildemeldinger er i praksis sin egen flyt: vision-modellen skal
-			// BESKRIVE, og korthets-eksemplene gjør den ordknapp til det
-			// meningsløse («T.») — de utelates derfor for bilder.
-			fewshot := []any{
-				map[string]any{"role": "user", "content": "Hvor mange cm er det i en meter?"},
-				map[string]any{"role": "assistant", "content": "En meter er 100 cm."},
-				map[string]any{"role": "user", "content": "Opprett en ny kobling"},
-				map[string]any{"role": "assistant", "content": "Hva skal vi koble til?"},
-				map[string]any{"role": "user", "content": "hva er mva-satsen i Norge?"},
-				map[string]any{"role": "assistant", "content": "Standardsatsen er 25 %, med 15 % på mat og 12 % på persontransport."},
-			}
-			if router.LastUserHasImage(payload.Messages) {
-				full["messages"] = append([]any{system}, raw...)
-			} else {
-				full["messages"] = append(append([]any{system}, fewshot...), raw...)
-			}
+			// Ingen few-shot-eksempler: de lå som FALSK samtalehistorikk foran
+			// hver melding, kostet tokens hver tur, og modellen kunne ikke
+			// skille dem fra noe brukeren faktisk hadde sagt — «hva er
+			// mva-satsen i Norge?» ble nærmeste nabo til en melding uten
+			// referent og smittet svaret. Stilen står i systemteksten.
+			full["messages"] = append([]any{system}, raw...)
 		}
 	}
 

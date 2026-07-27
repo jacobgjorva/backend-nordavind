@@ -15,12 +15,18 @@ const (
 	MidModel   = "mistral-medium-3.5-128b"
 	HeavyModel = "qwen3.5-397b-a17b"
 	TopModel   = "glm-5.2"
+	// LightModel («flau») tar de letteste flytene (smalltalk, web-fakta):
+	// 10× billigere enn MidModel og raskere. Målt jevngod på verktøyvalg og
+	// korte svar; hallusinasjonsrisikoen bæres av kildekontroll-gaten (G1/G2),
+	// derfor slippes den kun til i flyter med søk-først eller uten fakta.
+	LightModel = "mistral-small-3.2-24b-instruct-2506"
 	// VisionModel tolker bilder — Qwen3.6-35B er multimodal og rimelig.
 	VisionModel = "qwen3.6-35b-a3b"
 )
 
 // Nordavind-aliaser: vindskalaen navngir modellnivåene utad.
 var Aliases = map[string]string{
+	"flau":   LightModel,
 	"bris":   MidModel,
 	"storm":  HeavyModel,
 	"orkan":  TopModel,
@@ -31,7 +37,7 @@ var Aliases = map[string]string{
 // gamle klienter/localStorage, tastefeil) normaliseres til MidModel — en
 // deprekert modell skal aldri kunne overleve i omløp.
 var katalog = map[string]bool{
-	MidModel: true, HeavyModel: true, TopModel: true, VisionModel: true,
+	LightModel: true, MidModel: true, HeavyModel: true, TopModel: true, VisionModel: true,
 }
 
 // Resolve oversetter et alias til faktisk modellnavn; "auto" slippes gjennom

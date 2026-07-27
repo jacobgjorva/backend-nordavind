@@ -30,3 +30,11 @@ tjenestene og helsesjekker.
   ta i tillegg ukentlig Hetzner-snapshot.
 - Skalering: større VPS ved behov (resize i panelet). Horisontal skalering
   krever Postgres-migrering — bevisst utsatt.
+
+## SearXNG (websøk)
+
+Backenden søker via en self-hostet SearXNG-instans (Docker, loopback-only på
+127.0.0.1:8888) — se `deploy/searxng/`. `setup.sh` installerer og starter den;
+`SEARXNG_URL` i `/opt/nordavind/env` peker backenden dit. Tom `SEARXNG_URL`
+gir DuckDuckGo-fallback (gjelder også automatisk om instansen dør).
+Blokkeringsovervåking: `journalctl -u nordavind | grep "søkemotorer nede"`.

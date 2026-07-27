@@ -7,7 +7,7 @@ set -euo pipefail
 
 echo "== Pakker =="
 apt-get update -qq
-apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl sqlite3 ufw
+apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl sqlite3 ufw docker.io docker-compose-v2
 
 echo "== Caddy =="
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
@@ -27,10 +27,28 @@ PUBLIC_BASE_URL=https://${NORDAVIND_DOMAIN}
 ALLOWED_ORIGIN=https://${NORDAVIND_DOMAIN}
 DB_PATH=/opt/nordavind/data/nordavind.db
 UPSTREAM_API_KEY=FYLL-INN
+SEARXNG_URL=http://127.0.0.1:8888
 # MAIL_* og evt. andre hemmeligheter legges til her ved behov.
 EOF
   chown root:nordavind /opt/nordavind/env
   chmod 640 /opt/nordavind/env
+fi
+
+echo "== SearXNG (self-hostet metasøk, loopback-only) =="
+mkdir -p /opt/nordavind/searxng
+cp "$(dirname "$0")/searxng/compose.yml" /opt/nordavind/searxng/
+if [ ! -f /opt/nordavind/searxng/settings.yml ]; then
+  # Fersk installasjon: generer secret_key. Eksisterende settings røres aldri.
+  sed "s/CHANGE_ME_AT_SETUP/$(openssl rand -hex 32)/" \
+    "$(dirname "$0")/searxng/settings.yml" > /opt/nordavind/searxng/settings.yml
+fi
+chown -R 977:977 /opt/nordavind/searxng   # container-uid i searxng-imaget
+(cd /opt/nordavind/searxng && docker compose up -d)
+
+echo "== Swap (1G — SearXNG+Valkey på 4GB-boks) =="
+if [ ! -f /swapfile ]; then
+  fallocate -l 1G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
 fi
 
 echo "== systemd + Caddy-konfig =="

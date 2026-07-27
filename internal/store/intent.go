@@ -12,7 +12,7 @@ type IntentDecision struct {
 	UserID     string    `json:"-"`
 	Message    string    `json:"message"`
 	Key        string    `json:"key"`        // valgt flyt ("" = fri chat)
-	Method     string    `json:"method"`     // direct | judge | none | multi
+	Method     string    `json:"method"`     // direct | judge | none | sticky
 	Candidates string    `json:"candidates"` // JSON [{key,score}...]
 	ElapsedMS  int       `json:"elapsed_ms"`
 	Corrected  string    `json:"corrected"` // fasit satt i ettertid (tom = ukjent)

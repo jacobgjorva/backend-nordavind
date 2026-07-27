@@ -130,6 +130,8 @@ func (s *Server) chatOnce(ctx context.Context, model string, messages []any, too
 		return m, err
 	}
 	m.tokens = out.Usage.PromptTokens + out.Usage.CompletionTokens
+	// Plan- og oppdragskjøringer telles her — de gikk urapportert før.
+	s.countLLM(ctx, model, "agent", out.Usage.PromptTokens, out.Usage.CompletionTokens)
 	if len(out.Choices) == 0 {
 		return m, fmt.Errorf("tomt svar fra modellen")
 	}

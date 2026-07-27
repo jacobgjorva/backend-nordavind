@@ -176,7 +176,7 @@ func (s *Server) maybePush(a store.Agent, output string) {
 	if len(head) > 1200 {
 		head = head[:1200]
 	}
-	raw, err := s.llmComplete(ctx, pushClassifySystem, head, 3)
+	raw, err := s.llmComplete(ctx, "rutine", pushClassifySystem, head, 3)
 	if err != nil || !strings.Contains(strings.ToLower(raw), "ja") {
 		return
 	}
@@ -263,6 +263,8 @@ func (s *Server) executeAgent(ctx context.Context, a store.Agent) (string, int, 
 		}
 		if round == agentMaxRounds {
 			payload["tool_choice"] = "none" // tving et sluttsvar
+			// TOKEN: katalogen kan ikke brukes med "none" — ikke betal for den.
+			delete(payload, "tools")
 		}
 		body, _ := json.Marshal(payload)
 		req, err := s.newUpstreamRequest(ctx, bytes.NewReader(body))
@@ -298,6 +300,9 @@ func (s *Server) executeAgent(ctx context.Context, a store.Agent) (string, int, 
 			return "", totalTokens, derr
 		}
 		totalTokens += out.Usage.PromptTokens + out.Usage.CompletionTokens
+		// Rutinekjøringer eies av agentens bruker — synlige i /forbruk.
+		s.countLLMFor(a.TenantID, a.UserID, router.MidModel, "rutine",
+			out.Usage.PromptTokens, out.Usage.CompletionTokens)
 		if len(out.Choices) == 0 {
 			return "", totalTokens, fmt.Errorf("tomt svar fra modellen")
 		}
