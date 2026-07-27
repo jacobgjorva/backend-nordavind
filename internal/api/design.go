@@ -399,23 +399,42 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-// handleCreateDesign starter en design-chat: ett tomt dokument og en chat som
-// eier det. Én forespørsel, så frontend slipper å sy sammen to kall — og
-// dokumentet får alltid en fersk slug (kollisjon åpnet forrige dokument).
+// handleCreateDesign starter et design-arbeidsområde: en chat som kan holde
+// mange dokumenter side om side. Selve dokumentene lages etterpå, ett per
+// gang brukeren skriver på tom flate.
 func (s *Server) handleCreateDesign(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.user(w, r)
 	if !ok {
 		return
 	}
+	chat, err := s.store.CreateDesignChat(user.TenantID, user.ID, "Design", "")
+	if err != nil {
+		http.Error(w, "kunne ikke opprette arbeidsområdet", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"chat_id": chat.ID})
+}
+
+// handleCreateBoardDocument lager ett nytt dokument i arbeidsområdet, plassert der
+// brukeren står på boardet. Alltid fersk slug — en kollisjon ville åpnet et
+// annet dokument.
+func (s *Server) handleCreateBoardDocument(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
 	var req struct {
-		Kit   string `json:"kit"`
-		Title string `json:"title"`
+		Kit   string  `json:"kit"`
+		Title string  `json:"title"`
+		X     float64 `json:"x"`
+		Y     float64 `json:"y"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)
+	chatID := r.PathValue("chatId")
 	kit := design.Get(req.Kit)
 	title := strings.TrimSpace(req.Title)
 	if title == "" {
-		title = kit.Label
+		title = "Uten navn"
 	}
 	base := slugify(title)
 	if base == "" {
@@ -427,19 +446,59 @@ func (s *Server) handleCreateDesign(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "kunne ikke opprette dokumentet", http.StatusInternalServerError)
 		return
 	}
-	// Tomt dokument med valgt kitt: lerretet vet hvilket uttrykk som gjelder
-	// før modellen har lagt inn en eneste flate.
 	doc := design.Doc{Type: "design", Kind: kit.Type, Kit: kit.Name, Title: title}
 	if !s.saveDoc(user, wg.Slug, doc) {
 		http.Error(w, "kunne ikke lagre dokumentet", http.StatusInternalServerError)
 		return
 	}
-	chat, err := s.store.CreateDesignChat(user.TenantID, user.ID, title, wg.Slug)
-	if err != nil {
-		http.Error(w, "kunne ikke opprette chatten", http.StatusInternalServerError)
+	if err := s.store.PlaceOnBoard(chatID, wg.Slug, req.X, req.Y); err != nil {
+		http.Error(w, "kunne ikke plassere dokumentet", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]any{"chat_id": chat.ID, "slug": wg.Slug, "kit": kit.Name})
+	writeJSON(w, map[string]any{"slug": wg.Slug, "kit": kit.Name, "x": req.X, "y": req.Y})
+}
+
+// handleBoard gir alt som ligger i arbeidsområdet, med posisjon og innhold —
+// ett kall, så lerretet kan tegne hele bordet med en gang.
+func (s *Server) handleBoard(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.user(w, r)
+	if !ok {
+		return
+	}
+	items, err := s.store.BoardItems(r.PathValue("chatId"), user.ID)
+	if err != nil {
+		http.Error(w, "kunne ikke hente arbeidsområdet", http.StatusInternalServerError)
+		return
+	}
+	out := make([]map[string]any, 0, len(items))
+	for _, it := range items {
+		var spec any
+		json.Unmarshal([]byte(it.Spec), &spec)
+		out = append(out, map[string]any{
+			"slug": it.Slug, "title": it.Title, "x": it.X, "y": it.Y, "spec": spec,
+		})
+	}
+	writeJSON(w, map[string]any{"items": out})
+}
+
+// handleMoveDocument lagrer at brukeren har flyttet et dokument på boardet.
+func (s *Server) handleMoveDocument(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.user(w, r); !ok {
+		return
+	}
+	var req struct {
+		X float64 `json:"x"`
+		Y float64 `json:"y"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "ugyldig kropp", http.StatusBadRequest)
+		return
+	}
+	if err := s.store.PlaceOnBoard(r.PathValue("chatId"), r.PathValue("slug"), req.X, req.Y); err != nil {
+		http.Error(w, "kunne ikke lagre posisjonen", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleDesignMeta er brukerens egne valg på lerretet: uttrykk, tittel og
