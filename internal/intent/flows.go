@@ -89,7 +89,7 @@ var Flows = map[string]Flow{
 		Fallback:      FreeChatKey,
 	},
 	"manage_connections": {
-		Deterministic: true, // rendrer /tilkoblinger-panelet
+		Deterministic: true, // panelet åpnes kun via /tilkoblinger i frontend
 		Fallback:      FreeChatKey,
 	},
 
@@ -152,11 +152,14 @@ var Flows = map[string]Flow{
 		Sticky:    true,
 	},
 
-	"usage_stats":      {Deterministic: true, Fallback: FreeChatKey}, // /forbruk-panelet
-	"manage_users":     {Deterministic: true, Fallback: FreeChatKey}, // /tilganger-panelet
+	// Panelflytene beholder Deterministic (urørt payload → fri chat med alle
+	// verktøy), men serveren rendrer ALDRI panelet fra fritekst — panelene
+	// åpnes kun via slash-kommandoen i frontend.
+	"usage_stats":      {Deterministic: true, Fallback: FreeChatKey}, // /forbruk
+	"manage_users":     {Deterministic: true, Fallback: FreeChatKey}, // /tilganger
 	"impersonate_user": {Deterministic: true, Fallback: FreeChatKey}, // pillen i composeren
-	"knowledge_admin":  {Deterministic: true, Fallback: FreeChatKey}, // /kunnskap-panelet
-	"employees_admin":  {Deterministic: true, Fallback: FreeChatKey}, // /ansatte-panelet
+	"knowledge_admin":  {Deterministic: true, Fallback: FreeChatKey}, // /kunnskap
+	"employees_admin":  {Deterministic: true, Fallback: FreeChatKey}, // /ansatte
 
 	"upload_document": {
 		// Klassifisering + lagring har allerede deterministisk løype i chatten.

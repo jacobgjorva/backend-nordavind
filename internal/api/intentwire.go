@@ -162,17 +162,6 @@ func flowWantsKnowledge(full map[string]any) bool {
 	return !ok || f.Knowledge
 }
 
-// deterministicPanels: flyter som besvares HELT i kode med et admin-panel.
-// Øvrige deterministiske flyter (eksport, kontrakt, opplasting) eies av
-// frontend-løyper og faller til fri chat her.
-var deterministicPanels = map[string]string{
-	"usage_stats":        "forbruk",
-	"manage_users":       "tilganger",
-	"knowledge_admin":    "kunnskap",
-	"employees_admin":    "ansatte",
-	"manage_connections": "tilkoblinger",
-}
-
 // flowModel mapper flyt-radens modellnivå til router-konstantene. "light"
 // er bak LIGHT_TIER-bryteren: av (default) ruter de lette flytene til mid
 // som før — piloten skal kunne skrus av i prod uten deploy av ny kode.
@@ -268,9 +257,11 @@ func (s *Server) applyIntent(ctx context.Context, user store.User, full map[stri
 	s.log.Info("intent", "key", key, "method", d.Method, "ms", d.Elapsed.Milliseconds())
 
 	if flow.Deterministic {
-		if panel, ok := deterministicPanels[key]; ok {
-			return "```admin\n" + panel + "\n```", nil
-		}
+		// Admin-panelene (/forbruk, /tilganger, /kunnskap, /ansatte,
+		// /tilkoblinger) åpnes ALDRI fra fritekst — kun eksplisitt slash-
+		// kommando i frontend. Et intent-treff på dem faller til fri chat
+		// («hvor mye koster 120M tokens?» fikk forbrukspanelet i stedet
+		// for et regnestykke).
 		if key == "connect_database" {
 			return credentialBlock(msg), nil
 		}
