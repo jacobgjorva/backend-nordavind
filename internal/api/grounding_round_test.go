@@ -1,6 +1,9 @@
 package api
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseLooseNumber(t *testing.T) {
 	cases := map[string]float64{
@@ -32,5 +35,32 @@ func TestIsRoundingOfRejectsInvention(t *testing.T) {
 	}
 	if isRoundingOf("6 700", []string{"6594.90"}) {
 		t.Error("avvik utenfor avrunding skal ikke passere")
+	}
+}
+
+// Fabrikkerte entiteter: «**Eplemost 1L**» fantes ikke i basen og passerte
+// fordi kun tall ble målt. Navn og fremhevede fraser skal samme vei som tall.
+func TestOffendersCatchFabricatedEntities(t *testing.T) {
+	basis := []string{`{"columns":["kundenavn"],"rows":[["Müller & Sønn Vinkjeller AS"]]}`}
+	off := groundingOffenders("Müller & Sønn Vinkjeller AS kjøper mest **Eplemost 1L**.", basis)
+	found := false
+	for _, o := range off {
+		if strings.Contains(o, "Eplemost") {
+			found = true
+		}
+		if strings.Contains(o, "Müller") {
+			t.Errorf("dekket navn ble flagget: %q", o)
+		}
+	}
+	if !found {
+		t.Error("fabrikkert produkt slapp gjennom")
+	}
+}
+
+// Navn brukeren selv nevnte er dekket via samtalen i grunnlaget.
+func TestOffendersAllowUserMentionedNames(t *testing.T) {
+	basis := []string{"user: Hva kjøper Ravnkroa Pub & Scene AS mest av?"}
+	if off := groundingOffenders("Ravnkroa Pub & Scene AS har ingen kjøp registrert.", basis); len(off) > 0 {
+		t.Errorf("brukernevnt navn flagget: %v", off)
 	}
 }

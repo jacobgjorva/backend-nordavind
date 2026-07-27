@@ -66,6 +66,8 @@ func offendersAgainst(prose string, sources []string, minDigits int) []string {
 	return offendersCore(prose, sources, minDigits, false)
 }
 
+var boldRe = regexp.MustCompile(`\*\*([^*\n]{1,80})\*\*`)
+
 func offendersCore(prose string, sources []string, minDigits int, exactNums bool) []string {
 	if strings.TrimSpace(prose) == "" || len(sources) == 0 {
 		return nil
@@ -117,6 +119,32 @@ func offendersCore(prose string, sources []string, minDigits int, exactNums bool
 		}
 		if !covered {
 			offenders = append(offenders, strings.TrimSpace(m))
+		}
+	}
+
+	// Entiteter: et egennavn eller en fremhevet frase som ikke finnes noe
+	// sted i grunnlaget er like diktet som et tall. Målt: «**Eplemost 1L**»
+	// — et produkt som ikke eksisterer — passerte fordi bare tall ble målt.
+	// Samme løype som tallene: offender → faktadommer → omforsøk; dommeren
+	// frikjenner allmennkunnskap, så «Norge» i løpende tekst overlever.
+	for _, m := range boldRe.FindAllStringSubmatch(prose, -1) {
+		ent := strings.TrimSpace(m[1])
+		if len([]rune(ent)) < 3 || seen[strings.ToLower(ent)] {
+			continue
+		}
+		seen[strings.ToLower(ent)] = true
+		if !strings.Contains(src, strings.ToLower(ent)) {
+			offenders = append(offenders, ent)
+		}
+	}
+	for _, ent := range properNouns(prose) {
+		key := strings.ToLower(ent)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		if !strings.Contains(src, key) {
+			offenders = append(offenders, ent)
 		}
 	}
 

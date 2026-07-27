@@ -431,6 +431,12 @@ func norwegianDate(t time.Time) string {
 // glimtet ut. Maks 120 tegn: «én setning ekstra» skal være det.
 var insightPhrases = map[insightKind]func(n *narrator, in insight) string{
 	insConstantCol: func(n *narrator, in insight) string {
+		if in.val == "tom" {
+			return n.pick(
+				fmt.Sprintf("Merk at %s er tom i alle radene — feltet er rett og slett ikke i bruk.", in.col),
+				fmt.Sprintf("Kolonnen %s står tom hos samtlige, så der er det ingenting å hente.", in.col),
+			)
+		}
 		return n.pick(
 			fmt.Sprintf("Merk at %s er %s i alle radene — den kolonnen rangerer ingenting.", in.col, in.val),
 			fmt.Sprintf("Verdt å vite: %s står til %s hos samtlige, så det er ikke lavt, det er ubrukt.", in.col, in.val),
