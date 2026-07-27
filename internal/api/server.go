@@ -381,24 +381,12 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 					"norske uttrykk, aldri direkte oversatt engelsk slang. Du kan tolke bilder brukeren " +
 					"laster opp via bindersen, si aldri at du ikke kan se bilder.",
 			}
-			// Few-shot: faste eksempel-utvekslinger som VISER svarstilen —
-			// langt mer robust enn instrukser alene for akkurat stil.
-			// Bildemeldinger er i praksis sin egen flyt: vision-modellen skal
-			// BESKRIVE, og korthets-eksemplene gjør den ordknapp til det
-			// meningsløse («T.») — de utelates derfor for bilder.
-			fewshot := []any{
-				map[string]any{"role": "user", "content": "Hvor mange cm er det i en meter?"},
-				map[string]any{"role": "assistant", "content": "En meter er 100 cm."},
-				map[string]any{"role": "user", "content": "Opprett en ny kobling"},
-				map[string]any{"role": "assistant", "content": "Hva skal vi koble til?"},
-				map[string]any{"role": "user", "content": "hva er mva-satsen i Norge?"},
-				map[string]any{"role": "assistant", "content": "Standardsatsen er 25 %, med 15 % på mat og 12 % på persontransport."},
-			}
-			if router.LastUserHasImage(payload.Messages) {
-				full["messages"] = append([]any{system}, raw...)
-			} else {
-				full["messages"] = append(append([]any{system}, fewshot...), raw...)
-			}
+			// Ingen few-shot-eksempler: de lå som FALSK samtalehistorikk foran
+			// hver melding, kostet tokens hver tur, og modellen kunne ikke
+			// skille dem fra noe brukeren faktisk hadde sagt — «hva er
+			// mva-satsen i Norge?» ble nærmeste nabo til en melding uten
+			// referent og smittet svaret. Stilen står i systemteksten.
+			full["messages"] = append([]any{system}, raw...)
 		}
 	}
 

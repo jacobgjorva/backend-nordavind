@@ -94,8 +94,15 @@ func (s *ScalewayJudge) Pick(ctx context.Context, message string, keys []string)
 		switch {
 		case k == FreeChatKey:
 			fmt.Fprintf(&b, "- %s: ingen av disse — vanlig samtale, tekstarbeid på innhold brukeren gir, eller sammensatte ønsker\n", k)
-		case k == AskKey:
-			fmt.Fprintf(&b, "- %s: du er REELT i tvil mellom to flyter og en feilgjetning ville vært irriterende — brukeren får da ett kort oppklaringsspørsmål. Bruk sjelden.\n", k)
+		case k == UnclearKey:
+			// Kriterium, ikke styrkegrad: «bruk sjelden» uten kjennetegn er
+			// nettopp det som gjorde forgjengeren død i praksis.
+			fmt.Fprintf(&b, "- %s: meldingen kan ikke besvares som den står, fordi den viser til noe som "+
+				"ikke er nevnt i den — «ordet», «den», «det året», «dem», «han», «den saken» — og som du "+
+				"ikke kan gjette. Dette gjelder OGSÅ når resten av meldingen ser ut som et vanlig "+
+				"spørsmål om dato, tall eller fakta: mangler det ledd som sier HVA det spørres om, er "+
+				"svaret umulig og flyten uklart. Velg dette FØR du gjetter et tema. Velg det ALDRI når "+
+				"meldingen gir mening alene.\n", k)
 		default:
 			if in, ok := byKey[k]; ok {
 				fmt.Fprintf(&b, "- %s: %s\n", k, in.Description)

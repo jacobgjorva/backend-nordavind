@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"testing"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/deck"
@@ -55,5 +56,19 @@ func TestToolByNameFindsBuilders(t *testing.T) {
 		if toolByName(c.list, c.name) == nil {
 			t.Errorf("verktøy %q finnes ikke i byggeren", c.name)
 		}
+	}
+}
+
+// Uklart skal gi et TOMT verktøysett — ikke fail-open til fritt sett.
+// Uten verktøy kan modellen ikke søke seg til en gjetning; det er hele
+// grunnen til at flyten finnes.
+func TestUnclearFlowGetsNoTools(t *testing.T) {
+	s := &Server{}
+	tools, ok := s.flowTools(context.Background(), intent.UnclearKey, nil)
+	if !ok {
+		t.Fatal("uklart skal kunne innfris (ok=false gir fritt sett)")
+	}
+	if len(tools) != 0 {
+		t.Fatalf("uklart skal ha null verktøy, fikk %d", len(tools))
 	}
 }

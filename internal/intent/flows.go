@@ -61,7 +61,7 @@ const (
 
 // FreeChatKey er den bredeste flyten: dagens chatoppførsel, men med samme
 // grense- og modellkontrakt som alt annet. Motoren ruter hit ved MethodNone,
-// ved sammensatte ønsker (MethodMulti) og som Fallback for alle flyter.
+// ved sammensatte ønsker og som Fallback for alle flyter.
 const FreeChatKey = "free_chat"
 
 // Flows er flyt-tabellen. VEDLIKEHOLD: nye behov = ny rad (og ny intent i
@@ -204,6 +204,16 @@ var Flows = map[string]Flow{
 		Sticky:   true, // e-postdialog: «les den», «hva svarte hun?»
 	},
 
+	// Uklar melding: ingen verktøy. Uten søk og database KAN modellen ikke
+	// gjette seg til et tema — oppklaringsspørsmålet er eneste utvei. Samme
+	// grep som smalltalk: strukturen bærer oppførselen, ikke en instruks.
+	UnclearKey: {
+		Tools:    nil,
+		Model:    "mid", // å se at et referanseledd mangler er dømmekraft
+		MaxChars: 120,   // ett kort spørsmål, ikke en utredning
+		Fallback: FreeChatKey,
+	},
+
 	"web_fact": {
 		// "light": svaret bygges av søkeresultater og voktes av kilde-
 		// kontrollen — småmodellen valgte søk like riktig som medium i test,
@@ -238,33 +248,4 @@ func FlowFor(d Decision) (string, Flow) {
 		}
 	}
 	return FreeChatKey, Flows[FreeChatKey]
-}
-
-// AskLabels er korte menneskelige merkelapper per flyt — brukes KUN i
-// oppklaringsspørsmålet når dommeren er reelt i tvil («vil du X eller Y?»).
-var AskLabels = map[string]string{
-	"connect_database":    "koble til en database",
-	"connect_m365":        "sette opp Microsoft 365",
-	"manage_connections":  "administrere tilkoblingene",
-	"create_widget":       "lage en graf",
-	"edit_widget":         "endre en widget",
-	"create_presentation": "lage en presentasjon",
-	"export_excel":        "eksportere til Excel",
-	"data_question":       "få svar fra bedriftens egne tall",
-	"show_table":          "se en tabell med rader",
-	"usage_stats":         "se AI-forbruket",
-	"manage_users":        "administrere brukere",
-	"impersonate_user":    "se appen som en annen bruker",
-	"knowledge_admin":     "se på bedriftskunnskapen",
-	"upload_document":     "lagre et dokument som kunnskap",
-	"teach_fact":          "lære meg noe om bedriften",
-	"contract_review":     "få en kontrakt gjennomgått",
-	"create_routine":      "sette opp en fast rutine",
-	"edit_routine":        "endre en rutine",
-	"employees_admin":     "jobbe med ansattregisteret",
-	"m365_files":          "finne noe i filene dine",
-	"email":               "sjekke e-posten din",
-	"web_fact":            "få et faktasvar fra nettet",
-	"smalltalk":           "bare prate",
-	FreeChatKey:           "ha et råd eller en vurdering",
 }

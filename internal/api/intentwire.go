@@ -236,14 +236,16 @@ func (s *Server) applyIntent(ctx context.Context, user store.User, full map[stri
 			if pk, pf := intent.FlowFor(pd); pf.Sticky && pd.Key != "" {
 				d = intent.Decision{Key: pk, Method: intent.MethodSticky,
 					Candidates: d.Candidates, Elapsed: d.Elapsed + pd.Elapsed}
-			} else if d.Method == intent.MethodAsk || d.Method == intent.MethodNone ||
-				d.Method == intent.MethodMulti || d.Key == "smalltalk" {
+			} else if d.Key == intent.UnclearKey || d.Method == intent.MethodNone ||
+				d.Key == "smalltalk" {
 				// Midt i en vanlig samtale: en RETNINGSLØS kort oppfølging
-				// (ask/none/multi/smalltalk) skal FORTSETTE samtalen (fri
-				// chat, alle verktøy) — aldri kapres av panel eller
+				// (uklart/none/smalltalk) skal FORTSETTE samtalen (fri chat,
+				// alle verktøy) — aldri kapres av panel eller
 				// oppklaringsspørsmål («restartet, men fungerer ikke» fikk
-				// «vil du sette opp M365 …?»). Et tydelig dommer-valg av
-				// konkret flyt beholdes.
+				// «vil du sette opp M365 …?»). Tråden kan redde en kort
+				// melding; det er FØRSTE melding og lange meldinger uten
+				// forhistorie som trenger oppklaring. Et tydelig dommer-valg
+				// av konkret flyt beholdes.
 				d = intent.Decision{Method: intent.MethodSticky,
 					Candidates: d.Candidates, Elapsed: d.Elapsed + pd.Elapsed}
 			}
@@ -259,16 +261,6 @@ func (s *Server) applyIntent(ctx context.Context, user store.User, full map[stri
 			s.log.Warn("intent: kunne ikke logge avgjørelse", "err", err)
 		}
 	}()
-	// Dommeren er reelt i tvil: still ett kort oppklaringsspørsmål bygget av
-	// toppkandidatenes merkelapper — ren tekst, ingen gjetning.
-	if d.Method == intent.MethodAsk && len(d.Candidates) >= 2 {
-		a := intent.AskLabels[d.Candidates[0].Key]
-		b := intent.AskLabels[d.Candidates[1].Key]
-		if a != "" && b != "" && a != b {
-			return "Bare så jeg treffer riktig: vil du " + a + ", eller " + b + "?", nil
-		}
-	}
-
 	key, flow := intent.FlowFor(d)
 	s.log.Info("intent", "key", key, "method", d.Method, "ms", d.Elapsed.Milliseconds())
 

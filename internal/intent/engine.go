@@ -18,22 +18,21 @@ const (
 	MethodDirect = "direct" // klar vinner på ren cosine (ingen LLM)
 	MethodJudge  = "judge"  // enum-begrenset dommer-kall blant kandidatene
 	MethodNone   = "none"   // ingen flyt — fri chat (også ved feil: fail-open)
-	MethodMulti  = "multi"  // sammensatt ønske — to flyter nesten likt → fri chat
 	MethodSticky = "sticky" // kort oppfølging arvet forrige sticky-flyt
-	MethodAsk    = "ask"    // dommeren er reelt i tvil → still oppklaringsspørsmål
 )
 
-// AskKey er dommerens «reelt i tvil»-svar — ikke en flyt, men et signal om at
-// brukeren skal få ett kort oppklaringsspørsmål i stedet for en gjetning.
-const AskKey = "usikker"
+// UnclearKey er flyten for meldinger som ikke kan besvares som de står — de
+// viser til noe som ikke er nevnt («ordet», «det året»), eller mangler
+// informasjon svaret krever. Forgjengeren «usikker» beskrev tvil MELLOM
+// flyter og døde i praksis: oppklaringsspørsmålet ble bygget av de to
+// øverste cosine-treffene, mens dommeren valgte tvil etter å ha sett hele
+// registeret — kildene hang ikke sammen. Dette er en vanlig flyt, valgt av
+// dommeren som alle andre, og uten verktøy (se flows.go).
+const UnclearKey = "uklart"
 
 // Terskler. Kalibrert mot eval-settet (cmd/intent-eval skriver ut forslag);
 // endres KUN sammen med en grønn eval-kjøring — aldri på magefølelse.
 const (
-	// floorScore: under dette ligner meldingen ikke på noen flyt. Brukes kun
-	// som logg-signal og fallback-vern når dommeren feiler — usikre meldinger
-	// går alltid til dommeren, som selv kan svare fri chat.
-	floorScore = 0.42
 	// directScore + directMargin: over dette OG med klar avstand til nummer
 	// to velger matten alene, uten dommer.
 	directScore  = 0.60
@@ -44,10 +43,6 @@ const (
 	// dommeren i stedet for direct — romsligere enn directMargin fordi
 	// rådgivningsformuleringer scorer systematisk lavere på tekstlikhet.
 	freeChatMargin = 0.16
-	// multiMargin: scorer to flyter BEGGE over directScore med mindre avstand
-	// enn dette, tolkes meldingen som sammensatt («lag graf OG eksporter») og
-	// går til fri chat som har alle verktøy. Logges som MethodMulti.
-	multiMargin = 0.03
 	// embedTimeout/judgeTimeout: motoren skal aldri henge — fail-open. Stramme
 	// frister: p50 er ~100-250 ms, og en Scaleway-utstikker skal koste maks
 	// ~2 s ekstra før chatten går videre som fri chat, aldri 10+.
@@ -206,8 +201,8 @@ func (e *Engine) Resolve(ctx context.Context, message string, isAdmin bool) Deci
 		return none
 	}
 
-	// Klar vinner: matten bestemmer alene. Nesten-like kandidater (tidligere
-	// MethodMulti → rett til fri chat) går nå til dommeren, som selv velger
+	// Klar vinner: matten bestemmer alene. Nesten-like kandidater går til
+	// dommeren, som selv velger
 	// fri chat ved ekte sammensatte ønsker. Samme regel gjelder fri chat:
 	// ligger free_chat innenfor direct-marginen av toppen, avgjør dommeren —
 	// rådgivningsspørsmål skal aldri tape på ren tekstlikhet.
@@ -247,7 +242,7 @@ func (e *Engine) judgeDecision(ctx context.Context, msg string, isAdmin bool, ca
 	if !contains(keys, FreeChatKey) {
 		keys = append(keys, FreeChatKey)
 	}
-	keys = append(keys, AskKey)
+	keys = append(keys, UnclearKey)
 	jctx, jcancel := context.WithTimeout(ctx, judgeTimeout)
 	defer jcancel()
 	pick, err := e.judge.Pick(jctx, msg, keys)
@@ -264,9 +259,6 @@ func (e *Engine) judgeDecision(ctx context.Context, msg string, isAdmin bool, ca
 	}
 	if pick == FreeChatKey {
 		return Decision{Method: MethodJudge, Candidates: cands, Elapsed: time.Since(start)}
-	}
-	if pick == AskKey {
-		return Decision{Method: MethodAsk, Candidates: cands, Elapsed: time.Since(start)}
 	}
 	if pick == directKey {
 		// Bekreftet direktetreff — logges som direct for målbarhet.
