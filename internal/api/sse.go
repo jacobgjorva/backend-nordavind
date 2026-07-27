@@ -172,7 +172,7 @@ const tcClose = "</tool_call>"
 // fra og med treffet klippes bort — resten av svaret er uansett tapt.
 var bareToolCallRe = regexp.MustCompile(
 	`(web_search|fetch_url|query_database|show_table|m365_search|m365_read|` +
-		`mail_search|mail_read|mail_compose|set_widget|set_slide|set_deck|` +
+		`mail_search|mail_read|mail_compose|set_widget|compose|patch|restyle|` +
 		`contact_person|list_agents|update_agent|setup_routine)\s*\{`)
 
 // cutBareToolCall klipper et utagget verktøykall og alt etter det.
@@ -186,7 +186,7 @@ func cutBareToolCall(s string) string {
 var toolNames = []string{
 	"web_search", "fetch_url", "query_database", "show_table", "m365_search",
 	"m365_read", "mail_search", "mail_read", "mail_compose", "set_widget",
-	"set_slide", "set_deck", "contact_person", "list_agents", "update_agent",
+	"compose", "patch", "restyle", "contact_person", "list_agents", "update_agent",
 	"setup_routine",
 }
 
