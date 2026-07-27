@@ -138,3 +138,27 @@ func TestZeroAggregateDetectsMiss(t *testing.T) {
 		t.Error("flere rader er ikke et enkelt-aggregat")
 	}
 }
+
+// Et aggregat uten treff skal klassifiseres som TOMT, ikke som et vellykket
+// oppslag. Ellers tror dbSucceeded at vi fant noe, kvalitetsporten står ned,
+// og fraværet kan formuleres som et funn («har kjøpt for 0 kroner»).
+func TestZeroAggregateCountsAsEmptyOutcome(t *testing.T) {
+	cols := []string{"total"}
+	for _, c := range []struct {
+		name string
+		rows [][]string
+		want dbOutcome
+	}{
+		{"nullaggregat", [][]string{{"0"}}, dbEmpty},
+		{"null-verdi", [][]string{{"NULL"}}, dbEmpty},
+		{"ekte tall", [][]string{{"1473032.49"}}, dbOK},
+	} {
+		att := dbAttempt{outcome: dbOK, cols: cols, rows: c.rows}
+		if len(c.rows) == 0 || zeroAggregate(cols, c.rows) {
+			att.outcome = dbEmpty
+		}
+		if att.outcome != c.want {
+			t.Errorf("%s: utfall %v, ventet %v", c.name, att.outcome, c.want)
+		}
+	}
+}

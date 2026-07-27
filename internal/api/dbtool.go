@@ -460,13 +460,17 @@ func (s *Server) runDBQuery(ctx context.Context, t *dbToolCtx, connID, query str
 	s.log.Info("db-spørring", "connection", dc.conn.Name, "rader", len(rows))
 
 	att := dbAttempt{outcome: dbOK, sql: query, conn: dc.conn.Name, cols: cols, rows: rows}
-	if len(rows) == 0 {
+	// Et aggregat uten treff ER tomt, selv om det kommer tilbake som én rad
+	// med 0. Klassifiseres det som dbOK, tror hele maskineriet at vi fant noe:
+	// dbSucceeded blir sann, kvalitetsporten står ned, og modellen står fritt
+	// til å formulere fraværet som et funn («har kjøpt for 0 kroner»).
+	if len(rows) == 0 || zeroAggregate(cols, rows) {
 		att.outcome = dbEmpty
 	}
 
 	// Strategi: bommet et fritekstfilter, slå opp nærmeste verdi FØR modellen
 	// rekker å konkludere med at noe «ikke finnes». Ett lett prefikskall.
-	if att.outcome == dbEmpty || zeroAggregate(cols, rows) {
+	if att.outcome == dbEmpty {
 		if col, needle, hits := s.nearestValues(ctx, db, dc, query); len(hits) > 0 {
 			att.note = fmt.Sprintf("Ingen rader for %q i %s. Nærmeste verdier som FINNES: %s. "+
 				"Kjør spørringen på nytt med den riktige, og fortell brukeren hvilken du brukte.",
