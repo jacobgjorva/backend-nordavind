@@ -266,7 +266,10 @@ func (s *Server) applyIntent(ctx context.Context, user store.User, full map[stri
 	// Nevner brukeren en intern entitet, handler spørsmålet om bedriften —
 	// ikke om verden. Web-flyten ville svart «fant ingen informasjon» med
 	// svaret liggende i grafen.
-	if strings.Contains(msg, "@") && (key == "web_fact" || key == "smalltalk") {
+	// Nevner brukeren en intern entitet, er spørsmålet om bedriften — ikke om
+	// verden, og ikke et panel. «Hvem er @Kari Nes» åpnet ansatte-panelet i
+	// stedet for å svare fra grafen.
+	if strings.Contains(msg, "@") && (flow.Deterministic || key == "web_fact" || key == "smalltalk") {
 		key, flow = intent.FreeChatKey, intent.Flows[intent.FreeChatKey]
 		s.log.Info("intent: nevning gjør spørsmålet internt", "fra", d.Key)
 	}
