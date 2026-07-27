@@ -54,8 +54,13 @@ func (c *Client) fetchPage(ctx context.Context, url string, maxChars int) string
 	if err != nil {
 		return ""
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
-	req.Header.Set("Accept", "text/html,application/pdf")
+	// Full nettleser-signatur: enkle UA-filtre slipper oss gjennom med denne.
+	// (Cloudflare-beskyttede sider gjør det ikke uansett — de fingeravtrykker
+	// TLS og krever JS. Da leveres kilden som ulest, aldri som gjettet.)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "+
+		"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf;q=0.8,*/*;q=0.7")
+	req.Header.Set("Accept-Language", "nb-NO,nb;q=0.9,no;q=0.8,en;q=0.5")
 
 	resp, err := c.http.Do(req)
 	if err != nil {

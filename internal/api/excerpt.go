@@ -164,13 +164,17 @@ func formatExcerptContext(query string, results []search.Result, picked []source
 			b.WriteString("\n---\n")
 		}
 	}
-	// Kilder uten utdrag tas med som tittel+beskrivelse — billig og ofte nok.
+	// Kilder uten utdrag tas med som tittel+beskrivelse — men MERKET. Uten
+	// merkingen leste modellen en overskrift som en besvart kilde og diktet
+	// resten (Cloudflare-blokkerte sider gir 403 og dermed tom tekst).
 	for src, r := range results {
 		if _, ok := bySource[src]; ok {
 			continue
 		}
 		n++
 		fmt.Fprintf(&b, "\n### Kilde %d: %s — %s\n%s\n", n, r.Title, r.URL, r.Description)
+		b.WriteString("MERK: selve siden kunne ikke leses. Du vet KUN det som står i " +
+			"beskrivelsen over — gjett aldri på innholdet, og si heller at kilden ikke lot seg lese.\n")
 	}
 	return b.String()
 }

@@ -101,3 +101,25 @@ func TestSearchCacheTTLAndReset(t *testing.T) {
 		t.Fatal("tomt resultat ble cachet")
 	}
 }
+
+// Ulesbare kilder (403 fra Cloudflare o.l.) må MERKES — ellers leser modellen
+// en overskrift som en besvart kilde og dikter resten («tekoligark»-saken).
+func TestUnreadableSourceIsMarked(t *testing.T) {
+	results := []search.Result{
+		{Title: "Lest kilde", URL: "https://a.no", Description: "beskrivelse a"},
+		{Title: "Årets ord", URL: "https://sprakradet.no/arets-ord", Description: "Språkrådet kårer årets ord."},
+	}
+	picked := []sourceChunk{{source: 0, order: 0, score: 1, text: "Innhold fra kilde som lot seg lese."}}
+	ctxStr := formatExcerptContext("årets ord", results, picked)
+
+	if !strings.Contains(ctxStr, "kunne ikke leses") {
+		t.Fatal("kilde uten utdrag ble ikke merket som ulesbar")
+	}
+	// Den leste kilden skal ikke merkes.
+	before := strings.Index(ctxStr, "Lest kilde")
+	after := strings.Index(ctxStr, "Årets ord")
+	mark := strings.Index(ctxStr, "kunne ikke leses")
+	if mark < after || after < before {
+		t.Fatal("merkingen havnet på feil kilde")
+	}
+}
