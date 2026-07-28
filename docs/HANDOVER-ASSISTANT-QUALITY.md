@@ -1,5 +1,13 @@
 # Overlevering: assistentkvalitet
 
+NESTE ROTÅRSAK (2026-07-28 morgen): SØKELAGET. Samme spørring («Brent oljepris
+2025») finner prisene i noen kjøringer og ikke i andre — all gjenværende
+varians i hybrid-svarene sporer dit, ikke til modellen. Storm-eskalering ble
+prøvd og FJERNET (qwen3.5: 3m42s/tur, tom content — se minnet). Tallvakten
+(agent.go, «tallvakt») krever tallfestet konklusjon etter vellykket datatur,
+årstallsblind. Start neste økt i internal/search/: mål trefstabilitet per
+kilde, vurder faste kilder for pris-/kursdata.
+
 HUSETS STEMME PÅ (2026-07-28, Jacob-godkjent, deployet): answerStyle omskrevet
 til eierskap («du eier oppgaven … avslutt med hva du ville gjort videre, aldri
 tilbud om hjelp»), ANSWER_STYLE default on, «ingen oppfølgingstilbud»-forbudet
