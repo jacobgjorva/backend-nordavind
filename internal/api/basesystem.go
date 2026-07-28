@@ -65,6 +65,16 @@ const groundsRule = " KONKLUSJONSREGEL: en påstand om en sammenheng eller forsk
 	"utvikling, «større enn») skal tallfeste BEGGE sidene den sammenligner — én side alene er " +
 	"ikke et grunnlag.\n"
 
+// degradeRule: generalisert resonnering rundt ufullkomne data (Jacobs krav
+// 2026-07-28, inngravert som prinsipp — aldri patch per eksempel): modellen
+// blokkerte på selvpålagte presisjonskrav («fant ikke daglige tall») i stedet
+// for å bruke formen som finnes, og motsa sitt eget grunnlag mellom turer.
+const degradeRule = " NEDGRADER, ALDRI BLOKKER: finner du ikke dataene i formen du ønsket " +
+	"(daglig, eksakt, komplett), bruk den nærmeste formen som FINNES (månedlig, omtrentlig, " +
+	"delvis), svar med den, og si i én bisetning hva du brukte og hvorfor. Definer aldri selv " +
+	"et presisjonskrav spørsmålet ikke stilte. Konkluder aldri på grunnlag du ikke har hentet, " +
+	"og motsi aldri ditt forrige svar — var det feil, si det først og rett det.\n"
+
 // actionRule: kun når turen faktisk HAR verktøy å handle med.
 const actionRule = " HANDLINGSREGEL: har du et verktøy som kan utføre eller sjekke det brukeren spør om, KJØR det " +
 	"med en gang — spør ALDRI «vil du at jeg skal …» eller om lov/tillatelse for søk og lesing. " +
@@ -93,6 +103,7 @@ func baseSystem(opts systemOpts) string {
 	if opts.tools {
 		b.WriteString(actionRule)
 		b.WriteString(groundsRule)
+		b.WriteString(degradeRule)
 	}
 	if opts.image {
 		b.WriteString(imageRule)
