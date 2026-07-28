@@ -1,5 +1,18 @@
 # Overlevering: assistentkvalitet
 
+FØRSTESAK (2026-07-28, 09:1x): NØDBUNNEN «Her er de faktiske dataene:» +
+rå tabell er brukerfiendtlig for analysesporsmål (målt: korrelasjonssporsmål
+→ 12 måneders salgstabell, null forklaring — «gir ingen verdi», Jacob).
+Kjeden: modellprosa → groundingOffenders avviste (trolig web-oljetall) →
+judgeClaims nei → regroundAnswer → strictOffenders (EKSAKT tokenkrav på
+omforsøket!) drepte også omformuleringen → naken tabell (agent.go ~«Her er de
+faktiske dataene»). To ting å fikse FUNDAMENTALT: (1) strict-kravet på
+omforsøk feller legitime omformuleringer av verifiserte webtall — vurder
+token-dekning som i entityCovered; (2) nødbunnen skal FORKLARE deterministisk
+(hva som ble verifisert, hva som røk, hva brukeren kan spørre om) — aldri rå
+tabell uten kontekst på et hvorfor/analyse-spørsmål. Tallvakt + degradeRule
+(deployet 09:0x) er uprøvd i kombinasjon med denne kjeden — test samlet.
+
 NESTE ROTÅRSAK (2026-07-28 morgen): SØKELAGET. Samme spørring («Brent oljepris
 2025») finner prisene i noen kjøringer og ikke i andre — all gjenværende
 varians i hybrid-svarene sporer dit, ikke til modellen. Storm-eskalering ble
