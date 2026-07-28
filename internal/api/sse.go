@@ -326,3 +326,48 @@ func isJunkAnswer(s string) bool {
 	}
 	return false
 }
+
+// stripForeignHead fjerner et degenerert ledetoken i FREMMED skrift («جيكا Det
+// finnes …», «нымі …») foran en ellers latinsk setning. Måler skriftsystem,
+// aldri innhold: tokenet må være rene bokstaver uten ett eneste latinsk tegn,
+// og resten av teksten må være overveiende latinsk. Norske svar starter aldri
+// legitimt med et helarabisk eller helkyrillisk ord.
+func stripForeignHead(s string) string {
+	trimmed := strings.TrimLeft(s, " ")
+	i := strings.IndexAny(trimmed, " \n\t")
+	if i <= 0 {
+		return s
+	}
+	head, rest := trimmed[:i], strings.TrimLeft(trimmed[i:], " ")
+	if rest == "" {
+		return s
+	}
+	latin, letters := 0, 0
+	for _, r := range head {
+		if !unicode.IsLetter(r) {
+			return s // tegnsetting/tall i hodet: ikke vår klasse
+		}
+		letters++
+		if unicode.In(r, unicode.Latin) {
+			latin++
+		}
+	}
+	if letters == 0 || latin > 0 {
+		return s
+	}
+	// Resten må være overveiende latinsk — ellers er hele svaret på et annet
+	// språk, og det skal ikke røres her.
+	rl, rt := 0, 0
+	for _, r := range rest {
+		if unicode.IsLetter(r) {
+			rt++
+			if unicode.In(r, unicode.Latin) {
+				rl++
+			}
+		}
+	}
+	if rt == 0 || rl*10 < rt*8 {
+		return s
+	}
+	return rest
+}

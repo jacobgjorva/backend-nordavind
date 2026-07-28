@@ -285,6 +285,9 @@ func (g *sentenceGate) feed(chunk string) string {
 			return out.String() // setningen er ikke ferdig — vent
 		}
 		sent := g.buf[:end]
+		if g.shown.Len() == 0 {
+			sent = stripForeignHead(sent)
+		}
 		// Formsjekk FØR faktasjekk: en degenerert modell lekker verktøykall-
 		// fragmenter («+crusherweb_search{"query": …») i runde 0-prosaen, og
 		// de består faktasjekken fordi form aldri ble målt. Holdes som

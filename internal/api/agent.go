@@ -839,7 +839,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			case trimmed == "" && !actionTool:
 				emit(contentSSE(backstopGraceful))
 			default:
-				final := content
+				final := stripForeignHead(content)
 				// Kapitulasjonsvakten FØR kildekontrollen: svargrenene under er
 				// ikke gjensidig utelukkende (målt at vakten aldri traff da den
 				// lå i én av dem). Erklærer modellen oppgaven umulig ETTER at
@@ -1521,7 +1521,7 @@ func (s *Server) streamBackstop(ctx context.Context, full map[string]any, emit f
 	resp.Body.Close()
 	*promptTokens += usage.PromptTokens
 	*completionTokens += usage.CompletionTokens
-	trim := strings.TrimSpace(content)
+	trim := stripForeignHead(strings.TrimSpace(content))
 	if len([]rune(trim)) < 3 || isJunkAnswer(trim) {
 		s.log.Warn("backstop: formsjekk avviste syntesen", "tegn", len([]rune(trim)))
 		emit(contentSSE(backstopGraceful))
@@ -1712,7 +1712,9 @@ var gaveUpRe = regexp.MustCompile(`(?i)fant (ikke|ingen)|ingen pålitelig|ikke p
 // én ekstra runde, ikke et galt svar). Målt: «ingen tilgjengelige daglige
 // oljeprisdata … korrelasjonsanalyse kan ikke gjennomføres» — etter fire
 // vellykkede kilder og ferske salgstall; kravet om DAGLIGE tall var dens eget.
-var impossibleRe = regexp.MustCompile(`(?i)kan ikke (gjennomføres|beregnes|utføres|analyseres)|ikke mulig å|finnes ingen tilgjengelige|analysen? (er|blir) ikke mulig`)
+var impossibleRe = regexp.MustCompile(`(?i)kan ikke (gjennomføres|beregnes|utføres|analyseres)` +
+	`|(kan|klarer) (jeg |vi )?(dessverre )?ikke (å )?(regne|beregne|gjennomføre|utføre|analysere|fastslå|sammenligne)` +
+	`|ikke mulig å|finnes ingen (åpent )?tilgjengelige|analysen? (er|blir) ikke mulig`)
 
 // attachHintRe: brukeren ba om fil/vedlegg/oversikt i e-posten.
 var attachHintRe = regexp.MustCompile(`(?i)vedlegg|excel|xlsx|regneark|oversikt|rapport|liste|fil\b`)
