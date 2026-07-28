@@ -619,6 +619,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// Kapitulasjonsvakt: «umulig» etter vellykket innsamling godtas aldri —
 	// én tvungen fortsettelse på grunnlaget den HAR.
 	surrenderNudged := false
+	// Tallvakt: et datasvar uten ett eneste siffer, i en tur der spørringene
+	// faktisk ga rader, er aldri i tråd med konklusjonsregelen — målt:
+	// «ingen tydelig korrelasjon basert på de daglige salgstallene», null
+	// tall. Faktatrigger (sifferfravær), aldri formuleringslesing.
+	numberNudged := false
 	// Designlerret: compose har kjørt denne turen, så flater som venter på en
 	// spørring skal få den i én fokusert runde (dataFollowup).
 	composed, dataAsked, dataFilled := false, false, false
@@ -859,6 +864,21 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					full["messages"] = append(msgs,
 						map[string]any{"role": "assistant", "content": final},
 						map[string]any{"role": "user", "content": "Du har allerede hentet interne tall og kilder. Ikke krev mer presisjon enn spørsmålet trenger — gjør analysen med det du HAR (månedstall holder når dagstall mangler), og konkluder. Kun hvis et KONKRET tall faktisk mangler: navngi det."})
+					continue
+				}
+				// Årstall er ikke tallfesting: «ingen korrelasjon i 2025» har
+				// sifre, men null substans. Fjern årstallene før sjekken.
+				if !numberNudged && dbSucceeded &&
+					!strings.ContainsAny(yearRe.ReplaceAllString(final, ""), "0123456789") &&
+					len([]rune(final)) > 40 {
+					numberNudged = true
+					roundCap = round + 1
+					s.log.Info("tallvakt utløst")
+					narr.say("Det der skal tallfestes. En runde til.", kindDB)
+					msgs, _ := full["messages"].([]any)
+					full["messages"] = append(msgs,
+						map[string]any{"role": "assistant", "content": final},
+						map[string]any{"role": "user", "content": "Konklusjonen din mangler tall. Skriv den på nytt og TALLFEST med tallene du allerede har hentet — ved en sammenligning eller korrelasjon skal BEGGE sidene ha tall."})
 					continue
 				}
 				basis := groundingBasis(full, toolResults)
@@ -1700,6 +1720,8 @@ func emitAfter(emit func(string), d time.Duration, status string) func() {
 }
 
 // gaveUpRe: svar som melder tomt uten reell innsats.
+var yearRe = regexp.MustCompile(`\b(19|20)\d\d\b`)
+
 var gaveUpRe = regexp.MustCompile(`(?i)fant (ikke|ingen)|ingen pålitelig|ikke pålitelig informasjon`)
 
 // impossibleRe: modellen erklærer oppgaven umulig. Samme kontraktsklasse som
