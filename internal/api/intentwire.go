@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	encjson "encoding/json"
 	"net/http"
 	"strings"
 	"sync"
@@ -297,7 +298,13 @@ func (s *Server) applyIntent(ctx context.Context, user store.User, full map[stri
 		if flow.MaxChars > 0 {
 			full[flowMaxField] = flow.MaxChars
 		}
-		full["model"] = s.flowModel(flow.Model)
+		// Flytens modell er et GULV, ikke et tak: ruterens egen vurdering av
+		// meldingen («analyser», «hvorfor», «korrelasjon», lange spørsmål)
+		// får eskalere over flyt-defaulten. Målt: data_question tvang
+		// «korrelasjon mellom oljepris og salgene» ned på mid, som ga opp
+		// med stadig nye formuleringer — regexjakt på kapitulasjon tetter
+		// aldri det hullet, riktig modell fra start gjør.
+		full["model"] = router.Stronger(s.flowModel(flow.Model), router.Pick(routerMessages(full)))
 	}
 }
 
@@ -361,4 +368,24 @@ func (s *Server) respondSSEBlock(w http.ResponseWriter, block string) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Write([]byte(contentSSE(block) + "\n\n"))
 	w.Write([]byte("data: [DONE]\n\n"))
+}
+
+// routerMessages konverterer samtalens meldinger til ruterens form, slik at
+// ruterens egen tyngdevurdering kan brukes også på flyt-rutede turer.
+func routerMessages(full map[string]any) []router.Message {
+	msgs, _ := full["messages"].([]any)
+	out := make([]router.Message, 0, len(msgs))
+	for _, m := range msgs {
+		mm, ok := m.(map[string]any)
+		if !ok {
+			continue
+		}
+		role, _ := mm["role"].(string)
+		raw, err := encjson.Marshal(mm["content"])
+		if err != nil {
+			continue
+		}
+		out = append(out, router.Message{Role: role, Content: raw})
+	}
+	return out
 }

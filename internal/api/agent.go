@@ -852,7 +852,10 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				if !surrenderNudged && impossibleRe.MatchString(final) &&
 					(dbSucceeded || len(toolResults) > 0) {
 					surrenderNudged = true
-					roundCap = round + 1
+					// To runder, ikke én: Storm bruker gjerne den første på en
+					// ny spørring (riktig!), og trengte budsjett til å skrive
+					// svaret etterpå — målt at turen ellers endte i backstop.
+					roundCap = round + 2
 					// Jacobs regel (2026-07-28): trenger analysen mer enn
 					// medium leverer, går vi til Storm — eskalering på MÅLT
 					// svikt, aldri på forhånd. Kostnaden treffer kun turer
@@ -1522,6 +1525,27 @@ func (s *Server) streamBackstop(ctx context.Context, full map[string]any, emit f
 	*promptTokens += usage.PromptTokens
 	*completionTokens += usage.CompletionTokens
 	trim := stripForeignHead(strings.TrimSpace(content))
+	if len([]rune(trim)) < 3 || isJunkAnswer(trim) {
+		// Tom/degenerert syntese: én gjenkjøring på MidModel før vi gir oss.
+		// Målt: Storm-eskalert backstop ga null tegn (tenkemodellen brant
+		// svaret i resonnering), og turen endte i «prøv igjen» med ferske
+		// data liggende klare.
+		if m, _ := full["model"].(string); m != router.MidModel {
+			s.log.Warn("backstop: tom syntese, gjenkjører på mid", "modell", m)
+			full["model"] = router.MidModel
+			if body2, err := jsonMarshal(full); err == nil {
+				if req2, err := s.newUpstreamRequest(ctx, body2); err == nil {
+					if resp2, err := s.client.Do(req2); err == nil {
+						_, u2, c2 := s.relayRound(resp2, func(string) {}, false, nil)
+						resp2.Body.Close()
+						*promptTokens += u2.PromptTokens
+						*completionTokens += u2.CompletionTokens
+						trim = stripForeignHead(strings.TrimSpace(c2))
+					}
+				}
+			}
+		}
+	}
 	if len([]rune(trim)) < 3 || isJunkAnswer(trim) {
 		s.log.Warn("backstop: formsjekk avviste syntesen", "tegn", len([]rune(trim)))
 		emit(contentSSE(backstopGraceful))
