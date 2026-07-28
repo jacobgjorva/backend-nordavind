@@ -60,9 +60,6 @@ var heavyMarkers = []string{
 	"bevis", "beregn", "regn ut", "kalkuler", "optimaliser",
 	"hvorfor", "forklar hvordan", "hva er konsekvensen", "fordeler og ulemper",
 	"plan for", "utred", "estimer", "risiko",
-	// Analytiske sammenhenger — målt at «korrelasjon mellom oljepris og
-	// salgene» gikk til mid og kapitulerte i stadig nye formuleringer.
-	"korrelasjon", "sammenheng mellom", "trend", "prognose", "utvikling over",
 }
 
 // topMarkers signaliserer de aller tyngste oppgavene (Tornado) — dyp,
@@ -182,14 +179,4 @@ func matchesAny(text string, markers []string) bool {
 		}
 	}
 	return false
-}
-
-// Stronger velger den sterkeste av to modeller. Brukes der en flyt-default
-// møter ruterens egen vurdering av meldingen: flyten er et gulv, aldri et tak.
-func Stronger(a, b string) string {
-	rank := map[string]int{LightModel: 0, MidModel: 1, HeavyModel: 2, TopModel: 3}
-	if rank[b] > rank[a] {
-		return b
-	}
-	return a
 }
