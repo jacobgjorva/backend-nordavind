@@ -1,0 +1,11 @@
+# Dev-sett for v6-prober. Holdt-tilbake-settet skrives FØRST ved A/B-aksept og leses ikke under design.
+{"id":"r1","class":"relasjon","text":"Vi driver Fjellro Regnskap, et lite regnskapsbyrå i Tromsø med seks ansatte, mest bygg og fiskeri som kunder. Hvem er våre direkte konkurrenter?"}
+{"id":"r2","class":"relasjon","text":"Selskapet vårt lager spesialemballasje i bølgepapp for sjømateksport, rundt 40 millioner i omsetning. Finn sammenlignbare aktører i Norden."}
+{"id":"r3","class":"relasjon","text":"Which firms are the closest peers to a 15-person UX consultancy in Oslo focused on public sector clients?"}
+{"id":"r4","class":"relasjon","text":"Er ScaleAQ en direkte konkurrent av oss? Vi leverer fôrflåter til oppdrettsanlegg."}
+{"id":"a1","class":"anbefaling","text":"Vi trenger et vaktplansystem for 25 ansatte i turnus, helst norsk leverandør. Hva bør vi velge?"}
+{"id":"a2","class":"anbefaling","text":"Anbefal et internkontrollsystem for et lite byggefirma som må dokumentere HMS."}
+{"id":"o1","class":"oppslag","text":"hva er styringsrenten nå?"}
+{"id":"o2","class":"oppslag","text":"hva er fristen for å levere skattemeldingen for aksjeselskap i år?"}
+{"id":"s1","class":"samtale","text":"morn, lang natt på kontoret her"}
+{"id":"u1","class":"uklar","text":"sammenlign oss med de andre"}
