@@ -500,3 +500,32 @@ som prinsipp — brukeren som spør «hva kan jeg forvente?» bestiller et
 anslag, og et system som svarer «vet ikke» er ærligere men ubrukelig.
 Linjen er presisjon som matcher evidens: eksakt fra kilde, avrundet og
 selvmerket ellers, dekningsgulvet som bakvakt.
+
+## Kjøring 14 — rådgivningsmetoden: BESTÅTT i to iterasjoner, koblet inn
+
+Klassen fra RAG-sammenligningen (Fable mot vår modell): rådgivning krever
+standpunkt, situasjonsforankring og det ene manglende spørsmålet — free_chat
+hadde ingen metode, så «hva bør vi»-svar ble kompetente men generiske.
+
+A/B på 6 agn. v1 («spør hvis noe mangler»): menyene forsvant (a2 3→0),
+direkte valg der A hedget (a3), presis oppklaring på vag bestilling (a6) —
+men kontroll a1 røk: rik kontekst, og modellen spurte FØR den rådet.
+Forhåndskriteriet var satt, så ingen etterrasjonalisering: tekst-iterasjon.
+
+v2 («gi rådet på det du VET, si antakelsen, spørsmålet ETTER rådet — spør
+først kun når råd er umulig»): a1 ga rådet direkte med antakelsen uttalt og
+skjerpingsspørsmål sist; a3 beholdt valget; a6 spurte fortsatt først, som
+den lovlige unntaksklassen. Alle tre grønne.
+
+Innkoblet som full løype: katalograd (budsjett 2/1/4, MaxChars 700 — probene
+brukte 1-2 søk per tur), flyt-rad (sticky, Knowledge på, lesebelte),
+register-rad med eksempler på tvers av domener, 8 eval-linjer.
+Intent-eval: 93,3 % mot 91,8 før klassen — ingen regresjon. To gamle
+fasit-linjer («hva synes du om …-planen vår» → fri chat) omklassifisert til
+advisory: ønsket adferd endret seg da klassen kom; linjene var eldre enn
+muligheten.
+
+Kjent interaksjon å følge med på: rådgivningssvar med FORESLÅTTE tall
+(pakkepriser o.l.) kan få dekningsgulvets anslag-merknad når turen har søkt.
+Semantisk er det riktig nok («les som anslag» på et forslag), men om det
+skurrer i praksis, måles det — aldri lappes.
