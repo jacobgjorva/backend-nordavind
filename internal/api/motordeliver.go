@@ -42,10 +42,16 @@ func (w *motorWriter) Write(ctx context.Context, turn *motor.Turn, facts, draft 
 		}
 	}
 
-	instr := "Skriv sluttsvaret til brukeren nå."
+	// Ingen verktøy i skriverunden — og modellen får det SAGT. Uten
+	// setningen skrev den verktøykall som ren tekst når den «ville» søke
+	// mer (målt i prod 2026-07-30: «web\_search {…}» rett i svaret,
+	// markdown-escapet forbi vaktene).
+	instr := "Skriv sluttsvaret til brukeren nå. Du har INGEN verktøy i denne runden: skriv aldri " +
+		"verktøynavn, kall eller kodeblokker — mangler du noe, si heller ærlig hva du ikke fikk sjekket."
 	if facts != "" {
 		instr = "Koden har regnet dette av dataene dine — bruk tallene ordrett:\n" + facts +
-			"\n\nSkriv sluttsvaret til brukeren nå, med konklusjonen tallfestet."
+			"\n\nSkriv sluttsvaret til brukeren nå, med konklusjonen tallfestet. Du har INGEN verktøy " +
+			"i denne runden: skriv aldri verktøynavn eller kall."
 	}
 
 	compact := []any{}

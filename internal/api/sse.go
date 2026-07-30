@@ -183,10 +183,15 @@ const tcClose = "</tool_call>"
 // prosaen («… var «tekoligark»fetch_url{"url": …»). Mønsteret verktøynavn
 // umiddelbart etterfulgt av { finnes aldri i naturlig norsk tekst, så alt
 // fra og med treffet klippes bort — resten av svaret er uansett tapt.
+// bareToolCallRe tåler markdown-escape og NBSP: modellen skriver gjerne
+// «web\_search {» (markdown-trent), og frontenden RENDRER det som
+// «web_search» — vakten så aldri navnet, brukeren så SQL (målt i prod
+// 2026-07-30, andre lekkasje). Understrek matcher derfor med valgfri
+// backslash foran, og mellomrommet før { inkluderer NBSP.
 var bareToolCallRe = regexp.MustCompile(
-	`(web_search|fetch_url|query_database|show_table|m365_search|m365_read|` +
-		`mail_search|mail_read|mail_compose|set_widget|compose|patch|restyle|` +
-		`contact_person|list_agents|update_agent|setup_routine)\s*\{`)
+	`(web\\?_search|fetch\\?_url|query\\?_database|show\\?_table|m365\\?_search|m365\\?_read|` +
+		`mail\\?_search|mail\\?_read|mail\\?_compose|set\\?_widget|compose|patch|restyle|` +
+		`contact\\?_person|list\\?_agents|update\\?_agent|setup\\?_routine)[\s\x{00A0}]*\{`)
 
 // cutBareToolCall klipper et utagget verktøykall og alt etter det.
 func cutBareToolCall(s string) string {
@@ -205,25 +210,31 @@ var toolNames = []string{
 
 // bareToolCallPrefix gir lengden på halen av s som kan være starten på et
 // utagget verktøykall — den holdes igjen til neste chunk avgjør saken.
+// Halen normaliseres (backslash og NBSP fjernes) før sammenligningen, så
+// «web\_se» holdes igjen like sikkert som «web_se».
 func bareToolCallPrefix(s string) int {
-	best := 0
-	for _, name := range toolNames {
-		for k := len(name); k > 0; k-- {
-			if k <= best {
-				break
-			}
-			if strings.HasSuffix(s, name[:k]) {
-				best = k
-				break
+	// Sjekk de siste ~30 råtegnene: lengste verktøynavn + escapes.
+	start := len(s) - 30
+	if start < 0 {
+		start = 0
+	}
+	for i := start; i < len(s); i++ {
+		tail := normToolChars(s[i:])
+		for _, name := range toolNames {
+			if tail != "" && strings.HasPrefix(name, tail) {
+				return len(s) - i
 			}
 		}
 	}
-	return best
+	return 0
 }
 
-// splitToolCallText deler bufret innhold i (trygt innhold å sende, rest å
-// holde igjen, komplette <tool_call>-blokker uten tagger). Resten holdes
-// igjen når den kan være starten på en ny (u)lukket tag.
+// normToolChars fjerner escape-støy for navnesammenligning.
+func normToolChars(s string) string {
+	s = strings.ReplaceAll(s, "\\", "")
+	return strings.ReplaceAll(s, "\u00a0", "")
+}
+
 func splitToolCallText(buf string) (safe, rest string, blocks []string) {
 	var out strings.Builder
 	for {
