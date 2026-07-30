@@ -70,7 +70,14 @@ func main() {
 	outDir := flag.String("out", "loop_runs", "utkatalog")
 	model := flag.String("model", "mistral-large-2512", "modell")
 	omit := flag.Bool("omit", false, "legg på utelatelsesregelen (probe)")
+	verify := flag.Bool("verify", false, "legg på verifiser-påstanden-regelen (probe)")
 	flag.Parse()
+	if *verify {
+		omitRule = " Før du skriver sluttsvaret: pek ut den påstanden i svaret ditt som ville endret " +
+			"brukerens beslutning hvis den er feil, og verifiser akkurat den med ett målrettet søk mot " +
+			"kilden som eier faktumet — aktørens egen side, ikke omtaler eller topplister. Stemmer " +
+			"påstanden ikke lenger, rett den eller stryk den."
+	}
 	if *omit {
 		omitRule = " Nevn bare egenskaper ved aktører og produkter som kildene i denne turen faktisk sier " +
 			"— eierskap, opprinnelse, størrelse og historikk fra egen hukommelse utelates helt. Å si " +

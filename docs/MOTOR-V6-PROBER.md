@@ -435,3 +435,39 @@ relasjoner av metodetekstens kildekrav.
 Lærdom: adferdsgap mot en sterkere modell tettes ikke nødvendigvis med
 flere instrukser. Verifiser-før-gjenta er delvis modellevne; resten av
 gapet bæres ærlig i stedet for å skjules bak regler som ikke måler inn.
+
+## Kjøring 12 — verifiser-påstanden: BESTÅTT, plassert i metodene
+
+Hypotese (fra Toloka/PayPal-funnet): detaljene som glipper bor hos
+primærkilden, og primærkilden dukker bare opp når man søker på PÅSTANDEN,
+ikke temaet. Regel: «verifiser påstanden som ville endret brukerens
+beslutning — ett målrettet søk mot aktørens egen side, ikke omtaler».
+
+A/B på 6 agn (betalingsløsning, GA-lovlighet, gratisnivåer, tilgjengelighet,
+markedsplasser), regelen først globalt:
+
+```
+v5: A søkte 1 toppliste — B søkte «offisiell side» for HVERT gratisnivå
+v3: A søkte 1 toppliste — B søkte leverandørenes egne gratis-planer
+v6: A søkte INGENTING (svarte fra hukommelsen) — B søkte
+v2: B forsøkte å verifisere selve DPF-påstanden … og fikk TOMT svar
+```
+
+v2-feilen er strukturell: oppslag har 1 søk og 2 runder — regelen ba om et
+søk budsjettet avviste, og avslaget brant siste runde. Regelen passer bare
+klasser som har råd til den.
+
+Konsekvens: regelen ligger nå som DATA i anbefaling- og relasjonstekstene,
+ikke globalt. Katalogens lengdevakt avviste første versjon (1 237 > 1 200
+tegn) og tvang en strammere formulering — vaktene gjorde jobben sin.
+
+Bekreftelseskjøring med regelen kun i metodene:
+
+```
+v2/v4 (oppslag, uten regel): fulle svar, 1 søk, 6s — konflikten borte
+v5 (anbefaling): «gratisversjon detaljer» per leverandør — adferden består
+v3 (anbefaling): hentet primærsiden direkte (fetch) — samme mål, annen vei
+```
+
+Kost: verifiserende turer bruker 2-3 søk og ~10s mer. Det er prisen for å
+sjekke det viktigste man er i ferd med å si — kvalitet over tokens.

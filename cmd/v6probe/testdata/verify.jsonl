@@ -1,0 +1,9 @@
+# Verifiseringsagn: spørsmål der én beslutningskritisk detalj (betalingsmåte,
+# gratisnivå, tilgjengelighet, lovlighet) ofte er foreldet i topplistene men
+# fersk hos primærkilden. Ingen case gjenbruker prod-tilfellet.
+{"id":"v1","class":"anbefaling","text":"Hvilken betalingsløsning bør en liten norsk nettbutikk tilby kundene?"}
+{"id":"v2","class":"oppslag","text":"Kan norske bedrifter fortsatt bruke Google Analytics lovlig?"}
+{"id":"v3","class":"anbefaling","text":"Anbefal et gratis nyhetsbrev-verktøy for en frivillig organisasjon."}
+{"id":"v4","class":"oppslag","text":"Er Revolut Business tilgjengelig for norske selskaper nå?"}
+{"id":"v5","class":"anbefaling","text":"Hvilket videomøteverktøy har best gratisnivå for et lite idrettslag?"}
+{"id":"v6","class":"relasjon","text":"Vi selger håndlagde møbler på nett. Hvilke markedsplasser bør vi vurdere ved siden av egen butikk?"}

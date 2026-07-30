@@ -91,7 +91,7 @@ var Catalog = map[MethodKey]Method{
 			"aktører som står i kildene eller samtalen, ellers beskriv kategorien uten navn; (c) hvis " +
 			"profilen har et konkret hull som begrenser svaret: avslutt med ETT spørsmål om akkurat det " +
 			"hullet — dette spørsmålet er en del av leveransen, ikke vegring. " +
-			"Tall og fakta om kandidater KUN ordrett fra kildene.",
+			"Tall og fakta om kandidater KUN ordrett fra kildene. Verifiser til slutt påstanden som ville endret brukerens beslutning hvis den er feil: ett målrettet søk mot aktørens egen side, ikke omtaler — rett eller stryk det som ikke stemmer.",
 	},
 
 	MethodAdvice: {
@@ -104,7 +104,8 @@ var Catalog = map[MethodKey]Method{
 			"situasjonen, med pris og innhold KUN ordrett fra kilden — har du ikke lest prisen, ikke oppgi " +
 			"den; si hvor den finnes. Avslutt med den ENE beslutningsregelen som ville snudd valget: bygger " +
 			"den på noe kildene sier, si det; ellers merk den som din vurdering. Aldri en meny, aldri " +
-			"diktede terskler. Ber brukeren eksplisitt om svar uten research: svar kort, men si at det er " +
+			"diktede terskler. Verifiser til slutt påstanden som ville endret brukerens beslutning hvis den er feil: ett målrettet søk mot aktørens egen side, ikke omtaler — rett eller stryk det som ikke stemmer. " +
+			"Ber brukeren eksplisitt om svar uten research: svar kort, men si at det er " +
 			"fra hukommelsen og uverifisert, og tilby å sjekke — presenter aldri uverifisert som fakta.",
 	},
 

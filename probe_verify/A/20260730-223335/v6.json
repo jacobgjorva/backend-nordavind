@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "v6",
+    "class": "relasjon",
+    "text": "Vi selger håndlagde møbler på nett. Hvilke markedsplasser bør vi vurdere ved siden av egen butikk?"
+  },
+  "method": "relasjon",
+  "answer": "Du vil ha markedsplasser som treffer kunder som leter etter unike, håndlagde møbler og som verdsetter kvalitet og håndverk — ikke massemarkedet. Jeg må sjekke hvilke plattformer som har et tydelig segment for håndverk og design, og om de er tilgjengelige for norske selgere.\n\nHva er ditt viktigste kriterium: volum (mange kunder), høy pris/margin, eller internasjonal rekkevidde? Det påvirker hvilke plattformer som passer best.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 990,
+  "completion_tokens": 125,
+  "total_ms": 4485,
+  "handoff": false,
+  "evidence": null
+}
