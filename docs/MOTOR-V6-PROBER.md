@@ -326,3 +326,46 @@ generelle mekanismen som erstatter scope-parameteren og profil-regexen».
 Det løftet er ikke innfridd, og påstanden er strøket. Tanken har fortsatt
 en målt verdi — turer med tanke brukte halvparten så mange søk — men den
 verdien kommer av at modellen tenker, ikke av at vi gjenbruker teksten.
+
+## Kjøring 9 — del 6: tallkontrollen målt mot ekte svar
+
+Leveransen bruker kildekontrollen fra `grounding.go` som TELEMETRI: den
+logger avvik og lar svaret gå. Ingen dommer, ingen blokkering — v1-v4 hadde
+dommere som felte gode svar oftere enn de reddet dårlige.
+
+For å vite om telemetrien er brukbar, ble den kjørt mot en replay-fixtur:
+ti EKTE modellsvar fra loop-kjøringene, med den ordrette kildeteksten
+verktøyene returnerte (`internal/api/testdata/motor-replay.json`). Alle ti
+er manuelt kontrollert mot kildene i kjøring 7.
+
+Første måling: **7 av 10 svar slo ut**. Samtlige avvik var NAVN:
+
+```
+a2  «West Internkontroll»
+r1  «DA** Regnskapsbyrå**»        ← markørene ble en del av tokenet
+r2  «Mindre Kappa Norge»
+r3  «UX-konsulentbyrå»
+p1  «Anbefaling» «Beslutningsregel» «Prisen» «Prisvinnende»
+p3  «Andre aktører»
+r4  «Andre»
+```
+
+To feil, begge reelle:
+
+1. Kontrollen kjørte på USTRIPPET tekst, så den målte sin egen formatering.
+   Nå strippes svaret først.
+2. Navnekontroll uten dommer er ubrukelig som telemetri. Norsk har stor
+   forbokstav midt i setninger av mange grunner, og legacy løste nettopp
+   dette med et ekstra dommer-kall (judgeClaims). v6 har ingen dommer med
+   vilje. En logg som roper ulv syv av ti ganger blir aldri lest, og da er
+   den verre enn ingen logg.
+
+v6 logger derfor **kun tall**: enten står sifrene i kildene, eller de gjør
+det ikke — etterprøvbart uten skjønn. Etter endringen: 0 av 10 falske
+utslag, og et innplantet oppdiktet tall (2 990 → 7 431 i et ekte svar)
+fanges fortsatt.
+
+Navnekontroll er ikke «glemt», den er FRAVALGT: den krever en mekanisme v6
+ikke har, og skal ikke late som den virker. Metodetekstene bærer kravet i
+stedet («navngi kun aktører som står i kildene»), og det ble målt å virke i
+kjøring 3.

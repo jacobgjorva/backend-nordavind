@@ -133,10 +133,23 @@ avvik → maks ÉN omskriving (eksisterende tolerante løype). MaxChars fra
 flyt-raden (900/700 for research-klassene — kompresjonsgulvet skal aldri
 amputere svarkontraktens tre deler). Deretter gulv-appends og [DONE].
 
-Ferdig: leveranse-enhetstester (omskriving kun ved fakta/tomt, én-gangs
-reground, strip før emit); tallkontrollen fanger de probede
-diktings-tilfellene (r2-omsetning, p6-spennet) i replay av transkriptene —
-ekte modellsvar som testdata, ikke mocks.
+STATUS: FERDIG. `internal/motor/deliver.go` eier flyten (fakta → ETT
+skrivekall ved behov → ærlig bunn → telemetri → gulv → slutt);
+`internal/api/motordeliver.go` er skriveren (kompakt kontekst, verktøy av)
+og tallkontrollen.
+
+Replay-fixtur av ti EKTE svar med ordrett kildetekst
+(`internal/api/testdata/motor-replay.json`) er testdata for kontrollen —
+innspilt virkelighet, ikke mocks.
+
+MÅLT OG ENDRET: kontrollen slo ut på 7 av 10 forankrede svar, alle på NAVN.
+v6 logger nå kun tall (se probelogg kjøring 9). Navnekontroll krever en
+dommer v6 ikke har, og er fravalgt, ikke glemt.
+
+ÅPENT OG MERKET: `motorFacts` returnerer tom streng. Seriestatistikk og
+Pearson finnes bare på engine-experiment, og umålt kode porteres ikke.
+Leveransen hopper da over omskrivingen, nøyaktig som når det ikke er noe å
+regne.
 
 ## Del 7 — ruting og klebrighet
 

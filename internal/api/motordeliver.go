@@ -1,0 +1,130 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+
+	"github.com/jacobgjorva/backend-nordavind/internal/motor"
+)
+
+// Leveransens api-side: skriveren og tallkontrollen.
+//
+// Begge er tynne adaptere over kode som allerede finnes og er målt —
+// upstream-kallet i server.go og kildekontrollen i grounding.go. Ingen ny
+// vurderingslogikk her.
+
+// motorWriter skriver sluttsvaret når utkastet ikke holder. ETT kall med
+// kompakt kontekst: persona + samtale + fakta. Aldri hele historikken på
+// nytt — den var den største enkeltposten i tokenregnskapet.
+type motorWriter struct {
+	s    *Server
+	full map[string]any
+	// promptTokens/completionTokens føres på turens regnskap.
+	promptTokens, completionTokens *int
+}
+
+func (w *motorWriter) Write(ctx context.Context, turn *motor.Turn, facts, draft string) string {
+	fixed := map[string]any{}
+	for k, v := range w.full {
+		fixed[k] = v
+	}
+
+	// Persona beholdes; alt annet erstattes av et utdrag.
+	var sysText string
+	if msgs, ok := w.full["messages"].([]any); ok {
+		for _, m := range msgs {
+			if mm, ok := m.(map[string]any); ok && mm["role"] == "system" {
+				sysText = messageText(mm["content"])
+				break
+			}
+		}
+	}
+
+	instr := "Skriv sluttsvaret til brukeren nå."
+	if facts != "" {
+		instr = "Koden har regnet dette av dataene dine — bruk tallene ordrett:\n" + facts +
+			"\n\nSkriv sluttsvaret til brukeren nå, med konklusjonen tallfestet."
+	}
+
+	compact := []any{}
+	if sysText != "" {
+		compact = append(compact, map[string]any{"role": "system", "content": sysText})
+	}
+	compact = append(compact,
+		map[string]any{"role": "user", "content": "SAMTALEN:\n" + recentTurn(w.full) +
+			"\n\nSPØRSMÅL: " + turn.Question},
+		map[string]any{"role": "user", "content": instr})
+	fixed["messages"] = compact
+	// Uten verktøy i denne runden: svaret skal skrives, ikke hentes på nytt.
+	disableTools(fixed)
+
+	body, err := json.Marshal(fixed)
+	if err != nil {
+		return draft
+	}
+	req, err := w.s.newUpstreamRequest(ctx, strings.NewReader(string(body)))
+	if err != nil {
+		return draft
+	}
+	resp, err := w.s.client.Do(req)
+	if err != nil {
+		return draft
+	}
+	defer resp.Body.Close()
+	_, usage, content := w.s.relayRound(resp, func(string) {}, false, nil)
+	if w.promptTokens != nil {
+		*w.promptTokens += usage.PromptTokens
+	}
+	if w.completionTokens != nil {
+		*w.completionTokens += usage.CompletionTokens
+	}
+	turn.Usage.PromptTokens += usage.PromptTokens
+	turn.Usage.CompletionTokens += usage.CompletionTokens
+
+	if c := strings.TrimSpace(content); c != "" {
+		return c
+	}
+	return draft
+}
+
+// motorVerifier er kildekontrollen fra grounding.go, brukt som TELEMETRI.
+//
+// KUN TALL. offendersAgainst sjekker både tall og egennavn, men navnedelen
+// er ubrukelig som telemetri uten en dommer bak: målt på ti ekte,
+// manuelt kontrollerte svar slo den ut på syv — «Andre aktører»,
+// «Anbefaling», «Prisen», «UX-konsulentbyrå». Norsk har stor forbokstav
+// midt i setninger av mange grunner, og legacy løste det med et
+// dommer-kall (judgeClaims). v6 har ingen dommer med vilje, så
+// navnekontroll ville bare fylt loggen med støy ingen leser.
+//
+// Et tall er derimot etterprøvbart uten skjønn: enten står sifrene i
+// kildene, eller de gjør det ikke.
+//
+// minDigits=3: telling og formuleringer («én av tre», «to ganger») skal
+// aldri havne i logg som dikting. Samme terskel som legacy bruker på
+// verktøyturer.
+//
+// Svaret strippes først: uten det blir markørene en del av tokenet
+// («DA** Regnskapsbyrå**») og kontrollen måler sin egen formatering.
+type motorVerifier struct{}
+
+func (motorVerifier) Unsupported(answer string, basis []string) []string {
+	var nums []string
+	for _, o := range offendersAgainst(motor.StripEmphasis(answer), basis, 3) {
+		if normDigits(o) != "" {
+			nums = append(nums, o)
+		}
+	}
+	return nums
+}
+
+// motorFacts regner det koden kan regne selv av turens data.
+//
+// IKKE PORTERT ENNÅ: seriestatistikk og Pearson-korrelasjon finnes bare på
+// engine-experiment. Å kopiere umålt kode hit ville brutt regelen om at
+// gulv skal være verifiserte, så laget returnerer tom streng — leveransen
+// hopper da over omskrivingen, nøyaktig som når det ikke er noe å regne.
+type motorFacts struct{}
+
+func (motorFacts) Facts(*motor.Turn) string { return "" }
