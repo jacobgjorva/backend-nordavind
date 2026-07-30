@@ -1,0 +1,33 @@
+# HOLDT-TILBAKE-SETT for A/B-aksepten (docs/MOTOR-V6.md del 10).
+#
+# Skrevet FØR første A/B-kjøring, etter at designet og metodetekstene var
+# låst (git-historikken viser rekkefølgen). Ingen prompt er gjenbrukt fra
+# dev-settet, og ingen er hentet fra en tidligere feilsak.
+#
+# ÆRLIG SVAKHET: settet er skrevet av den som bygde motoren. Ideelt skulle
+# en uavhengig part skrevet det. Domenene er derfor valgt bevisst utenfor
+# alt som er brukt under utviklingen: ingen vin, emballasje, regnskapsbyrå,
+# vaktplan, HMS, UX eller oppdrett.
+#
+# klasse styrer hvilken metode ruteren bør velge; assert er egenskapene
+# svaret måles på ved blindlesing.
+{"id":"h01","class":"relasjon","text":"Vi driver Nordre Dalen Trelast, et lite sagbruk i Innlandet som leverer spesialskåret furu til restaurering av verneverdige bygg. Hvem er våre direkte konkurrenter?"}
+{"id":"h02","class":"relasjon","text":"Firmaet vårt reparerer og vedlikeholder heiser i næringsbygg i Bergensområdet, ni montører. Hvilke aktører konkurrerer vi mot?"}
+{"id":"h03","class":"relasjon","text":"Which companies are the closest peers to a small Norwegian studio that localises video games into Nordic languages?"}
+{"id":"h04","class":"relasjon","text":"Vi selger abonnement på digitale kurs i førstehjelp til barnehager. Er Røde Kors en direkte konkurrent for oss?"}
+{"id":"h05","class":"relasjon","text":"Hvilke aktører ligner mest på oss? Vi driver mobil dekkskift og hjulhotell for bedriftsflåter i Stavanger."}
+{"id":"h06","class":"relasjon","text":"Vi lager håndsydde seilduksbager i Ålesund, rundt 3 millioner i omsetning. Finn sammenlignbare merkevarer i Skandinavia."}
+{"id":"h07","class":"anbefaling","text":"Vi trenger et system for å håndtere utleie av anleggsmaskiner med timeregistrering og fakturering. Hva bør vi velge?"}
+{"id":"h08","class":"anbefaling","text":"Anbefal et verktøy for å planlegge og dokumentere vedlikehold på et mindre gårdsbruk."}
+{"id":"h09","class":"anbefaling","text":"Hvilken løsning bør en tannlegeklinikk med fire behandlere bruke til timebestilling på nett?"}
+{"id":"h10","class":"anbefaling","text":"Vi må ha noe for å holde styr på sertifikater og kurs for 40 ansatte i en elektrobedrift. Forslag?"}
+{"id":"h11","class":"anbefaling","text":"Hva slags kassasystem passer for en liten gårdsbutikk som også selger på markeder?"}
+{"id":"h12","class":"oppslag","text":"hva er maksimal tillatt totalvekt for en bil du kan kjøre på førerkort klasse B?"}
+{"id":"h13","class":"oppslag","text":"når trer den nye åpenhetsloven i kraft for mindre virksomheter?"}
+{"id":"h14","class":"oppslag","text":"hva koster en tomannsbolig i Bodø i snitt nå?"}
+{"id":"h15","class":"oppslag","text":"hvor mye er minstefradraget i år?"}
+{"id":"h16","class":"samtale","text":"tusen takk for hjelpen, dette var nyttig"}
+{"id":"h17","class":"samtale","text":"jeg er litt usikker på om vi gjør dette riktig, egentlig"}
+{"id":"h18","class":"uklar","text":"kan du finne ut hvor mye de tar?"}
+{"id":"h19","class":"uklar","text":"stemmer det som ble sagt i går?"}
+{"id":"h20","class":"relasjon","text":"Vi driver et lite bryggeri i Trøndelag som bare selger fatøl til utesteder, ingen flasker. Hvem konkurrerer vi egentlig med?"}
