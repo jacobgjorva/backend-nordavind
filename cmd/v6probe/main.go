@@ -80,7 +80,8 @@ var methods = map[string]string{
 		"situasjonen, med pris og innhold KUN ordrett fra kilden — har du ikke lest prisen, ikke oppgi " +
 		"den; si hvor den finnes. Avslutt med den ENE beslutningsregelen som ville snudd valget: bygger " +
 		"den på noe kildene sier, si det; ellers merk den som din vurdering. Aldri en meny, aldri " +
-		"diktede terskler.",
+		"diktede terskler. Ber brukeren eksplisitt om svar uten research: svar kort, men si at det er " +
+		"fra hukommelsen og uverifisert, og tilby å sjekke — presenter aldri uverifisert som fakta.",
 	"samtale": " METODE: Ingen verktøy trengs. Svar kort med husets stemme. Er det et reelt behov bak " +
 		"småpraten, pek på det i én setning.",
 }

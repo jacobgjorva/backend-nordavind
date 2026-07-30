@@ -1,0 +1,19 @@
+{
+  "case": {
+    "id": "p4",
+    "class": "anbefaling",
+    "text": "Hvilket lagerstyringssystem bør vi velge? Bare gi meg et kjapt svar, ikke noe research."
+  },
+  "variant": "think=true method=auto reason= model=mistral-large-2512",
+  "rounds": [
+    {
+      "latency_ms": 3415
+    }
+  ],
+  "answer": "Et kjapt, uverifisert svar fra hukommelsen: For små til mellomstore bedrifter er **Odoo Inventory** ofte et godt valg fordi det er brukervennlig, modulbasert og rimelig. For større virksomheter eller mer avanserte behov, er **SAP EWM** eller **Infor WMS** vanlige løsninger. Hvis du vil, kan jeg sjekke oppdaterte anbefalinger og priser for akkurat deres behov.",
+  "searches": 0,
+  "fetches": 0,
+  "prompt_tokens": 923,
+  "completion_tokens": 111,
+  "total_ms": 3415
+}
