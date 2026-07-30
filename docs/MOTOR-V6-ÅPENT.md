@@ -64,3 +64,31 @@ leverandør-forgreningen er borte.
 
 Rekkefølge: sett env på serveren → deploy → verifiser at
 «dommer feilet»-linjer IKKE dukker opp i loggen.
+
+## 6. Kildefrie svar i free_chat har intet ærlighetsmerke
+
+Målt i prod 2026-07-30 (logglinjene 21:04-21:05): «ja gjerne» etter et
+web_fact-svar falt via sticky til free_chat metode="" — naken løkke. Svaret
+var en anbefaling fra hukommelsen («start med Toloka fra Yandex», foreldet
+attributt), uten søk, og uten merknad: dekningsgulvet krever både en
+kildekrevende metode OG tall, og her fantes ingen av delene.
+
+Viktig presisering fra samme logg: NESTE oppfølging («hva kan jeg forvente
+i betaling?») rutet KORREKT til recommendation/anbefaling — verifiser-
+regelen var aktiv, modellen lot likevel være å søke, og gulvet merket
+svaret. Regeletterlevelse er probabilistisk; ærligheten er gulvet.
+
+Kandidat-løsninger, ingen valgt ennå:
+- Rådgivningsmetode på free_chat (planlagt probe) dekker deler av klassen,
+  men free_chat er bunnflyten for ALT — stor blastradius, må probes bredt.
+- Dekningsgulvets «hukommelse»-variant kunne utvides til kildekrevende
+  SPØRSMÅL uten evidens selv uten tall — men «kildekrevende» er semantisk
+  når metoden mangler, og det er dommer-territorium. Ikke bygg uten måling.
+
+## 7. Sticky-arv når samtalen bytter oppgaveklasse
+
+Samme logg: sticky er designet for elliptiske oppfølginger («sikker?»), men
+en samtale kan BYTTE klasse underveis (faktum → anbefaling). «ja gjerne»
+som aksept av et tilbud assistenten selv ga, arver forrige flyt i stedet
+for tilbudets klasse. Dokumentert med denne samtalen som belegg; avgjøres
+med holdout-måling, ikke fra caset.
