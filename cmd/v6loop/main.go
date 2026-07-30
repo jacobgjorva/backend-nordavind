@@ -48,15 +48,19 @@ const baseSystem = "Svar KORTEST MULIG, men alltid i hele, naturlige setninger �
 	"en steg-for-steg-plan. Først når verktøyene har svart, skriver du svaret."
 
 var classMethod = map[string]motor.MethodKey{
-	"relasjon":   motor.MethodRelation,
-	"anbefaling": motor.MethodAdvice,
-	"oppslag":    motor.MethodLookup,
-	"samtale":    motor.MethodSmalltalk,
-	"analyse":    motor.MethodAnalysis,
+	"raadgivning": motor.MethodAdvisory,
+	"relasjon":    motor.MethodRelation,
+	"anbefaling":  motor.MethodAdvice,
+	"oppslag":     motor.MethodLookup,
+	"samtale":     motor.MethodSmalltalk,
+	"analyse":     motor.MethodAnalysis,
 }
 
 // omitRule settes av -omit: utelatelsesregelen som probes.
 var omitRule string
+
+// budgetLine: -budget forteller modellen metodens svarbudsjett.
+var budgetLine bool
 
 type probeCase struct {
 	ID    string `json:"id"`
@@ -73,7 +77,9 @@ func main() {
 	verify := flag.Bool("verify", false, "legg på verifiser-påstanden-regelen (probe)")
 	precision := flag.Bool("precision", false, "legg på presisjonsregelen (probe)")
 	advis := flag.Bool("advis", false, "legg på rådgivningsmetoden (probe)")
+	budget := flag.Bool("budget", false, "fortell modellen svarbudsjettet (probe)")
 	flag.Parse()
+	budgetLine = *budget
 	if *advis {
 		omitRule = " METODE: Brukeren ber om råd — leveransen er et standpunkt, ikke en oversikt. " +
 			"(1) Utled hva brukeren faktisk skal beslutte eller oppnå, og la rådet svare på DET. " +
@@ -165,6 +171,11 @@ func run(client *http.Client, sc *search.Client, cfg config.Config, log *slog.Lo
 
 	method := classMethod[c.Class]
 	system := motor.BuildSystem(baseSystem+omitRule, method, true)
+	if budgetLine {
+		if mc := motor.BudgetFor(method).MaxChars; mc > 0 {
+			system += fmt.Sprintf(" Hold sluttsvaret under cirka %d ord — kutt ord, aldri fakta.", mc/6)
+		}
+	}
 
 	payload := map[string]any{
 		"model": model, "stream": false, "temperature": 0.3,

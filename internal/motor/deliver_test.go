@@ -185,3 +185,53 @@ func TestDeliverStripsEmphasisFromRewrite(t *testing.T) {
 		t.Errorf("fet skrift overlevde leveransen: %q", out.content[0])
 	}
 }
+
+type fakeCompress struct{ out string }
+
+func (f fakeCompress) Compress(_ context.Context, _ string, _ int) string { return f.out }
+
+// Lengdegulvet: komprimering godtas kun når koden har verifisert at alt
+// overlevde — ellers leveres originalen. Gulvet kan aldri miste fakta.
+func TestCompressionFloorKeepsFactsOrFallsBack(t *testing.T) {
+	long := strings.Repeat("Dette er fyll og gjentakelse som sier det samme. ", 30) +
+		"Prisen er 6 825 kroner, og fristen er 14 dager. Vil du ha detaljer?"
+
+	// God komprimering: kortere, alle tall, spørsmålet beholdt → leveres.
+	good := "Prisen er 6 825 kroner og fristen 14 dager. Vil du ha detaljer?"
+	out := &fakeOut{}
+	d := &Delivery{Out: out, Compress: fakeCompress{good}, Limit: 300}
+	d.Deliver(context.Background(), &Turn{}, long)
+	if out.content[0] != good {
+		t.Errorf("god komprimering skulle vært levert, fikk %d tegn", len(out.content[0]))
+	}
+
+	// Mistet et tall → originalen leveres.
+	bad := "Prisen er 6 825 kroner. Vil du ha detaljer?" // 14 borte
+	out2 := &fakeOut{}
+	d2 := &Delivery{Out: out2, Compress: fakeCompress{bad}, Limit: 300}
+	d2.Deliver(context.Background(), &Turn{}, long)
+	if !strings.Contains(out2.content[0], "14 dager") {
+		t.Error("tapt tall skal gi originalen, ikke komprimeringen")
+	}
+
+	// Under grensen → ingen komprimering i det hele tatt.
+	short := "Kort svar med 42 tegn i seg."
+	out3 := &fakeOut{}
+	d3 := &Delivery{Out: out3, Compress: fakeCompress{"skal aldri brukes"}, Limit: 300}
+	d3.Deliver(context.Background(), &Turn{}, short)
+	if out3.content[0] != short {
+		t.Error("korte svar skal ikke røres")
+	}
+}
+
+// Mistet sluttspørsmål → original.
+func TestCompressionFloorKeepsTrailingQuestion(t *testing.T) {
+	long := strings.Repeat("fyll og atter fyll som gjentar seg selv her. ", 30) + "Hva er viktigst for dere?"
+	noQ := "Kort versjon uten spørsmålet."
+	out := &fakeOut{}
+	d := &Delivery{Out: out, Compress: fakeCompress{noQ}, Limit: 300}
+	d.Deliver(context.Background(), &Turn{}, long)
+	if !strings.Contains(out.content[0], "?") {
+		t.Error("tapt spørsmål skal gi originalen")
+	}
+}

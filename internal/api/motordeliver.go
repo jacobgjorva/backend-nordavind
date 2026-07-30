@@ -3,10 +3,12 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/motor"
+	"github.com/jacobgjorva/backend-nordavind/internal/router"
 )
 
 // Leveransens api-side: skriveren og tallkontrollen.
@@ -159,3 +161,46 @@ func (motorForm) IsJunk(text string) bool { return isJunkAnswer(text) }
 type motorFacts struct{}
 
 func (motorFacts) Facts(*motor.Turn) string { return "" }
+
+// motorCompress er lengdegulvets modellkall — samme prompt som proben
+// (kjøring 15) validerte på ekte lange svar.
+type motorCompress struct {
+	s                              *Server
+	promptTokens, completionTokens *int
+}
+
+const compressInstr = `Komprimer teksten under til godt under %d tegn, på norsk.
+UFRAVIKELIG: behold HVERT tall, HVERT navn og HVERT faktum ordrett — kutt kun fyll, gjentakelser og omskrivinger.
+Behold standpunktet/anbefalingen med begrunnelse, en eventuell avgrensning mot det som IKKE passer, og et eventuelt avsluttende spørsmål.
+Løpende tekst, ingen lister. Svar KUN med den komprimerte teksten.
+
+TEKST:
+%s`
+
+func (c *motorCompress) Compress(ctx context.Context, answer string, limit int) string {
+	body, err := json.Marshal(map[string]any{
+		"model": router.MidModel, "stream": false, "temperature": 0.2, "max_tokens": 900,
+		"messages": []any{map[string]any{"role": "user",
+			"content": fmt.Sprintf(compressInstr, limit, answer)}},
+	})
+	if err != nil {
+		return ""
+	}
+	req, err := c.s.newUpstreamRequest(ctx, strings.NewReader(string(body)))
+	if err != nil {
+		return ""
+	}
+	resp, err := c.s.client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	_, usage, content := c.s.relayRound(resp, func(string) {}, false, nil)
+	if c.promptTokens != nil {
+		*c.promptTokens += usage.PromptTokens
+	}
+	if c.completionTokens != nil {
+		*c.completionTokens += usage.CompletionTokens
+	}
+	return strings.TrimSpace(content)
+}

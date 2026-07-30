@@ -529,3 +529,29 @@ Kjent interaksjon å følge med på: rådgivningssvar med FORESLÅTTE tall
 (pakkepriser o.l.) kan få dekningsgulvets anslag-merknad når turen har søkt.
 Semantisk er det riktig nok («les som anslag» på et forslag), men om det
 skurrer i praksis, måles det — aldri lappes.
+
+## Kjøring 15 — lengdegulvet: BESTÅTT og koblet inn
+
+Bakgrunn: ordgrense i prompten målte null (median 0,99 — stil lar seg ikke
+styre på denne modellen; adferd gjør). Tetthet håndheves derfor i
+leveransen, ikke ved kilden.
+
+Probe på åtte EKTE lange svar (1 279-2 516 tegn) fra tidligere kjøringer,
+komprimert med ett kall og sjekket mekanisk:
+
+```
+median 36 % kortere (0,42-0,80)
+tall tapt:      1 av 8 (v1 mistet «100»)
+kontrakt tapt:  0 av 8 (alle sluttspørsmål overlevde)
+diktede tall:   0 av 8
+```
+
+Gulvet i drift: utløses kun når svaret overstiger metodens MaxChars med
+50 %, ett kall, og komprimeringen godtas KUN når koden deterministisk har
+verifisert at hvert rene tall og et eventuelt sluttspørsmål overlevde —
+ellers leveres originalen og avviket logges. Det målte talltapet (1 av 8)
+er dermed ufarlig i prod: den casen ville fått originalen.
+
+Kostnad: ett ekstra kall kun på oversized turer. Stil-lærdommen står
+generelt: instrukser som endrer ADFERD måler inn, instrukser som endrer
+STIL måler null — form håndheves i kode.

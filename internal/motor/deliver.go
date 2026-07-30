@@ -2,6 +2,7 @@ package motor
 
 import (
 	"context"
+	"regexp"
 	"strings"
 )
 
@@ -40,6 +41,12 @@ type Verifier interface {
 	Unsupported(answer string, basis []string) []string
 }
 
+// Compressor skriver et svar tettere uten å miste innhold. Brukes av
+// lengdegulvet; tom streng betyr at komprimeringen feilet.
+type Compressor interface {
+	Compress(ctx context.Context, answer string, limit int) string
+}
+
 // FormChecker avgjør om en tekst er ødelagt struktur (lekket verktøykall-
 // JSON, degenerert output) som aldri skal vises. Dette er en FAKTA-sjekk
 // på form (klammer, anførselstegn, bokstavandel) — aldri på innhold, og
@@ -61,7 +68,14 @@ type Delivery struct {
 	// v6 manglet den, og et utkast fullt av verktøysyntaks gikk rett til
 	// brukeren (målt i prod 2026-07-30).
 	Form FormChecker
-	Log  Logger
+	// Compress er lengdegulvet. Probet (kjøring 15): median 36 % kortere,
+	// null kontrakttap, null diktede tall på åtte ekte lange svar. Utløses
+	// KUN på et observerbart faktum (svaret overstiger metodens budsjett
+	// med 50 %), og resultatet godtas KUN når koden har verifisert at
+	// hvert rene tall og et eventuelt avsluttende spørsmål overlevde —
+	// ellers leveres originalen. Gulvet kan altså aldri miste fakta.
+	Compress Compressor
+	Log      Logger
 	// Limit er svarbudsjettet (metodens tak, ellers flytens).
 	Limit int
 	// EmptyExplain er databasens egen redegjørelse når alt feilet.
@@ -116,6 +130,21 @@ func (d *Delivery) Deliver(ctx context.Context, turn *Turn, draft string) {
 		answer = HonestEmpty(turn, explain)
 	}
 
+	// Lengdegulvet: stil lar seg ikke styre i prompt (målt — ordgrense-
+	// instruks ga median 0,99), så tettheten håndheves her i stedet.
+	if d.Compress != nil && d.Limit > 0 {
+		if r := []rune(answer); len(r) > d.Limit*3/2 {
+			if tight := strings.TrimSpace(d.Compress.Compress(ctx, answer, d.Limit)); tight != "" {
+				if compressionKeptFacts(answer, tight) {
+					answer = tight
+				} else if d.Log != nil {
+					d.Log.Warn("motor v6: komprimering forkastet, mistet innhold",
+						"metode", string(turn.Method))
+				}
+			}
+		}
+	}
+
 	// Tallkontroll. Grunnlaget er alt turen faktisk hentet, det koden
 	// regnet, brukerens eget spørsmål OG samtalen — et tall brukeren selv
 	// oppga eller fikk i forrige tur er ikke dikting.
@@ -139,4 +168,37 @@ func (d *Delivery) Deliver(ctx context.Context, turn *Turn, draft string) {
 
 	d.Answer = StripEmphasis(answer)
 	DeliverWithFloors(d.Out, d.Floors, turn, answer, d.Limit)
+}
+
+// compressionKeptFacts: godta komprimeringen bare når den faktisk er
+// kortere, har beholdt HVERT rene tall (som siffersekvens), og ikke har
+// mistet et avsluttende spørsmål. Ren kode — komprimeringens sikkerhetsnett
+// er deterministisk, aldri en dommer.
+func compressionKeptFacts(original, tight string) bool {
+	if len([]rune(tight)) >= len([]rune(original)) {
+		return false
+	}
+	tightDigits := digitsOnly(tight)
+	for _, tok := range numTokenRe.FindAllString(original, -1) {
+		d := digitsOnly(tok)
+		if len(d) >= 2 && !strings.Contains(tightDigits, d) {
+			return false
+		}
+	}
+	if strings.Contains(original, "?") && !strings.Contains(tight, "?") {
+		return false
+	}
+	return true
+}
+
+var numTokenRe = regexp.MustCompile(`\d[\d .,]*\d|\d`)
+
+func digitsOnly(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
