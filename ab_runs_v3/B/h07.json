@@ -1,0 +1,18 @@
+{
+  "case": {
+    "id": "h07",
+    "class": "anbefaling",
+    "text": "Vi trenger et system for å håndtere utleie av anleggsmaskiner med timeregistrering og fakturering. Hva bør vi velge?"
+  },
+  "side": "B",
+  "answer": "Velg Leasi som system for utleie av anleggsmaskiner med timeregistrering og fakturering. Det er utviklet for norske forhold, brukes av store aktører som Skanska og NRC Group, og gir deg kontroll på maskinpark, vedlikehold, utleie og fakturering i én plattform.\n\nDet viktigste for dere er at systemet er skreddersydd for anleggsmaskiner og allerede er i bruk i bransjen. Gå til [leasi.io/utleier](https://www.leasi.io/utleier) og bestill en demo.",
+  "steps": [
+    "Brukeren trenger et ferdig system for utleie av anleggsmaskiner med timeregistrering og fakturering, ikke en utviklingsoppgave.",
+    "Sjekker \"beste utleiesystem for anleggsmaskiner med timer...\" på nettet.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 4,
+  "ttft_ms": 14890,
+  "total_ms": 14890
+}

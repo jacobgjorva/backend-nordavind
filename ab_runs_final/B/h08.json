@@ -1,0 +1,18 @@
+{
+  "case": {
+    "id": "h08",
+    "class": "anbefaling",
+    "text": "Anbefal et verktøy for å planlegge og dokumentere vedlikehold på et mindre gårdsbruk."
+  },
+  "side": "B",
+  "answer": "For et mindre gårdsbruk er Skifteplan det beste verktøyet for å planlegge og dokumentere vedlikehold. Det er utviklet spesielt for norske forhold, dekker alle krav til dokumentasjon, og lar deg registrere både planlagte og utførte vedlikeholdstiltak direkte fra traktoren eller kontoret. Du får også varsler om frister og kan enkelt lage rapporter for tilsyn.\n\nHvis du trenger å dokumentere service på maskiner, bygninger og utstyr i samme system, er Agrilogg et godt alternativ. Det er også norsk, enkelt å tilpasse, og sender varsler om viktige frister.\n\nJeg ville startet med Skifteplan, siden det er mest brukt blant bønder og dekker både vedlikehold og lovpålagt dokumentasjon i ett.",
+  "steps": [
+    "Jeg vet at små gårdsbruk trenger enkle, rimelige verktøy som både hjelper med planlegging og dokumentasjon av vedlikehold, uten for mye administrasjon.",
+    "Søker på \"beste verktøy for vedlikeholdsplanlegging og dok...\".",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom."
+  ],
+  "sources": 4,
+  "ttft_ms": 12591,
+  "total_ms": 12591
+}

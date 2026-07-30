@@ -1,0 +1,20 @@
+{
+  "case": {
+    "id": "h20",
+    "class": "relasjon",
+    "text": "Vi driver et lite bryggeri i Trøndelag som bare selger fatøl til utesteder, ingen flasker. Hvem konkurrerer vi egentlig med?"
+  },
+  "side": "B",
+  "answer": "De viktigste konkurrentene deres i Trøndelag er de lokale håndverksbryggeriene som også leverer fatøl til utesteder. De mest relevante er:\n\nAustmann Bryggeri i Trondheim er et av de mest kjente og leverer både til utesteder og butikk. De har et bredt sortiment og er godt etablert i regionen. Hammerhead Brewing Company, også i Trondheim, er et mindre bryggeri som satser på kvalitet og leverer fatøl til flere utesteder i byen. Klostergården Håndbryggeri på Tautra leverer i hovedsak til egen restaurant, men har også noe salg til andre utesteder i regionen. Northbrew, som ligger i Steinkjer, selger både fat og bokser, og leverer fatøl til utesteder i Trøndelag.\n\nI tillegg kommer noen av de større, nasjonale aktørene som Ringnes og Hansa Borg, som også leverer fatøl til mange utesteder i Trøndelag, men de er ikke direkte konkurrenter på håndverksøl-nisjen.\n\nFor å kartlegge konkurransen nærmere, ville jeg sjekket hvilke utesteder som har hvilke bryggeriers fatøl på menyen, for eksempel ved å ringe eller besøke noen av de største utestedene i Trondheim og Steinkjer.",
+  "steps": [
+    "Du trenger en oversikt over hvilke bryggerier som leverer fatøl til utesteder i Trøndelag, gjerne med fokus på de som har lignende størrelse eller profil som dere.",
+    "Sjekker \"aktive bryggerier i Trøndelag 2026\" på nettet.",
+    "4 treff. Siler ut det som duger.",
+    "Leter etter \"bryggerier i Trøndelag som selger fatøl til utes...\".",
+    "Nettet er tregt akkurat nå. Leter videre.",
+    "4 treff. Siler ut det som duger."
+  ],
+  "sources": 8,
+  "ttft_ms": 27596,
+  "total_ms": 27596
+}

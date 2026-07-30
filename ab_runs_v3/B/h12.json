@@ -1,0 +1,20 @@
+{
+  "case": {
+    "id": "h12",
+    "class": "oppslag",
+    "text": "hva er maksimal tillatt totalvekt for en bil du kan kjøre på førerkort klasse B?"
+  },
+  "side": "B",
+  "answer": "På førerkort klasse B i Norge kan du kjøre en bil med maksimal tillatt totalvekt på 3 500 kg. Det finnes et unntak for visse elektriske eller alternative drivstoff-lastebiler (N2) som kan ha tillatt totalvekt opp til 4 250 kg, men da må du ha hatt klasse B i mer enn to år, og bilen må oppfylle spesielle vilkår som dokumenteres i vognkortet. For vanlige personbiler og de fleste tilfeller gjelder fortsatt 3 500 kg som absolutt maksgrense.",
+  "steps": [
+    "Sjekker \"maksimal tillatt totalvekt klasse B førerkort No...\" på nettet.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser.",
+    "På førerkort klasse B i Norge er maksimal tillatt totalvekt for bilen du kan kjøre 3 500 kg. Det er ikke innført noen generell økning av denne grensen per juli 2026.",
+    "Tar en titt på vegvesen.no.",
+    "Lest ferdig. Tar med meg det brukbare."
+  ],
+  "sources": 4,
+  "ttft_ms": 15389,
+  "total_ms": 15389
+}

@@ -1,0 +1,15 @@
+{
+  "case": {
+    "id": "h11",
+    "class": "anbefaling",
+    "text": "Hva slags kassasystem passer for en liten gårdsbutikk som også selger på markeder?"
+  },
+  "side": "A",
+  "answer": "For en liten gårdsbutikk som også selger på markeder, passer et mobilt og enkelt kassasystem med offline-funksjon, lav månedskostnad og mulighet for både kortbetaling og kontantregistrering.\n\n**Anbefaling:**\n… – her stopper jeg: resten hadde jeg ikke dekning for i kildene. Se bort fra den halve setningen over.",
+  "steps": [
+    "Dobbeltsjekker mot kildene"
+  ],
+  "sources": 0,
+  "ttft_ms": 6146,
+  "total_ms": 31621
+}

@@ -1,0 +1,23 @@
+{
+  "case": {
+    "id": "h03",
+    "class": "relasjon",
+    "text": "Which companies are the closest peers to a small Norwegian studio that localises video games into Nordic languages?"
+  },
+  "side": "B",
+  "answer": "De nærmeste peer-selskapene til en liten norsk spillokaliseringsstudio som jobber med nordiske språk, er Welok Games og Baltic Media.\n\nWelok Games har siden 2009 spesialisert seg på full-syklus lokalisering av videospill, med særlig kompetanse på nordiske språk (svensk, norsk, dansk, finsk). De er ISO-sertifiserte og har erfaring med både små og mellomstore prosjekter, noe som gjør dem til en naturlig konkurrent og samarbeidspartner for en liten norsk aktøraltic Media tilbyr også dedikerte spillokaliseringstjenester for hele Norden, med fokus på kulturell tilpasning og terminologi. De er en av få som eksplisitt nevner nordiske språk som kjerneområde, og de håndterer både små og store oppdrag.\n\nDet finnes få små, rene lokaliseringsbyråer i Norge som kun jobber med spill, men både Welok Games og Baltic Media er relevante peers fordi de opererer i samme marked og størrelsesorden. For å finne flere små norske aktører, kan du søke i Brønnøysundregistrene på næringskode 74.300 (språktjenester) og filtrere på små foretak i Norge.",
+  "steps": [
+    "Jeg vet at \"closest peers\" for en liten norsk spillokaliseringsstudio betyr selskaper som også jobber med lokalisering av videospill til nordiske språk, helst i omtrent samme størrelse og marked.",
+    "Ute etter \"norske spillokaliseringsbyråer nordiske språk\".",
+    "Nettet er tregt akkurat nå. Leter videre.",
+    "4 treff. Siler ut det som duger.",
+    "Leter etter \"små og mellomstore spillokaliseringsbyråer i Nor...\".",
+    "4 kilder å gå gjennom.",
+    "Googler \"game localization companies Norway, Sweden, Denm...\", i mangel av et bedre verb.",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom."
+  ],
+  "sources": 12,
+  "ttft_ms": 26052,
+  "total_ms": 26052
+}

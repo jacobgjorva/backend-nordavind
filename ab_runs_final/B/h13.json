@@ -1,0 +1,17 @@
+{
+  "case": {
+    "id": "h13",
+    "class": "oppslag",
+    "text": "når trer den nye åpenhetsloven i kraft for mindre virksomheter?"
+  },
+  "side": "B",
+  "answer": "Per i dag gjelder ikke Åpenhetsloven for mindre virksomheter i Norge. Loven trådte i kraft 1. juli 2022, men den omfatter bare større virksomheter som oppfyller minst to av disse tre vilkårene: 50 millioner kroner i salgsinntekter, 30 ansatte eller 25 millioner kroner i balansesum. Det er ikke vedtatt noen utvidelse av loven til å gjelde mindre virksomheter fra 2026 eller senere, selv om det er diskutert både nasjonalt og i EU.\n\nHvis regjeringen eller Stortinget vedtar en utvidelse, vil det bli kunngjort på offisielle kanaler som regjeringen.no og lovdata.no. Vil du ha varsel om eventuelle endringer, følg med på Forbrukertilsynets nettsider.",
+  "steps": [
+    "Søker på \"ny åpenhetslov ikrafttredelse for mindre virksom...\".",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 4,
+  "ttft_ms": 10487,
+  "total_ms": 10487
+}

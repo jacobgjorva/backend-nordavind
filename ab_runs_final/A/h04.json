@@ -1,0 +1,17 @@
+{
+  "case": {
+    "id": "h04",
+    "class": "relasjon",
+    "text": "Vi selger abonnement på digitale kurs i førstehjelp til barnehager. Er Røde Kors en direkte konkurrent for oss?"
+  },
+  "side": "A",
+  "answer": "Røde Kors er en direkte konkurrent for dere. De tilbyr gratis digitale førstehjelpskurs som er åpne for alle, og har et pedagogisk læringsopplegg kalt «Henry – Førstehjelp for barn» som er utviklet for barn i alderen 3–8 år. Kursene deres varer omtrent én time og er ment som en oppfriskning i livreddende førstehjelp.\n\nSiden Røde Kors’ kurs er gratis, vil mange barnehager sannsynligvis vurdere dem som et alternativ til betalte abonnement. Dere bør derfor tydeliggjøre hva som skiller deres tilbud fra Røde Kors’ gratiskurs, for eksempel omfang, oppfølging eller dokumentasjon.",
+  "steps": [
+    "Leter etter \"Røde Kors digitale førstehjelpskurs for barnehag...\".",
+    "Fant 4 kilder. Leser.",
+    "Dobbeltsjekker mot kildene"
+  ],
+  "sources": 4,
+  "ttft_ms": 51088,
+  "total_ms": 51088
+}

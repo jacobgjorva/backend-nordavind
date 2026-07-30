@@ -1,0 +1,13 @@
+{
+  "case": {
+    "id": "h16",
+    "class": "samtale",
+    "text": "tusen takk for hjelpen, dette var nyttig"
+  },
+  "side": "B",
+  "answer": "Det var hyggelig å høre! Bare si ifra når du lurer på noe mer.",
+  "steps": null,
+  "sources": 0,
+  "ttft_ms": 1911,
+  "total_ms": 1911
+}

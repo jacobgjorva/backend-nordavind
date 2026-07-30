@@ -1,0 +1,18 @@
+{
+  "case": {
+    "id": "h08",
+    "class": "anbefaling",
+    "text": "Anbefal et verktøy for å planlegge og dokumentere vedlikehold på et mindre gårdsbruk."
+  },
+  "side": "B",
+  "answer": "For et mindre gårdsbruk som vil planlegge og dokumentere vedlikehold på maskiner, utstyr og driftsbygninger, er Agrilogg det beste valget.\n\nAgrilogg er laget for norske forhold, fungerer på både PC og mobil, og lar deg enkelt skjule funksjoner du ikke trenger. Du kan registrere service på maskiner og utstyr, sette opp varsler for viktige vedlikeholdsdatoer, og dokumentere alt på ett sted. Det er også mulig å få SMS-varsler for frister og servicebehov, noe som gjør det enkelt å holde oversikt uten å måtte logge inn hele tiden.\n\nHvis du vil se nærmere på hvordan det fungerer i praksis, kan du gå til [agrilogg.no](https://agrilogg.no).",
+  "steps": [
+    "Jeg trenger å sjekke hvilke verktøy som faktisk er tilgjengelige, brukervennlige og rimelige for et mindre gårdsbruk, gjerne med fokus på vedlikeholdsdokumentasjon og planlegging.",
+    "Søker på \"beste verktøy for vedlikeholdsplanlegging og dok...\".",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom."
+  ],
+  "sources": 4,
+  "ttft_ms": 14906,
+  "total_ms": 14906
+}

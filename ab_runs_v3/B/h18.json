@@ -1,0 +1,13 @@
+{
+  "case": {
+    "id": "h18",
+    "class": "uklar",
+    "text": "kan du finne ut hvor mye de tar?"
+  },
+  "side": "B",
+  "answer": "Hva er det du lurer på prisen for? Et konkret produkt, en tjeneste, eller noe annet? Jeg trenger navnet eller en kort beskrivelse for å søke riktig.",
+  "steps": null,
+  "sources": 0,
+  "ttft_ms": 1454,
+  "total_ms": 1454
+}

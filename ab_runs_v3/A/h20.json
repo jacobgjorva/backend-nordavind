@@ -1,0 +1,22 @@
+{
+  "case": {
+    "id": "h20",
+    "class": "relasjon",
+    "text": "Vi driver et lite bryggeri i Trøndelag som bare selger fatøl til utesteder, ingen flasker. Hvem konkurrerer vi egentlig med?"
+  },
+  "side": "A",
+  "answer": "Jeg fikk ikke formulert dette kildefast — se kildene over for detaljene.",
+  "steps": [
+    "Ute etter \"aktive mikrobryggerier i Trøndelag 2026 fatøl\".",
+    "4 kilder å gå gjennom.",
+    "Søker på \"hovedleverandører av fatøl til utesteder i Trønd...\".",
+    "Fant 4 kilder. Leser.",
+    "Ser hva nettet vet om \"store ølprodusenter som selger fatøl til utested...\".",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser.",
+    "Dobbeltsjekker mot kildene"
+  ],
+  "sources": 12,
+  "ttft_ms": 29837,
+  "total_ms": 29837
+}

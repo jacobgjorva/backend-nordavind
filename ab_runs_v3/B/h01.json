@@ -1,0 +1,22 @@
+{
+  "case": {
+    "id": "h01",
+    "class": "relasjon",
+    "text": "Vi driver Nordre Dalen Trelast, et lite sagbruk i Innlandet som leverer spesialskåret furu til restaurering av verneverdige bygg. Hvem er våre direkte konkurrenter?"
+  },
+  "side": "B",
+  "answer": "De viktigste direkte konkurrentene til Nordre Dalen Trelast i Innlandet på spesialskåret furu til restaurering av verneverdige bygg er Stiltre på Skollenborg og lokale sagbruk med tilsvarende spesialkompetanse på antikvarisk trelast.\n\nStiltre er den eneste aktøren som eksplisitt markedsfører seg med spesialproduksjon av historisk riktig trelast og kopiering av gamle profiler, noe som er helt avgjørende for restaurering av verneverdige bygg. De har også direkte dialog med byggmestere og proffe for å tilpasse materialer til slike prosjekter. Andre sagbruk i Innlandet kan også være konkurrenter, men de er sjelden like synlige på spesialskåret furu til antikvariske formål.\n\nDet er ingen fullstendig oversikt over alle lokale sagbruk med slik spesialkompetanse, men det er grunn til å tro at noen av de mindre, tradisjonsrike sagbrukene i Innlandet også leverer tilsvarende produkter — om enn i mindre skala og uten like tydelig markedsføring.\n\nVidere bør du kartlegge hvilke sagbruk som er aktive i ditt nærområde og som har erfaring med restaurering, for eksempel gjennom å sjekke med Bygningsvernsenteret i Innlandet eller lokale byggmestere som jobber med verneverdige bygg.",
+  "steps": [
+    "Sjekker \"Nordre Dalen Trelast konkurrenter Innlandet spes...\" på nettet.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser.",
+    "Ser hva nettet vet om \"sagbruk Innlandet spesialskåret furu restaurerin...\".",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser.",
+    "Ute etter \"leverandører av tradisjonell trelast til verneve...\".",
+    "4 treff. Siler ut det som duger."
+  ],
+  "sources": 12,
+  "ttft_ms": 25506,
+  "total_ms": 25506
+}

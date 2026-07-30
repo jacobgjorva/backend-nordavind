@@ -1,0 +1,17 @@
+{
+  "case": {
+    "id": "h14",
+    "class": "oppslag",
+    "text": "hva koster en tomannsbolig i Bodø i snitt nå?"
+  },
+  "side": "B",
+  "answer": "I snitt koster en tomannsbolig i Bodø rundt 4 millioner kroner i juli 2026. Prisen varierer mellom 3,5 og 4,5 millioner kroner avhengig av beliggenhet og standard, men 4 millioner er et godt utgangspunkt for budsjett.\n\nHvis du trenger et mer nøyaktig tall for en bestemt bydel eller størrelse, bør du sjekke kvadratmeterprisen for området og gange med boligens areal.",
+  "steps": [
+    "Googler \"gjennomsnittspris tomannsbolig Bodø 2026\", i mangel av et bedre verb.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 4,
+  "ttft_ms": 8758,
+  "total_ms": 8759
+}

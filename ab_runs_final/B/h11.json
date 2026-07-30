@@ -1,0 +1,18 @@
+{
+  "case": {
+    "id": "h11",
+    "class": "anbefaling",
+    "text": "Hva slags kassasystem passer for en liten gårdsbutikk som også selger på markeder?"
+  },
+  "side": "B",
+  "answer": "Et enkelt, mobilt og robust kassasystem som passer for både gårdsbutikk og markedsføring er Vipps Bedrift med Vipps Hurtigkasse eller PCKasse. Vipps Hurtigkasse fungerer på mobil eller nettbrett, trenger ikke egen kortterminal, og håndterer både kontant- og mobilbetaling. PCKasse er norskutviklet, støtter SAF-T-krav, og finnes i rimelige pakker for små bedrifter som trenger lagerstyring og rapportering.\n\nFor markedsføring er det viktig at systemet tåler litt vær, fungerer offline, og er lett å ta med seg. Vipps Hurtigkasse er spesielt godt egnet for mobil bruk, mens PCKasse gir mer funksjonalitet for fast butikk og lager.\n\nVelg Vipps Hurtigkasse hvis du vil ha det enkleste og mest mobile, og PCKasse hvis du trenger litt mer funksjonalitet og integrasjon med regnskapssystemer.\n\nHvis du vil se konkrete priser og moduler, gå til PCKasses nettside og be om et tilbud for din type virksomhet.",
+  "steps": [
+    "En liten gårdsbutikk som også selger på markeder trenger et enkelt, mobilt og robust kassasystem som fungerer både offline og online, med mulighet for å håndtere kontant- og kortbetaling, samt enkel rapportering.",
+    "Leter etter \"beste kassasystem for liten gårdsbutikk og marke...\".",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom."
+  ],
+  "sources": 4,
+  "ttft_ms": 20987,
+  "total_ms": 20987
+}

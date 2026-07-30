@@ -1,0 +1,18 @@
+{
+  "case": {
+    "id": "h07",
+    "class": "anbefaling",
+    "text": "Vi trenger et system for å håndtere utleie av anleggsmaskiner med timeregistrering og fakturering. Hva bør vi velge?"
+  },
+  "side": "A",
+  "answer": "Jeg fikk ikke formulert dette kildefast — se kildene over for detaljene.",
+  "steps": [
+    "Ute etter \"beste programvare for utleie av anleggsmaskiner...\".",
+    "Nettet er tregt akkurat nå. Leter videre.",
+    "4 treff. Siler ut det som duger.",
+    "Dobbeltsjekker mot kildene"
+  ],
+  "sources": 4,
+  "ttft_ms": 16073,
+  "total_ms": 16073
+}

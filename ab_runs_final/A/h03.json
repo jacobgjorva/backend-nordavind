@@ -1,0 +1,18 @@
+{
+  "case": {
+    "id": "h03",
+    "class": "relasjon",
+    "text": "Which companies are the closest peers to a small Norwegian studio that localises video games into Nordic languages?"
+  },
+  "side": "A",
+  "answer": "De nærmeste peerene for et lite norsk spillokaliseringsstudio som jobber med nordiske språk, er Baltic Media og Altagram.\n\nBaltic Media spesialiserer seg på gaming- og esportsinnhold til svensk, norsk, dansk, finsk og islandsk. Altagram tilbyr lokalisering til over 60 språk og har erfaring med nordiske markeder.\n\nVelg å differensiere deg på tettere samarbeid med små norske utviklere eller raskere leveranser enn de større aktørene.",
+  "steps": [
+    "Slår opp \"leading video game localisation companies Nordic...\".",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom.",
+    "Dobbeltsjekker mot kildene"
+  ],
+  "sources": 4,
+  "ttft_ms": 19684,
+  "total_ms": 19684
+}

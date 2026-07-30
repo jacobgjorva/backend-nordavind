@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "h05",
+    "class": "relasjon",
+    "text": "Hvilke aktører ligner mest på oss? Vi driver mobil dekkskift og hjulhotell for bedriftsflåter i Stavanger."
+  },
+  "side": "B",
+  "answer": "De aktørene som ligner mest på dere i Stavanger-området, er DekkTeam på Mariero (de tilbyr både dekkskift og dekkhotell, og har et stort utvalg for næringslivet) og First Stop Dekkcenter Forus (del av en landsdekkende kjede med fokus på bedriftsmarkedet). Begge har fysiske verksteder i Stavanger og markedsfører seg mot bedriftsflåter med dekkskift og lagring.\n\nI tillegg er Vianor og Mobile store aktører som tilbyr både mobil dekkskift og dekkhotell for bedrifter over hele landet, også i Rogaland. De er ikke Stavanger-baserte, men har sentraliserte løsninger som kan være relevante for større flåter. Saltvedt Dekk AS i Haugesund og SnapDrive (som har verksteder i Rogaland) er også aktuelle, men med litt lengre avstand.\n\nFor å skille dere ut lokalt, bør dere kartlegge om disse aktørene tilbyr mobil tjeneste direkte til bedriftenes flåter i Stavanger — det er fortsatt få som gjør det, og det kan være deres viktigste konkurransefortrinn. Neste grep: sjekk om DekkTeam eller First Stop Forus faktisk tilbyr mobil dekkskift til bedrifter, eller om de kun har verkstedløsninger.",
+  "steps": [
+    "Ute etter \"mobil dekkskift og hjulhotell for bedriftsflåter...\".",
+    "4 kilder å gå gjennom.",
+    "Søker på \"bedrifter som tilbyr mobil dekkskift og lagring...\".",
+    "Fant 4 kilder. Leser.",
+    "Ser hva nettet vet om \"dekkhotell og mobil dekkskift tjenester for næri...\".",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 12,
+  "ttft_ms": 24162,
+  "total_ms": 24162
+}

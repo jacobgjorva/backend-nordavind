@@ -1,0 +1,18 @@
+{
+  "case": {
+    "id": "h07",
+    "class": "anbefaling",
+    "text": "Vi trenger et system for å håndtere utleie av anleggsmaskiner med timeregistrering og fakturering. Hva bør vi velge?"
+  },
+  "side": "B",
+  "answer": "Det mest anbefalte systemet for utleie av anleggsmaskiner med timeregistrering og fakturering i Norge i 2026 er Sharefox. Det er utviklet for maskinutleie, støtter sanntidsbooking, timeregistrering, automatisk fakturering, lagerstyring og vedlikehold, og er tilpasset norske krav til betaling og regnskap.\n\nEn alternativ løsning er Leasi, som også er skreddersydd for maskinutleie og har gode brukeranmeldelser for brukervennlighet og effektiv drift.\n\nJeg ville gått for Sharefox hvis dere trenger en komplett, norsktilpasset løsning med bred funksjonalitet og god support. Vil du ha en kort demo eller prøveperiode, kan du bestille det direkte på deres nettside.",
+  "steps": [
+    "Vi trenger å vite hvilke systemer som finnes for utleiebransjen med timeregistrering og fakturering, og hvilken løsning som passer best for små eller mellomstore aktører i Norge i dag. Jeg sjekker markedet.",
+    "Sjekker \"beste utleiesystem anleggsmaskiner timeregistrer...\" på nettet.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 4,
+  "ttft_ms": 18470,
+  "total_ms": 18470
+}

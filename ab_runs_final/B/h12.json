@@ -1,0 +1,17 @@
+{
+  "case": {
+    "id": "h12",
+    "class": "oppslag",
+    "text": "hva er maksimal tillatt totalvekt for en bil du kan kjøre på førerkort klasse B?"
+  },
+  "side": "B",
+  "answer": "På førerkort klasse B kan du kjøre en bil med maksimal tillatt totalvekt på 3 500 kg. Hvis du trekker tilhenger, må den samlede totalvekten av bil og tilhenger heller ikke overstige 3 500 kg, med mindre du har kode 96 på førerkortet, som utvider grensen til 4 250 kg. For tyngre tilhengere kreves det førerkort klasse BE.",
+  "steps": [
+    "Sjekker \"maksimal tillatt totalvekt førerkort klasse B 20...\" på nettet.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 4,
+  "ttft_ms": 15980,
+  "total_ms": 15980
+}

@@ -1,0 +1,24 @@
+{
+  "case": {
+    "id": "h09",
+    "class": "anbefaling",
+    "text": "Hvilken løsning bør en tannlegeklinikk med fire behandlere bruke til timebestilling på nett?"
+  },
+  "side": "B",
+  "answer": "For en tannlegeklinikk med fire behandlere er Anolla det beste valget for online timebestilling i 2026. Løsningen er spesialutviklet for klinikker, har AI-basert triage og smart tidsskjemaoptimalisering som reduserer avbestillinger og fyller kalenderen mer effektivt enn konkurrentene. Anolla integreres sømløst med journalsystemer og gir dokumenterte tidsbesparelser på 8–10 timer per behandler per uke, noe som er avgjørende for en travel klinikk med flere behandlere.\n\nAlternativt kan Muntra være aktuelt hvis dere prioriterer et norskutviklet, skybasert journalsystem med innebygd timebestilling og integrert røntgenhåndtering. Muntra brukes av over 800 tannklinikker i Norge og har svært høy kundetilfredshet, men mangler noe av den avanserte AI-drevne kapasitetsstyringen som Anolla tilbyr.\n\nAnbefaling: Start med en gratis prøveperiode hos Anolla for å teste AI-funksjonene og integrasjonen med deres eksisterende journalsystem. Hvis dere allerede bruker et journalsystem som Muntra eller Anita, sjekk om Anolla kan integreres før dere bestemmer dere.",
+  "steps": [
+    "En tannlegeklinikk med fire behandlere bør bruke en dedikert online timebestillingstjeneste som er integrert med et journalsystem for tannhelse, slik at både pasienter og behandlere får oversikt og unngår dobbeltbooking.",
+    "Søker på \"beste online timebestillingssystem for tannlegek...\".",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom.",
+    "Googler \"anmeldelse og sammenligning av timebestillingssy...\", i mangel av et bedre verb.",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom.",
+    "Sjekker \"integrerte journalsystemer med timebestilling fo...\" på nettet.",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom."
+  ],
+  "sources": 12,
+  "ttft_ms": 29716,
+  "total_ms": 29716
+}

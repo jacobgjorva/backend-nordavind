@@ -1,5 +1,8 @@
 # Motor v6 — A/B-aksept mot holdt-tilbake-settet
 
+> RUNDE 1 (under) er kjørt på mistral-medium og er historikk.
+> RUNDE 2 nederst er den gjeldende målingen: Large 3 på begge sider.
+
 Rå tall før konklusjon, som probeloggen.
 
 ## Oppsett
@@ -116,3 +119,68 @@ ikke ti.
 
 Blindlesefila fra denne runden er laget og kan leses nå, men den måler v6
 på feil modell. Anbefalingen er å vente til punkt 2.
+
+
+---
+
+# RUNDE 2 — Large 3 på begge sider (gjeldende)
+
+Etter runde 1 ble modellen byttet til `mistral-large-2512` for hele
+motoren (én modell, leverandørruting til La Plateforme). Begge sider
+kjørt samme dag, samme binær, samme sett — kun `ENGINE` skiller.
+
+Rådata: `ab_runs_final/A` (legacy), `ab_runs_v3/B` (v6).
+Blindlesefil: `ab_runs_v3/BLINDLESING.md`, fasit i egen fil.
+
+```
+                A (legacy)   B (v6)
+total tid          420 s      331 s     -21 %
+MISLYKKEDE svar    5/20       0/20
+kilder per tur      4,0        6,0
+svarlengde         313 t      644 t
+```
+
+«Mislykkede» = svar der brukeren ikke fikk noe brukbart: fire
+nødbunn-svar («Jeg fikk ikke formulert dette kildefast — se kildene
+over») og én vegring («det har jeg ikke grunnlag for») uten at et
+eneste søk var gjort.
+
+Dette er hovedfunnet. Legacy sin kildekontroll-gate feller ett av fem
+svar og erstatter dem med en henvisning til kildelista. v6 har ingen
+slik gate — tallkontrollen logger og lar svaret gå — og leverte et
+fullstendig svar på samtlige tjue oppgaver.
+
+## To ekte feil funnet av denne runden
+
+**1. Metodeteksten nådde aldri modellen.** v6 valgte metode og brukte
+metodens budsjett — derfor var den raskere — men selve fremgangsmåten
+ble aldri injisert i systemprompten. Hele metodelaget var frakoblet
+gjennom serveren, mens `cmd/v6loop` (som kaller `BuildSystem` direkte)
+hadde det med. Det forklarte hvorfor negativ avgrensning var 0/7
+gjennom serveren og 3/3 i kontrolltesten.
+
+Fikset, og `TestMethodTextReachesTheSystemPrompt` feiler nå hvis teksten
+forsvinner igjen.
+
+LÆRDOM: alle enhetstester var grønne mens et helt lag var koblet fra.
+Bare en ende-til-ende-kjøring mot ekte modell fanger det.
+
+**2. SSE-skriveren manglet lås.** Narratorens treghets-melding kommer
+fra en egen goroutine (`narrate.go`, `slow()`) og kunne treffe samtidig
+som svaret ble skrevet. Racen har ligget i produksjonskoden hele tiden;
+v6 eksponerer den oftere fordi den sender svaret i én blokk.
+
+Fikset med en mutex rundt `emit`. Merk: dette forklarte IKKE
+tegn-mønsteret jeg først mistenkte — den mistanken var falsk alarm
+(«CapsLoc», «ExtendaGO», «iPad» er ekte produktnavn med stor bokstav
+inni). Racen er likevel reell og verdt å tette.
+
+## Status
+
+Kvantitativt er v6 klart bedre: raskere, henter mer, og feiler ikke.
+Den kvalitative dommen — om svarene er MER VERDT for brukeren — er ikke
+felt. Den krever blindlesing, og den eier Jacob.
+
+`ab_runs_v3/BLINDLESING.md` er klar: tjue oppgaver, to varianter hver,
+vekslende rekkefølge, fasit i egen fil som ikke skal åpnes før lesingen
+er ferdig.

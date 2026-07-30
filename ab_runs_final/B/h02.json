@@ -1,0 +1,22 @@
+{
+  "case": {
+    "id": "h02",
+    "class": "relasjon",
+    "text": "Firmaet vårt reparerer og vedlikeholder heiser i næringsbygg i Bergensområdet, ni montører. Hvilke aktører konkurrerer vi mot?"
+  },
+  "side": "B",
+  "answer": "De viktigste konkurrentene til heisvedlikehold for næringsbygg i Bergensområdet er Alt Heis, Heiskompaniet, Motum og Lift Tech.\n\nAlt Heis er lokalisert i Bergen og er en av de største aktørene på Vestlandet, med 27 ansatte og bred erfaring fra både næringsbygg og boligprosjekter. Heiskompaniet og Motum er landsdekkende, men har begge sterk tilstedeværelse i regionen og tilbyr alle former for heisservice. Lift Tech, med base i Ålesund, dekker også Vestlandet og er en mindre, men etablert aktør med lokalkunnskap.\n\nSjekk hvilke av disse som er mest synlige i markedet og tilbyr tilsvarende serviceavtaler som dere, og vurder å kartlegge deres priser og kundetilfredshet for å posisjonere dere enda bedre.",
+  "steps": [
+    "Slår opp \"største heisvedlikeholdsbedrifter Bergen nærings...\".",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom.",
+    "Søker på \"heisreparasjon og vedlikehold aktører Hordaland\".",
+    "Fant 4 kilder. Leser.",
+    "Ser hva nettet vet om \"konkurrenter heisservice næringsbygg Vestland\".",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 12,
+  "ttft_ms": 21831,
+  "total_ms": 21831
+}

@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "h10",
+    "class": "anbefaling",
+    "text": "Vi må ha noe for å holde styr på sertifikater og kurs for 40 ansatte i en elektrobedrift. Forslag?"
+  },
+  "side": "B",
+  "answer": "For å holde styr på sertifikater og kurs for 40 ansatte i en elektrobedrift, anbefaler jeg Snapper. Snapper er en norsk LMS-plattform (Learning Management System) som er laget for å administrere og følge opp kompetanse, kurs, sertifikater og lisenser. Den gir automatiske varsler når sertifikater eller kurs er i ferd med å utløpe, og lar dere samle all dokumentasjon på ett sted. Dette er spesielt nyttig i elektrobransjen, der det stilles strenge krav til dokumentert kompetanse og oppdaterte sertifikater.\n\nDet viktigste for dere er å få på plass et system som både sparer tid og reduserer risikoen for at sertifikater utløper uten at dere får med dere det. Med Snapper kan dere også enkelt tildele kurs og opplæring til de ansatte, og få oversikt over hvem som har hvilken kompetanse.\n\nGå i gang med å legge inn alle sertifikater og kurs for de ansatte, sett opp varsler for utløpsdatoer, og bruk systemet til å planlegge neste runde med obligatorisk opplæring.",
+  "steps": [
+    "Du trenger en enkel, skybasert løsning som lar dere registrere, følge opp og få varsler om utløpsdatoer for sertifikater og kurs for alle ansatte.",
+    "Googler \"beste kompetanse- og sertifikathåndteringssystem...\", i mangel av et bedre verb.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser.",
+    "Sjekker \"anbefalte systemer for sertifikat- og kursoppføl...\" på nettet.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 8,
+  "ttft_ms": 30585,
+  "total_ms": 30585
+}

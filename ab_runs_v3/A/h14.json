@@ -1,0 +1,18 @@
+{
+  "case": {
+    "id": "h14",
+    "class": "oppslag",
+    "text": "hva koster en tomannsbolig i Bodø i snitt nå?"
+  },
+  "side": "A",
+  "answer": "Jeg fikk ikke formulert dette kildefast — se kildene over for detaljene.",
+  "steps": [
+    "Googler \"gjennomsnittlig pris tomannsbolig Bodø 2026\", i mangel av et bedre verb.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser.",
+    "Dobbeltsjekker mot kildene"
+  ],
+  "sources": 4,
+  "ttft_ms": 12366,
+  "total_ms": 12366
+}

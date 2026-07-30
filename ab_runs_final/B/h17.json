@@ -1,0 +1,13 @@
+{
+  "case": {
+    "id": "h17",
+    "class": "samtale",
+    "text": "jeg er litt usikker på om vi gjør dette riktig, egentlig"
+  },
+  "side": "B",
+  "answer": "Hva er det dere gjør, konkret? Si gjerne hva slags oppgave, prosess eller beslutning det handler om, så kan jeg hjelpe deg å sjekke.",
+  "steps": null,
+  "sources": 0,
+  "ttft_ms": 1500,
+  "total_ms": 1501
+}

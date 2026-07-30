@@ -1,0 +1,24 @@
+{
+  "case": {
+    "id": "h20",
+    "class": "relasjon",
+    "text": "Vi driver et lite bryggeri i Trøndelag som bare selger fatøl til utesteder, ingen flasker. Hvem konkurrerer vi egentlig med?"
+  },
+  "side": "B",
+  "answer": "De viktigste konkurrentene deres i Trøndelag på fatøl til utesteder er E.C. Dahls Bryggeri, Austmann Bryggeri og Bryggeriet Frøya. E.C. Dahls er størst og dominerer på fatøl til utesteder i regionen, mens Austmann og Bryggeriet Frøya er de mest synlige håndverksbryggeriene med stor lokal popularitet og distribusjon til både puber og restauranter. Flere mindre bryggerier som Inderøy Gårdsbryggeri og Klostergården Håndbryggeri leverer også fatøl, men i mindre skala og ofte kun til egne serveringssteder eller lokale utesteder.\n\nDet er ingen oppdaterte tall på markedandel for 2026, men E.C. Dahls har tradisjonelt hatt størst volum, mens håndverksbryggeriene vokser mest på fatøl til utesteder.\n\nSjekk hvilke utesteder som er viktige for dere, og be om å få se hvilke fatøl de har på menyen — da ser dere konkret hvem dere konkurrerer med på hvert sted.",
+  "steps": [
+    "Du trenger en oversikt over hvilke bryggerier som leverer fatøl til utesteder i Trøndelag, med vekt på de som har størst markedsandel og lignende produktprofil som dere.",
+    "Sjekker \"hvilke bryggerier leverer fatøl til utesteder i...\" på nettet.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser.",
+    "Ser hva nettet vet om \"mest populære fatøl bryggerier Trøndelag 2026\".",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser.",
+    "Ute etter \"markedandel fatøl bryggerier Trøndelag\".",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 12,
+  "ttft_ms": 32342,
+  "total_ms": 32342
+}

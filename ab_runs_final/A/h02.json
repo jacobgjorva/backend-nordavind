@@ -1,0 +1,17 @@
+{
+  "case": {
+    "id": "h02",
+    "class": "relasjon",
+    "text": "Firmaet vårt reparerer og vedlikeholder heiser i næringsbygg i Bergensområdet, ni montører. Hvilke aktører konkurrerer vi mot?"
+  },
+  "side": "A",
+  "answer": "De viktigste konkurrentene deres i Bergensområdet for vedlikehold og reparasjon av heiser i næringsbygg er Heiskompaniet og Alt Heis. Begge tilbyr service på alle heistyper og har avdelinger som dekker Vestlandet. Det finnes også mindre, lokale aktører, men disse to er de mest synlige og etablerte i markedet for næringsbygg i regionen. Vil du ha en oversikt over hvilke serviceavtaler de konkret tilbyr, kan jeg hente detaljer fra nettsidene deres.",
+  "steps": [
+    "Slår opp \"største heisvedlikeholdsbedrifter Bergen nærings...\".",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom."
+  ],
+  "sources": 4,
+  "ttft_ms": 13728,
+  "total_ms": 13728
+}

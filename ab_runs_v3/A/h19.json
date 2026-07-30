@@ -1,0 +1,13 @@
+{
+  "case": {
+    "id": "h19",
+    "class": "uklar",
+    "text": "stemmer det som ble sagt i går?"
+  },
+  "side": "A",
+  "answer": "Hva var det som ble sagt i går? Jeg husker ikke samtaler fra tidligere dager. Skriv inn det du lurer på, så sjekker jeg.",
+  "steps": null,
+  "sources": 0,
+  "ttft_ms": 694,
+  "total_ms": 1686
+}

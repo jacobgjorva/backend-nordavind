@@ -1,0 +1,17 @@
+{
+  "case": {
+    "id": "h15",
+    "class": "oppslag",
+    "text": "hvor mye er minstefradraget i år?"
+  },
+  "side": "B",
+  "answer": "Minstefradraget for lønn og trygd i 2026 er maksimalt 95 700 kroner. For pensjon er taket 75 400 kroner. Satsen er fortsatt 46 prosent av inntekten for lønn/trygd og 40 prosent for pensjon, men beløpet kan ikke overstige disse takene.",
+  "steps": [
+    "Googler \"minstefradrag 2026 Norge\", i mangel av et bedre verb.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 4,
+  "ttft_ms": 7525,
+  "total_ms": 7525
+}

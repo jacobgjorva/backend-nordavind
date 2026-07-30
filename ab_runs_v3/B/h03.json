@@ -1,0 +1,23 @@
+{
+  "case": {
+    "id": "h03",
+    "class": "relasjon",
+    "text": "Which companies are the closest peers to a small Norwegian studio that localises video games into Nordic languages?"
+  },
+  "side": "B",
+  "answer": "De nærmeste peerene til et lite norsk spillokaliseringsstudio er CapsLoc og Locpick. Begge er uavhengige, norske selskaper som spesialiserer seg på lokalisering av spill til nordiske språk, med lang erfaring og fokus på kvalitet, transkreasjon og kulturell tilpasning for det norske markedet. CapsLoc har jobbet med alt fra små mobilspill til store AAA-titler, og Locpick legger vekt på klarhet, naturlig tone og regional bevissthet i sine leveranser.\n\nHvis du vil utvide til hele Norden, er LocalizeDirect i Sverige en relevant aktør med tilsvarende profil og erfaring fra nordiske språk.",
+  "steps": [
+    "Slår opp \"leading video game localisation companies Nordic...\".",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom.",
+    "Søker på \"small Norwegian game localisation studios peers\".",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom.",
+    "Googler \"game localisation companies Scandinavia comparis...\", i mangel av et bedre verb.",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom."
+  ],
+  "sources": 12,
+  "ttft_ms": 21048,
+  "total_ms": 21048
+}

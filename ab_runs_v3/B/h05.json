@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "h05",
+    "class": "relasjon",
+    "text": "Hvilke aktører ligner mest på oss? Vi driver mobil dekkskift og hjulhotell for bedriftsflåter i Stavanger."
+  },
+  "side": "B",
+  "answer": "De aktørene som ligner mest på dere i Stavanger, er Noddi og Mobile.\n\nNoddi tilbyr mobil dekkskift og hjulhotell for både privat- og bedriftskunder, og kommer til deg der bilen står — akkurat som dere gjør for bedriftsflåter. De markedsfører seg tydelig mot bedriftsmarkedet og har en modell som er svært lik deres, med fokus på mobilitet og tidsbesparing for kunden.\n\nMobile har også dekkhotell og mobil dekkskift, men opererer i dag hovedsakelig fra faste lokasjoner (som Billingstad). De har likevel en modell som kan skaleres mobilitet, og er en av de få som tilbyr både lagring og skift som en pakke — noe som ligner på deres tjeneste til bedriftsflåterekonomen og Dekkpartner tilbyr lignende tjenester, men er først og fremst stasjonære verksteder med mange lokasjoner, ikke mobile løsninger for bedriftsflåter.\n\nAnbefaling: Ta kontakt med Noddi for en prat om hvordan de løser logistikk og kundeopplevelse for bedriftsflåter, siden de er mest sammenlignbare både i tjeneste og målgruppe.",
+  "steps": [
+    "Ute etter \"mobil dekkskift og hjulhotell for bedriftsflåter...\".",
+    "4 kilder å gå gjennom.",
+    "Søker på \"bedriftsflåte dekkskifte tjenester Norge lignend...\".",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom.",
+    "Googler \"mobile tire change and wheel storage for corpora...\", i mangel av et bedre verb.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 12,
+  "ttft_ms": 27870,
+  "total_ms": 27870
+}

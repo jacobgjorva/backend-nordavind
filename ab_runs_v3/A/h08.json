@@ -1,0 +1,17 @@
+{
+  "case": {
+    "id": "h08",
+    "class": "anbefaling",
+    "text": "Anbefal et verktøy for å planlegge og dokumentere vedlikehold på et mindre gårdsbruk."
+  },
+  "side": "A",
+  "answer": "Bruk **Skifteplan** til å planlegge og dokumentere vedlikehold på et mindre gårdsbruk. Det er en nettløsning og app som er laget for norske forhold, dekker alle krav til dokumentasjon, og lar deg registrere både planlagte og utførte tiltak direkte fra traktoren eller kontoret. Du får også med deg kart, sjekklister og mulighet til å legge inn egne vedlikeholdsrutiner for maskiner og bygninger. Vil du ha noe enklere, er **Jordplan** et godt alternativ, men Skifteplan er mest komplett for vedlikehold. Gå inn på skifteplan.no og prøv gratisversjonen før du bestemmer deg.",
+  "steps": [
+    "Sjekker \"beste verktøy for vedlikeholdsplanlegging og dok...\" på nettet.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 4,
+  "ttft_ms": 10762,
+  "total_ms": 10762
+}

@@ -1,0 +1,18 @@
+{
+  "case": {
+    "id": "h06",
+    "class": "relasjon",
+    "text": "Vi lager håndsydde seilduksbager i Ålesund, rundt 3 millioner i omsetning. Finn sammenlignbare merkevarer i Skandinavia."
+  },
+  "side": "A",
+  "answer": "Jeg fikk ikke formulert dette kildefast — se kildene over for detaljene.",
+  "steps": [
+    "Ser hva nettet vet om \"sammenlignbare merkevarer håndsydde seilduksbage...\".",
+    "Nettet er tregt akkurat nå. Leter videre.",
+    "4 treff. Siler ut det som duger.",
+    "Dobbeltsjekker mot kildene"
+  ],
+  "sources": 4,
+  "ttft_ms": 12906,
+  "total_ms": 12906
+}
