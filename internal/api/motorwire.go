@@ -28,6 +28,10 @@ func (s *Server) motorOn() bool { return s.cfg.Engine == "v6" }
 type apiModel struct{ s *Server }
 
 func (m apiModel) Call(ctx context.Context, req motor.ModelRequest) (motor.ModelResponse, error) {
+	// Interne felt skal aldri upstream. De leses av motoren helt frem hit,
+	// så de fjernes her og ikke tidligere (målt: en tidlig sletting gjorde
+	// at motoren aldri så flyten og kjørte uten metode).
+	stripFlowFields(req.Payload)
 	body, err := json.Marshal(req.Payload)
 	if err != nil {
 		return motor.ModelResponse{}, err

@@ -259,7 +259,6 @@ func (s *Server) executeAgent(ctx context.Context, a store.Agent) (string, int, 
 			"tools":       tools,
 			"temperature": 0.3,
 			"max_tokens":  800,
-			"reasoning":   map[string]any{"enabled": false},
 		}
 		if round == agentMaxRounds {
 			payload["tool_choice"] = "none" // tving et sluttsvar

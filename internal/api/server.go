@@ -290,7 +290,6 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		// skal skrive rent innhold (agent_setup-blokken), ikke resonnere.
 		if setup, _ := full["nordavind_agent_setup"].(bool); setup {
 			full["model"] = router.HeavyModel
-			full["reasoning"] = map[string]any{"enabled": false}
 			pickedModel = router.HeavyModel
 		}
 		s.runAgentLoop(r.Context(), w, full)
@@ -394,18 +393,12 @@ func withRoutingDefaults(body []byte) ([]byte, map[string]any, string) {
 	} else if model == "auto" {
 		model = router.Pick(payload.Messages)
 		full["model"] = model
-		if model == router.TopModel {
-			// Tornado (GLM) resonnerer på de tyngste oppgavene.
-			full["reasoning"] = map[string]any{"enabled": true}
-		}
 	}
-	// Kun TopModel skal resonnere. Slå reasoning eksplisitt av for alle andre
-	// (ikke stol på upstream-default) med mindre klienten selv har satt det.
-	if model != router.TopModel {
-		if _, set := full["reasoning"]; !set {
-			full["reasoning"] = map[string]any{"enabled": false}
-		}
-	}
+	// «reasoning» er et Scaleway-felt. Mistral svarer 422 på det, og da
+	// feiler HELE turen — brukeren fikk «jeg fikk ikke satt sammen et svar»
+	// (målt i prod 2026-07-30). Feltet fjernes her, ved inngangen, så ingen
+	// klient eller kodesti kan smugle det videre.
+	delete(full, "reasoning")
 	// Bris/Storm er ikke multimodale — bytt ut gamle bilde-deler med en
 	// tekstplassholder så de kan svare på oppfølging uten å feile på bildedata.
 	if model != router.VisionModel {

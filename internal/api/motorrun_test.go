@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -121,5 +123,50 @@ func TestNoInjectionWithoutMethodOrTools(t *testing.T) {
 	full := map[string]any{flowKeyField: "free_chat"}
 	if extra := motor.BuildSystem("", motorMethod(full), motorHasTools(full)); extra != "" {
 		t.Errorf("uten metode og verktøy skal ingenting injiseres, fikk %q", extra)
+	}
+}
+
+// Flyten MÅ overleve helt frem til motoren. Slettes den for tidlig, velger
+// v6 ingen metode og kjører naken — målt i prod: hver tur logget flyt=""
+// selv om rutingen hadde funnet riktig flyt.
+func TestFlowSurvivesUntilTheMotorReadsIt(t *testing.T) {
+	full := map[string]any{
+		flowKeyField: "research_relation",
+		flowMaxField: 900,
+		"messages":   []any{map[string]any{"role": "user", "content": "hei"}},
+	}
+	if got := motorFlowKey(full); got != "research_relation" {
+		t.Fatalf("motoren måtte se flyten, fikk %q", got)
+	}
+	if got := motorMethod(full); got != motor.MethodRelation {
+		t.Errorf("metoden skulle vært relasjon, fikk %q", got)
+	}
+	// Først ved upstream-kallet fjernes feltene.
+	stripFlowFields(full)
+	if _, ok := full[flowKeyField]; ok {
+		t.Error("flyt-feltet skal ikke gå upstream")
+	}
+	if _, ok := full[flowMaxField]; ok {
+		t.Error("maks-feltet skal ikke gå upstream")
+	}
+}
+
+// «reasoning» er et Scaleway-felt Mistral svarer 422 på. Ingen kodesti skal
+// sette det (målt i prod: hele turen feilet og brukeren fikk «jeg fikk ikke
+// satt sammen et svar»).
+func TestNoReasoningFieldAnywhere(t *testing.T) {
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		body := string(raw)
+		if strings.Contains(body, `"reasoning":`) {
+			t.Errorf("%s setter «reasoning» — Mistral svarer 422 på det", f)
+		}
 	}
 }

@@ -300,8 +300,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// Flyt-kontrakten (intent-modus): leses ut her, skal aldri videre upstream.
 	flowKey, _ := full[flowKeyField].(string)
 	answerLimit := answerCharLimit(full)
-	delete(full, flowKeyField)
-	delete(full, flowMaxField)
+	// MERK: feltene slettes IKKE her. Motor v6 leser flyten for å velge
+	// metode, og slettingen kom før den fikk sjansen — målt i prod: hver
+	// tur logget flyt="" metode="", så v6 kjørte naken selv om rutingen
+	// hadde funnet riktig flyt. De fjernes rett før upstream-kallet i
+	// stedet (stripFlowFields), som er der kravet faktisk gjelder.
 	if setup {
 		injectSystem(full, agentSetupSystem)
 	}
@@ -679,6 +682,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	}
 
 	for round := 0; round <= roundCap; round++ {
+		stripFlowFields(full)
 		body, err := json.Marshal(full)
 		if err != nil {
 			return
@@ -1491,6 +1495,14 @@ func (s *Server) recordUsage(ctx context.Context, full map[string]any, promptTok
 type sourceRef struct {
 	Title string `json:"title"`
 	URL   string `json:"url"`
+}
+
+// stripFlowFields fjerner våre interne felt før payloaden går upstream.
+// Leverandøren skal aldri se dem, men koden vår trenger dem helt frem til
+// kallet — motoren leser flyten for å velge metode.
+func stripFlowFields(full map[string]any) {
+	delete(full, flowKeyField)
+	delete(full, flowMaxField)
 }
 
 // legacyReadTools: verktøy hvis resultat legacy-løkka behandler som lest

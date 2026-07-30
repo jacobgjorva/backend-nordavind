@@ -41,7 +41,6 @@ func (s *Server) judgeClaims(ctx context.Context, question, answer string, offen
 			map[string]any{"role": "user", "content": user},
 		},
 		"stream": false, "temperature": 0, "max_tokens": 300,
-		"reasoning": map[string]any{"enabled": false},
 	})
 	req, err := s.newUpstreamRequest(ctx, strings.NewReader(string(body)))
 	if err != nil {

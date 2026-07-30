@@ -75,7 +75,6 @@ func (s *Server) llmCompleteModel(ctx context.Context, model, source, system, us
 		"stream":      false,
 		"temperature": 0.3,
 		"max_tokens":  maxTokens,
-		"reasoning":   map[string]any{"enabled": false},
 	}
 	body, _ := json.Marshal(payload)
 	req, err := s.newUpstreamRequest(ctx, bytes.NewReader(body))

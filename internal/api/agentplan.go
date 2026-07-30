@@ -92,7 +92,6 @@ func (s *Server) chatOnce(ctx context.Context, model string, messages []any, too
 		"stream":      false,
 		"temperature": 0.2,
 		"max_tokens":  maxTokens,
-		"reasoning":   map[string]any{"enabled": false},
 	}
 	if len(tools) > 0 {
 		payload["tools"] = tools

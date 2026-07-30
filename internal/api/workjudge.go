@@ -37,7 +37,6 @@ func (s *Server) verifyWork(ctx context.Context, task, answer string, toolResult
 			map[string]any{"role": "user", "content": user},
 		},
 		"stream": false, "temperature": 0, "max_tokens": 300,
-		"reasoning": map[string]any{"enabled": false},
 	})
 	req, err := s.newUpstreamRequest(ctx, strings.NewReader(string(body)))
 	if err != nil {
