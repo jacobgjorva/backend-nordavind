@@ -1,0 +1,20 @@
+{
+  "case": {
+    "id": "s1",
+    "class": "samtale",
+    "text": "morn, lang natt på kontoret her"
+  },
+  "method": "samtale",
+  "answer": "Det høres ut som det har vært en krevende periode! Hva trenger du mest akkurat nå – en kopp kaffe, et par gode råd for å få orden på ting, eller kanskje bare en solid porsjon motivasjon? Si ifra, så hjelper jeg deg videre.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 698,
+  "completion_tokens": 71,
+  "total_ms": 2788,
+  "handoff": false
+}

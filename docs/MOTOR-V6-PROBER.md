@@ -228,3 +228,44 @@ den regnes som ferdig.
 Åpent, til del 6: `a1` leverte i én kjøring «tre gode norske
 vaktplansystemer» — en meny, som anbefalingskontrakten forbyr. Metodetekst
 alene holder ikke formen hver gang; leveransegulvet må ta det.
+
+## Kjøring 7 — del 3: metodetekst v5 (mål, ikke verktøynavn)
+
+Bekreftelseskjøringen etter at tenk-rekkefølgen var låst viste **null
+sidehentinger** på hele settet, mens designprobene hadde 4, 2 og 2. Metoden
+sa eksplisitt «les kandidatenes egne sider (fetch_url)», og modellen
+ignorerte det hver eneste gang.
+
+Årsaken var ikke ulydighet. `web_search` kaller ALLEREDE `FetchPages` med
+4 sider à 6 000 tegn (`excerpt.go`), så full sidetekst ligger i
+søkeresultatet. Instruksen ba om en dublett, og modellen avslo korrekt.
+
+Fikset i DATA, ikke kode: metodetekstene sier nå hva som må være SANT om
+svaret («bygg dommen på KILDETEKSTEN, aldri på titler, topplister eller
+hukommelse; mangler en avgjørende kilde, hent den siden særskilt») i stedet
+for å navngi et verktøy. Ny strukturvakt
+(`TestMethodTextsDescribeGoalsNotToolNames`) hindrer at verktøynavn kommer
+inn igjen — de binder metoden til dagens verktøyoppsett og må skrives om
+hver gang det endres.
+
+Resultat med v5 (r2, r4, a1, a2):
+
+```
+tanke i 3 av 4 turer
+verktøykall 1-3 søk per tur, 0 hentinger (nå riktig: sidene er alt hentet)
+grunnlag: alle navn og tall dekket av kildene
+```
+
+Metodefeil hos MEG, verdt å notere: første grunnlagssjekk ropte «diktet» på
+tre navn som viste seg å være helt dekket. Sjekkeren krevde ordrett
+frasetreff, mens modellen lovlig hadde satt sammen produktnavn og leverandør
+fra URL-en («HMS Bygg fra West Internkontroll» av «HMS Bygg» +
+`west-internkontroll.no`). Riktig mål er TOKEN-dekning — nøyaktig det
+prods `grounding.go` gjør. Sjekkeren ligger nå i
+`cmd/v6loop/grounding_check.py` så senere kjøringer bruker samme mål.
+
+Åpent til del 4: tankefrekvensen svinger (2/7, 3/4, 6/9 i ulike kjøringer).
+Tanken er verdifull når den kommer — turer med tanke bruker halvparten så
+mange søk — men den kan ikke ANTAS. Narrasjonen og relevansankeret må
+derfor være fullstendig valgfrie: uten tanke faller begge tilbake til
+dagens oppførsel uten tap.

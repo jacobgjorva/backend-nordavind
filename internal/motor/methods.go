@@ -18,6 +18,13 @@ package motor
 // Ingen av delene er en kodegren. Er du fristet til å skrive en if-setning
 // for et enkelttilfelle, er svaret nesten alltid en rad eller et tall her.
 //
+// TEKSTENE BESKRIVER MÅL, IKKE VERKTØY. Første versjon sa «les
+// kandidatenes egne sider (fetch_url)». Modellen ignorerte det i samtlige
+// målte turer — helt korrekt, for web_search henter ALLEREDE fire hele
+// sider à 6 000 tegn (excerpt.go). Instruksen ba om en dublett. En metode
+// som navngir et verktøy binder seg til dagens verktøyoppsett; en metode
+// som sier hva som skal være SANT om svaret overlever at verktøyene endres.
+//
 // TEKSTENE ER MÅLT, IKKE SKREVET. Hver er probet mot faktisk
 // mistral-large-2512 med ekte websøk over flere runder (v3/v4 —
 // docs/MOTOR-V6-PROBER.md). De sier FREMGANGSMÅTE, aldri hva svaret skal
@@ -76,8 +83,9 @@ var Catalog = map[MethodKey]Method{
 		Text: " METODE: Svaret avhenger av hvem subjektet ER. Arbeidsrekkefølge: (1) Profiler subjektet " +
 			"fra nærmeste kilde — det brukeren har fortalt, og aktørens egne sider når de finnes. (2) Si i " +
 			"arbeidsnotatet hvilket kriterium relasjonen krever her, utledet av det brukeren skal beslutte. " +
-			"(3) Let etter kandidater INNENFOR det segmentet, og les kandidatenes egne sider (fetch_url) før " +
-			"du feller dom om portefølje eller posisjon — søkeutdrag og topplister er ikke evidens. " +
+			"(3) Let etter kandidater INNENFOR det segmentet, og bygg dommen om portefølje eller posisjon " +
+			"på KILDETEKSTEN du får tilbake — aldri på titler, topplister eller din egen hukommelse. " +
+			"Mangler en avgjørende kilde, hent den siden særskilt. " +
 			"SVARKONTRAKT, alle tre delene: (a) kandidatene i løpende tekst med hver sin korte begrunnelse " +
 			"mot kriteriet; (b) én setning som avgrenser mot aktørene som IKKE kvalifiserer — navngi kun " +
 			"aktører som står i kildene eller samtalen, ellers beskriv kategorien uten navn; (c) hvis " +
@@ -90,8 +98,9 @@ var Catalog = map[MethodKey]Method{
 		Key:    MethodAdvice,
 		Budget: Budget{Searches: 3, Fetches: 4, Rounds: 6, MaxChars: 700},
 		Text: " METODE: Etabler behovet fra samtalen før du leter. Søk etter kategorien og segmentet, " +
-			"aldri «beste X»-fraser — topplister er ikke evidens. Les den aktuelle leverandørens EGEN side " +
-			"(fetch_url) før du anbefaler. Lever ÉN anbefaling: hvorfor den passer akkurat denne " +
+			"aldri «beste X»-fraser — topplister er ikke evidens. Bygg anbefalingen på KILDETEKSTEN om " +
+			"leverandøren, ikke på titler eller hukommelse; mangler du leverandørens egen side, hent den. " +
+			"Lever ÉN anbefaling: hvorfor den passer akkurat denne " +
 			"situasjonen, med pris og innhold KUN ordrett fra kilden — har du ikke lest prisen, ikke oppgi " +
 			"den; si hvor den finnes. Avslutt med den ENE beslutningsregelen som ville snudd valget: bygger " +
 			"den på noe kildene sier, si det; ellers merk den som din vurdering. Aldri en meny, aldri " +

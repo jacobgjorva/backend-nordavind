@@ -1,0 +1,22 @@
+{
+  "case": {
+    "id": "a1",
+    "class": "anbefaling",
+    "text": "Vi trenger et vaktplansystem for 25 ansatte i turnus, helst norsk leverandør. Hva bør vi velge?"
+  },
+  "method": "anbefaling",
+  "answer": "Du bør velge **VaktFlyt** som vaktplansystem for 25 ansatte i turnus. VaktFlyt er utviklet i Norge, er spesialisert på turnus og vaktplanlegging, og har automatisk samsvar med norsk arbeidsmiljølov. Systemet tilbyr AI-drevet planlegging, rettferdig vaktfordeling, smart håndtering av vaktbytte, og support på norsk. Det passer godt for team på din størrelse og er enkelt å komme i gang med — du kan prøve det gratis i 30 dager før du binder deg.\n\nDen ene beslutningsregelen som ville snudd valget: Hvis dere trenger dyp integrasjon med et bestemt norsk lønnssystem, bør dere sjekke om VaktFlyt støtter akkurat det systemet før dere bestemmer dere.",
+  "steps": null,
+  "thoughts": [
+    "Du trenger et vaktplansystem som er skreddersydd for turnus, passer for 25 ansatte, og helst er norsk både i utvikling og support. Jeg vet at norske systemer ofte har god integrasjon mot norske lønnssystemer, tar hensyn til norsk arbeidsmiljølovgivning, og tilbyr support på norsk. Jeg skal sjekke hvilke norske leverandører som er mest relevante for turnusbaserte team på rundt 25 ansatte, og hva som skiller dem fra hverandre."
+  ],
+  "thought_count": 1,
+  "rounds": 2,
+  "searches": 1,
+  "fetches": 0,
+  "sources": 4,
+  "prompt_tokens": 4677,
+  "completion_tokens": 346,
+  "total_ms": 11336,
+  "handoff": false
+}

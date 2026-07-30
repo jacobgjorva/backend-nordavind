@@ -1,0 +1,22 @@
+{
+  "case": {
+    "id": "r3",
+    "class": "relasjon",
+    "text": "Which firms are the closest peers to a 15-person UX consultancy in Oslo focused on public sector clients?"
+  },
+  "method": "relasjon",
+  "answer": "Her er de mest relevante peer-byråene for en 15-personers UX-konsulentvirksomhet i Oslo med offentlig sektor som fokus:\n\n**Okse** er et UX- og designbyrå med kontor i Oslo og Stavanger, og har mellom 10 og 20 ansatte. De har bred erfaring med digital produktutvikling og strategi, og nevner spesielt kompetanse på WCAG, universell utforming og offentlige digitale tjenester. De har også en tydelig profil på brukersentrert design og metodikk, noe som passer godt for offentlig sektor. Flere av deres ansatte har bakgrunn fra offentlige prosjekter, og de er blant de mest synlige aktørene i UX-miljøet i Norge.\n\n**Svai Oslo** er et lite byrå med et knippe ansatte, men med over 20 års samlet erfaring. De har jobbet med flere offentlige og ideelle aktører, blant annet Den Norske Turistforening, NRK og Stiftelsen Norsk Luftambulanse. Selv om de også jobber med private kunder, har de solid erfaring med komplekse, brukersentrerte tjenester som ofte ligner offentlige prosjekter.\n\nDe byråene som primært jobber med reklame, teknisk utvikling eller store kommersielle kunder (som Neuron, Singlemind, Skalar, Monkey Wizard), eller som er betydelig større eller mindre enn 10–20 ansatte, er ikke relevante som direkte peers. Det samme gjelder byråer uten dokumentert erfaring fra offentlig sektor.\n\nHvilken type samarbeid eller konkurranse vurderer du – er det for benchmarking, partnerskap, eller noe annet?",
+  "steps": null,
+  "thoughts": [
+    "Du trenger en liste over norske UX-byråer som (1) er omtrent like store (10–20 ansatte), (2) har offentlig sektor som hovedfokus eller betydelig del av porteføljen, (3) er lokalisert i Oslo-området, og (4) selger UX-rådgivning (ikke primært teknisk utvikling eller reklame). Jeg må sjekke hvilke byråer som faktisk oppfyller alle disse kriteriene, ikke bare de som er mest synlige i søk."
+  ],
+  "thought_count": 1,
+  "rounds": 2,
+  "searches": 3,
+  "fetches": 0,
+  "sources": 12,
+  "prompt_tokens": 9389,
+  "completion_tokens": 585,
+  "total_ms": 19920,
+  "handoff": false
+}

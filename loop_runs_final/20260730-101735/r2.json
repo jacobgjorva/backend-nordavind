@@ -1,0 +1,20 @@
+{
+  "case": {
+    "id": "r2",
+    "class": "relasjon",
+    "text": "Selskapet vårt lager spesialemballasje i bølgepapp for sjømateksport, rundt 40 millioner i omsetning. Finn sammenlignbare aktører i Norden."
+  },
+  "method": "relasjon",
+  "answer": "For å finne sammenlignbare aktører i Norden som lager spesialemballasje i bølgepapp for sjømateksport og har en omsetning rundt 40 millioner kroner, er det mest relevante kriteriet at de både produserer skreddersydd bølgepappemballasje for matvareeksport (spesielt sjømat) og har en omsetning i samme størrelsesorden.\n\n**Glomma Papp AS** i Norge er en direkte sammenlignbar aktør. De utvikler og produserer spesialemballasje i bølgepapp og massivpapp for blant annet sjømat og frysevarer, leverer til hele Norden, og har en tydelig fokus på skreddersøm og innovasjon for eksportmarkedet. Omsetningstall for Glomma Papp er ikke oppgitt i søket, men de er en av de ledende aktørene i Norge på dette segmentet og har kapasitet og produktportefølje som matcher din bedrift.\n\nAndre aktører i Norden med tilsvarende spesialisering og størrelse er ikke navngitt i søkeresultatene, men typiske konkurrenter vil være mellomstore bølgepappprodusenter med egen utvikling og produksjon av eksportemballasje for mat, gjerne lokalisert i sjømatnæringens kjerneområder i Norge, Sverige og Danmark. Mindre aktører og rene standardvareprodusenter uten skreddersøm eller eksportfokus vil ikke være direkte sammenlignbare.\n\nFor å avklare om Glomma Papp har en omsetning nær 40 millioner, eller for å få navn på andre nordiske aktører med tilsvarende profil, trenger jeg å vite om du ønsker at jeg skal grave dypere etter omsetningstall og flere navn?",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 2,
+  "searches": 1,
+  "fetches": 0,
+  "sources": 4,
+  "prompt_tokens": 6055,
+  "completion_tokens": 447,
+  "total_ms": 12905,
+  "handoff": false
+}

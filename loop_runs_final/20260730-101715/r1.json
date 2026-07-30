@@ -1,0 +1,20 @@
+{
+  "case": {
+    "id": "r1",
+    "class": "relasjon",
+    "text": "Vi driver Fjellro Regnskap, et lite regnskapsbyrå i Tromsø med seks ansatte, mest bygg og fiskeri som kunder. Hvem er våre direkte konkurrenter?"
+  },
+  "method": "relasjon",
+  "answer": "Du har bedrifter i bygg- og fiskeribransjen som hovedkunder, og konkurransen i Tromsø handler om å finne regnskapsbyråer som både har kapasitet, lokal forankring og bransjekunnskap innen disse segmentene.\n\nDe mest relevante direkte konkurrentene til Fjellro Regnskap i Tromsø er:\n\n**Nordnorsk Revisjon \u0026 Regnskap AS** er spesialisert på fiskeri- og havbrukssektoren, og har inngående kjennskap til de lokale industrielle forholdene. De er en naturlig konkurrent fordi de henvender seg direkte til din viktigste kundegruppe innen fiskeri, og tilbyr både tradisjonell regnskapsføring og skreddersydd rådgivning.\n\n**Kystregnskap DA** har lang erfaring med kunder innen fiske, håndverk, konsulentvirksomhet og handel. De er en konkurrent fordi de både treffer bygg- og fiskerikunder, og har et tydelig fokus på små og mellomstore bedrifter i regionen.\n\n**Aktiv Regnskapsbyrå** har bred kompetanse og spesialisering innen bygg og anlegg, samt advokatregnskap og eiendomsutvikling. De er en konkurrent fordi de aktivt markedsfører seg mot bygg- og håndverksbedrifter, som er en av dine hovedkundegrupper.\n\n**Tromsø Regnskap AS** er kjent for sin lokalkunnskap og personlige service til små og mellomstore bedrifter i Tromsø-området. Selv om de ikke spesialiserer seg på bygg og fiskeri, er de en konkurrent fordi de tilbyr skreddersydde løsninger og har en stor andel av de samme kundene som deg.\n\nDe største revisjons- og rådgivningsselskapene som BDO, KPMG og Accountor er ikke direkte konkurrenter til dere, siden de primært henvender seg til større bedrifter og konsern, og ikke har samme fokus på små og mellomstore bedrifter innen bygg og fiskeri. De fleste små, generelle regnskapsbyråer uten bransjespesialisering er heller ikke direkte konkurrenter, så lenge de ikke aktivt markedsfører seg mot bygg og fiskeri.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 2,
+  "searches": 3,
+  "fetches": 0,
+  "sources": 12,
+  "prompt_tokens": 13021,
+  "completion_tokens": 591,
+  "total_ms": 19774,
+  "handoff": false
+}

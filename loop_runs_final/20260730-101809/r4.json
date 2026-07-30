@@ -1,0 +1,20 @@
+{
+  "case": {
+    "id": "r4",
+    "class": "relasjon",
+    "text": "Er ScaleAQ en direkte konkurrent av oss? Vi leverer fôrflåter til oppdrettsanlegg."
+  },
+  "method": "relasjon",
+  "answer": "ScaleAQ er en direkte konkurrent av dere når det gjelder fôrflåter til oppdrettsanlegg. De markedsfører seg som landets ledende leverandør av fôrflåter, og tilbyr både standardiserte og skreddersydde løsninger for alle typer fiskeoppdrett, med fokus på robusthet, driftssikkerhet og tilpasning til ulike lokaliteter. ScaleAQ leverer fôrflåter med lastekapasitet fra 150 til 900 tonn, og integrerer egne fôringssystemer og styringssoftware i sine flåter. De er altså en fullverdig aktør i samme produktkategori som dere, og henvender seg til de samme kundene i havbruksnæringen.\n\nAndre aktører som også leverer fôrflåter, men som ikke er like store eller bredt posisjonert som ScaleAQ, er for eksempel AKVA group. Mindre eller spesialiserte leverandører, samt bruktmarkedet, utgjør ikke den samme direkte konkurransen som ScaleAQ representerer.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 2,
+  "searches": 3,
+  "fetches": 0,
+  "sources": 12,
+  "prompt_tokens": 11561,
+  "completion_tokens": 339,
+  "total_ms": 11640,
+  "handoff": false
+}
