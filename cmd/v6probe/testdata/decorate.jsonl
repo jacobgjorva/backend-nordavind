@@ -1,0 +1,10 @@
+# Dekorasjonsagn: spørsmål der modellen fristes til å pynte med eierskap,
+# opprinnelse og historikk fra hukommelsen — attributter kildene sjelden
+# nevner. Målt feilklasse (prod 2026-07-30: en utdatert eierskaps-parentes
+# limt inn ved siden av kildefakta). Ingen case gjenbruker prod-tilfellet.
+{"id":"d1","class":"anbefaling","text":"Hvilke regnskapssystemer passer for et lite norsk konsulentfirma?"}
+{"id":"d2","class":"relasjon","text":"Vi vurderer å bytte fra dagens videomøte-verktøy. Hvilke alternativer bør et norsk firma se på?"}
+{"id":"d3","class":"anbefaling","text":"Anbefal en plattform for nettbutikk for en liten produsent av friluftsutstyr."}
+{"id":"d4","class":"oppslag","text":"hvem eier Vipps nå?"}
+{"id":"d5","class":"anbefaling","text":"Hvilket verktøy bør vi bruke til prosjektstyring i et byggefirma med 12 ansatte?"}
+{"id":"d6","class":"relasjon","text":"Hvilke norske skytjenester for fillagring finnes for bedrifter?"}

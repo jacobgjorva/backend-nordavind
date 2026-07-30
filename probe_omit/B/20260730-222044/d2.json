@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "d2",
+    "class": "relasjon",
+    "text": "Vi vurderer å bytte fra dagens videomøte-verktøy. Hvilke alternativer bør et norsk firma se på?"
+  },
+  "method": "relasjon",
+  "answer": "For å gi deg et godt svar, trenger jeg først å avklare hvilket behov dere har som ikke dekkes av dagens løsning. Er det spesifikke funksjoner, brukeropplevelse, pris, integrasjoner, eller kanskje krav til datasikkerhet og lagring i EU/EÆS som er viktigst for dere? Det hjelper meg å snevre inn til de mest relevante alternativene for et norsk firma.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 1058,
+  "completion_tokens": 101,
+  "total_ms": 3006,
+  "handoff": false,
+  "evidence": null
+}

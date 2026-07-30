@@ -55,6 +55,9 @@ var classMethod = map[string]motor.MethodKey{
 	"analyse":    motor.MethodAnalysis,
 }
 
+// omitRule settes av -omit: utelatelsesregelen som probes.
+var omitRule string
+
 type probeCase struct {
 	ID    string `json:"id"`
 	Class string `json:"class"`
@@ -66,7 +69,13 @@ func main() {
 	only := flag.String("only", "", "kjør bare én id")
 	outDir := flag.String("out", "loop_runs", "utkatalog")
 	model := flag.String("model", "mistral-large-2512", "modell")
+	omit := flag.Bool("omit", false, "legg på utelatelsesregelen (probe)")
 	flag.Parse()
+	if *omit {
+		omitRule = " Nevn bare egenskaper ved aktører og produkter som kildene i denne turen faktisk sier " +
+			"— eierskap, opprinnelse, størrelse og historikk fra egen hukommelse utelates helt. Å si " +
+			"mindre er riktig; å pynte med uverifisert er feil."
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -130,7 +139,7 @@ func run(client *http.Client, sc *search.Client, cfg config.Config, log *slog.Lo
 	c probeCase, model string) record {
 
 	method := classMethod[c.Class]
-	system := motor.BuildSystem(baseSystem, method, true)
+	system := motor.BuildSystem(baseSystem+omitRule, method, true)
 
 	payload := map[string]any{
 		"model": model, "stream": false, "temperature": 0.3,

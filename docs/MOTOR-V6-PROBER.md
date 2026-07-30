@@ -401,3 +401,37 @@ kontrakt som den gamle motoren hadde: kjør hvis du kan, ellers took=false
 uten å ha sendt noe. Tre tester fester sikkerhetsnettet — flagget av gir
 inert motor, utfører-flyter faller gjennom, og et åpent lerret eier turen
 selv. Hele suiten er grønn med ENGINE=v6 både på og av.
+
+## Kjøring 11 — utelatelsesregelen: NULLRESULTAT, forkastet
+
+Hypotese (etter prod-funnet der en utdatert eierskaps-parentes ble limt inn
+ved siden av kildefakta): en eksplisitt regel om å utelate attributter
+kildene ikke dekker («eierskap, opprinnelse, historikk fra hukommelse
+utelates helt») reduserer dekorasjonsklassen.
+
+Oppsett: 6 agnspørsmål på tvers av domener (regnskap, video, netthandel,
+eierskap, prosjektstyring, sky), A uten regel mot B med, ekte modell og
+ekte søk. Kontrollagn d4 («hvem eier Vipps») der attributtene ER svaret.
+
+Resultat:
+
+```
+dekorasjoner:  A 0/6   B 1/6
+d4 (kontroll): begge svarte eierskap korrekt — regelen kvalte ikke svaret
+d3:            B halvparten så langt som A (786 mot 1 765 tegn)
+```
+
+Den ENE dekorasjonen kom i B-varianten, MED regelen aktiv: «Hoppe
+(tidligere kjent som MyProject)» — to navn fra samme kildeside, limt sammen
+med en relasjon som ikke står der og som websøk ikke finner belegg for.
+
+Dom: regelen forkastes. Den forhindrer ikke feilklassen (modellen pynter
+ikke med å BRYTE en regel, den pynter i god tro når to biter ligner), og en
+virkningsløs regel i systemprompten er ren stapling — målt til å gjøre svar
+verre. Feilklassen bæres som dokumentert restrisiko: sjelden (1 av 12 på
+agn designet for å utløse den), tall dekkes av dekningsgulvet, navn og
+relasjoner av metodetekstens kildekrav.
+
+Lærdom: adferdsgap mot en sterkere modell tettes ikke nødvendigvis med
+flere instrukser. Verifiser-før-gjenta er delvis modellevne; resten av
+gapet bæres ærlig i stedet for å skjules bak regler som ikke måler inn.

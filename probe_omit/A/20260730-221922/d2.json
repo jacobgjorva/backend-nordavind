@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "d2",
+    "class": "relasjon",
+    "text": "Vi vurderer å bytte fra dagens videomøte-verktøy. Hvilke alternativer bør et norsk firma se på?"
+  },
+  "method": "relasjon",
+  "answer": "For å gi deg et godt svar, trenger jeg først å avklare hvilket kriterium som er viktigst for dere akkurat nå: Er det **kostnad**, **integrasjon mot Microsoft 365/Google Workspace**, **funksjoner som opptak, transkripsjon eller direkteteksting på norsk**, **personvern/sikkerhet (Schrems II, GDPR)**, **brukervennlighet**, eller kanskje **støtte for hybridmøter og store grupper**? Det vil avgjøre om jeg bør anbefale for eksempel Microsoft Teams, Google Meet, Zoom, eller mer nisjeaktører som Whereby eller Pexip.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 990,
+  "completion_tokens": 153,
+  "total_ms": 3981,
+  "handoff": false,
+  "evidence": null
+}
