@@ -50,14 +50,24 @@ og flyt→metode-mappingen (research_relation→relasjon, recommendation→
 anbefaling, web_fact→oppslag, data_question→analyse, smalltalk→samtale,
 free_chat→ingen). Ingen metode = naken løkke (fail-open).
 
-Vaktene er strukturelle, ikke semantiske: enhetstest håndhever at tekstene
-er innenfor lengdetak (300-700 tegn), at nøklene dekker mappingen begge
-veier, at budsjettene er satt, og at KUN ÉN blokk kan injiseres per tur.
-Katalogendring er en dataendring med diff på én rad.
+Vaktene er strukturelle, ikke semantiske: enhetstest håndhever
+lengdetak, at ingen tekst inneholder et EKSEMPEL (bransje/entitet/case-ord),
+at rutingen peker på klasser som finnes, at budsjettene henger sammen
+(fetch uten search er umulig), at ingen rad sprenger kostnadstaket, at
+standardbudsjettet fortsatt speiler legacys tak, og at klasser uten
+rutingsvei er dokumentert i stedet for glemt. Katalogendring er en
+dataendring med diff på én rad.
 
-Ferdig: katalogtestene grønne; tekstene er identiske med de probede
-(diff mot cmd/v6probe/main.go i test, så harness og motor aldri glir fra
-hverandre).
+Harness-drift løses STRUKTURELT, ikke med en diff-test: cmd/v6probe
+importerer katalogen fra internal/motor. Kopien i proben er borte, så
+probene tester per definisjon det produksjon kjører.
+
+STATUS: FERDIG. Katalogtestene grønne. Én reell konflikt fanget av
+testene — relasjonsklassen trenger 4 hentinger (probe r2 brukte nøyaktig
+4, og dybden var det som gjorde svaret godt), mens legacys tak er 3. Riktig
+invariant er derfor et hardt kostnadstak (MaxBudget), ikke «aldri over
+standarden»; standarden er låst til legacys tall så en tur UTEN metode
+oppfører seg nøyaktig som i dag.
 
 ## Del 3 — arbeidsløkka
 

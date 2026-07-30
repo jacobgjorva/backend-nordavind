@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/config"
+	"github.com/jacobgjorva/backend-nordavind/internal/motor"
 	"github.com/jacobgjorva/backend-nordavind/internal/search"
 )
 
@@ -59,37 +60,31 @@ const thinkRule = " Før verktøykallene: tenk kort høyt i én til tre setninge
 	"trenger, hva du alt vet, og hva du må sjekke. Skriv tanken som vanlig tekst og kall verktøyene " +
 	"i SAMME svar. Tanken er arbeidsnotat, ikke svaret."
 
-// Metodekatalogen (docs/MOTOR-V6.md del 6) — utkastene som probes i P3.
-var methods = map[string]string{
-	"oppslag": " METODE: Dette er et faktaoppslag. Verifiser med ett søk selv om du tror du vet svaret — " +
-		"ferskhet slår hukommelse. Én autoritativ kilde holder. Svar med faktumet og tidspunktet det " +
-		"gjelder for. Ikke utred.",
-	"relasjon": " METODE: Svaret avhenger av hvem subjektet ER. Arbeidsrekkefølge: (1) Profiler subjektet " +
-		"fra nærmeste kilde — det brukeren har fortalt, og aktørens egne sider når de finnes. (2) Si i " +
-		"arbeidsnotatet hvilket kriterium relasjonen krever her, utledet av det brukeren skal beslutte. " +
-		"(3) Let etter kandidater INNENFOR det segmentet, og les kandidatenes egne sider (fetch_url) før " +
-		"du feller dom om portefølje eller posisjon — søkeutdrag og topplister er ikke evidens. " +
-		"SVARKONTRAKT, alle tre delene: (a) kandidatene i løpende tekst med hver sin korte begrunnelse " +
-		"mot kriteriet; (b) én setning som avgrenser mot aktørene som IKKE kvalifiserer — navngi kun " +
-		"aktører som står i kildene eller samtalen, ellers beskriv kategorien uten navn; (c) hvis profilen har et konkret hull som begrenser svaret: avslutt med ETT spørsmål " +
-		"om akkurat det hullet — dette spørsmålet er en del av leveransen, ikke vegring. " +
-		"Tall og fakta om kandidater KUN ordrett fra kildene.",
-	"anbefaling": " METODE: Etabler behovet fra samtalen før du leter. Søk etter kategorien og segmentet, " +
-		"aldri «beste X»-fraser — topplister er ikke evidens. Les den aktuelle leverandørens EGEN side " +
-		"(fetch_url) før du anbefaler. Lever ÉN anbefaling: hvorfor den passer akkurat denne " +
-		"situasjonen, med pris og innhold KUN ordrett fra kilden — har du ikke lest prisen, ikke oppgi " +
-		"den; si hvor den finnes. Avslutt med den ENE beslutningsregelen som ville snudd valget: bygger " +
-		"den på noe kildene sier, si det; ellers merk den som din vurdering. Aldri en meny, aldri " +
-		"diktede terskler. Ber brukeren eksplisitt om svar uten research: svar kort, men si at det er " +
-		"fra hukommelsen og uverifisert, og tilby å sjekke — presenter aldri uverifisert som fakta.",
-	"samtale": " METODE: Ingen verktøy trengs. Svar kort med husets stemme. Er det et reelt behov bak " +
-		"småpraten, pek på det i én setning.",
+// Metodetekstene hentes fra internal/motor — samme katalog som produksjon.
+// Proben hadde sin egen kopi i designfasen; da katalogen ble kode, ville en
+// kopi her betydd at vi prober noe annet enn vi kjører. classMethod
+// oversetter promptsettets klassenavn til katalognøkler.
+var classMethod = map[string]motor.MethodKey{
+	"relasjon":   motor.MethodRelation,
+	"anbefaling": motor.MethodAdvice,
+	"oppslag":    motor.MethodLookup,
+	"samtale":    motor.MethodSmalltalk,
+	"analyse":    motor.MethodAnalysis,
 }
 
-// classMethod: promptsettets klasse → metodenøkkel ved -method auto.
-var classMethod = map[string]string{
-	"relasjon": "relasjon", "anbefaling": "anbefaling",
-	"oppslag": "oppslag", "samtale": "samtale",
+// methodText gir teksten for -method: "auto" bruker casens klasse, ellers
+// slås nøkkelen opp direkte i katalogen.
+func methodText(flag string, class string) string {
+	if flag == "" {
+		return ""
+	}
+	if flag == "auto" {
+		return motor.TextFor(classMethod[class])
+	}
+	if k, ok := classMethod[flag]; ok {
+		return motor.TextFor(k)
+	}
+	return motor.TextFor(motor.MethodKey(flag))
 }
 
 var webSearchTool = map[string]any{
@@ -243,13 +238,7 @@ func runCase(client *http.Client, sc *search.Client, cfg config.Config, c probeC
 	if think {
 		system += thinkRule
 	}
-	mkey := method
-	if method == "auto" {
-		mkey = classMethod[c.Class]
-	}
-	if m, ok := methods[mkey]; ok {
-		system += m
-	}
+	system += methodText(method, c.Class)
 
 	msgs := []any{
 		map[string]any{"role": "system", "content": system},
