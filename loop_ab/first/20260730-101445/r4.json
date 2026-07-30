@@ -1,0 +1,22 @@
+{
+  "case": {
+    "id": "r4",
+    "class": "relasjon",
+    "text": "Er ScaleAQ en direkte konkurrent av oss? Vi leverer fôrflåter til oppdrettsanlegg."
+  },
+  "method": "relasjon",
+  "answer": "ScaleAQ er en direkte konkurrent av dere når det gjelder fôrflåter til oppdrettsanlegg. De markedsfører og leverer fôrflåter i alle størrelser og for alle typer lokaliteter, med fokus på robusthet, lastekapasitet og integrerte fôringssystemer. De tilbyr også sertifiserte flåter og skreddersydde løsninger for både bemannede og ubemannede anlegg.\n\nAndre aktører som leverer fôrflåter, men som ikke er like store eller like synlige i det norske markedet, er ikke direkte konkurrenter på samme måte. Hvis dere har et spesielt nisjeprodukt eller en unik teknologi som ikke er standard i bransjen, bør du avklare om ScaleAQ tilbyr akkurat det. Er det en spesiell funksjon eller egenskap ved deres fôrflåter som du lurer på om ScaleAQ matcher?",
+  "steps": null,
+  "thoughts": [
+    "Du trenger å vite om ScaleAQ er en direkte konkurrent innenfor fôrflåter til oppdrettsanlegg, ikke bare om de overlapper på andre produkter eller tjenester.\n\nJeg vet at ScaleAQ er en stor aktør innen teknologi og utstyr for oppdrett, men det er ikke dokumentert i min kunnskap om de leverer fôrflåter spesifikt. For å svare presist må jeg sjekke om de markedsfører eller selger fôrflåter i dag."
+  ],
+  "thought_count": 1,
+  "rounds": 2,
+  "searches": 1,
+  "fetches": 0,
+  "sources": 4,
+  "prompt_tokens": 4854,
+  "completion_tokens": 359,
+  "total_ms": 10770,
+  "handoff": false
+}

@@ -1,0 +1,20 @@
+{
+  "case": {
+    "id": "r1",
+    "class": "relasjon",
+    "text": "Vi driver Fjellro Regnskap, et lite regnskapsbyrå i Tromsø med seks ansatte, mest bygg og fiskeri som kunder. Hvem er våre direkte konkurrenter?"
+  },
+  "method": "relasjon",
+  "answer": "Her er dine direkte konkurrenter i Tromsø, med fokus på de som også retter seg mot små og mellomstore bedrifter, spesielt innen bygg og fiskeri:\n\n**Tromsø Regnskap AS** er en naturlig konkurrent fordi de har dyptgående lokalkunnskap og spesialiserer seg på skreddersydde tjenester for små og mellomstore bedrifter i Tromsø-området, akkurat som dere. De legger vekt på personlig service og forståelse for kundens unike behov, noe som matcher deres egen profil.\n\n**Nordnorsk Revisjon \u0026 Regnskap AS** er en sterk konkurrent fordi de har spesialisert seg på fiskeri- og havbrukssektoren, som er en av deres hovedbransjer. De tilbyr alt fra tradisjonell bokføring til økonomisk rådgivning og skatteplanlegging, og har inngående kjennskap til lokale industrielle forhold.\n\n**Kystregnskap DA** på Kvaløysletta er også en direkte konkurrent, ettersom de har lang erfaring med kunder innen fiskeri, håndverk, konsulentvirksomhet og handel. De retter seg mot små og mellomstore bedrifter i regionen, og har dermed en kundegruppe som overlapper med deres.\n\n**Aktiv Regnskapsbyrå** er en konkurrent fordi de tilbyr et bredt tjenestespekter, inkludert regnskapsføring, lønn, skatterådgivning og bedriftsrådgivning, og har erfaring med flere bransjer, blant annet bygg og anlegg. De bruker moderne digitale løsninger, noe som kan appellere til kunder som ønsker effektivisering.\n\nDe største revisjons- og rådgivningsselskapene som BDO, KPMG og Accountor er ikke direkte konkurrenter for dere, siden de først og fremst retter seg mot større bedrifter og konsern, og har en mer internasjonal profil. De mindre, lokale byråene som ikke spesialiserer seg på bygg eller fiskeri, eller som har en annen kundestørrelse, er heller ikke direkte konkurrenter.\n\nHvilken bransje innen bygg er deres største kundegruppe – er det entreprenører, håndverkere, eller anlegg?",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 2,
+  "searches": 1,
+  "fetches": 0,
+  "sources": 4,
+  "prompt_tokens": 6161,
+  "completion_tokens": 540,
+  "total_ms": 17073,
+  "handoff": false
+}

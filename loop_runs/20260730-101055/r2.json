@@ -1,0 +1,20 @@
+{
+  "case": {
+    "id": "r2",
+    "class": "relasjon",
+    "text": "Selskapet vårt lager spesialemballasje i bølgepapp for sjømateksport, rundt 40 millioner i omsetning. Finn sammenlignbare aktører i Norden."
+  },
+  "method": "relasjon",
+  "answer": "Du trenger sammenlignbare nordiske aktører som lager spesialemballasje i bølgepapp for sjømateksport og har en omsetning rundt 40 millioner kroner. Her er de mest relevante kandidatene, basert på tilgjengelig informasjon:\n\n**Glomma Papp AS** i Norge er en ledende produsent av spesialemballasje i bølge- og massivpapp, med tydelig fokus på sjømatsektoren. De utvikler skreddersydde løsninger for fisk og frysevarer, og leverer til hele Norden. Omsetningen ligger sannsynligvis i nærheten av 40 millioner, men det eksakte tallet er ikke oppgitt i åpne kilder. Bedriften er en naturlig sammenligning fordi de har samme produktfokus, kundesegment og geografisk rekkevidde som dere.\n\n**Smurfit Kappa Norge** (del av den internasjonale Smurfit Kappa Group) produserer også bølgepappemballasje for sjømat, inkludert frysekasser og transportløsninger. De er en stor aktør med bredere produktspekter og høyere omsetning totalt, men deres norske avdeling kan ha en omsetning i samme størrelsesorden som dere. De skiller seg fra dere ved å være en del av en global kjede, men er relevante fordi de konkurrerer i samme marked og segment.\n\nAndre aktører i Norge med emballasjefokus og omsetning i 30–50 millionersklassen er vanskelig å finne direkte oppgitt i åpne kilder, men Proff.no og søkfirma.no viser at de fleste emballasjeprodusenter i denne størrelsen enten er bredere i produktspekteret eller har lavere omsetning enn 40 millioner. Aktører uten spesialisering på sjømat eller bølgepapp er ikke relevante for sammenligningen.\n\nFor å få et mer presist svar, trenger jeg å vite om dere ønsker å sammenligne dere med aktører som har nøyaktig samme omsetning, eller om det er tilstrekkelig at de har samme produkt- og kundefokus.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 2,
+  "searches": 3,
+  "fetches": 0,
+  "sources": 12,
+  "prompt_tokens": 14186,
+  "completion_tokens": 610,
+  "total_ms": 20704,
+  "handoff": false
+}

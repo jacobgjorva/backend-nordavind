@@ -1,0 +1,22 @@
+{
+  "case": {
+    "id": "r2",
+    "class": "relasjon",
+    "text": "Selskapet vårt lager spesialemballasje i bølgepapp for sjømateksport, rundt 40 millioner i omsetning. Finn sammenlignbare aktører i Norden."
+  },
+  "method": "relasjon",
+  "answer": "Du trenger aktører som er sammenlignbare i størrelse (omsetning rundt 40 millioner) og som spesialiserer seg på spesialemballasje i bølgepapp for sjømateksport i Norden. Glomma Papp er en klar kandidat, men med en omsetning på 697 millioner kroner i 2023 er de for store til å være direkte sammenlignbare. Det finnes få offentlige omsetningstall for mindre, spesialiserte aktører i dette segmentet i Norden, men én aktør som ofte nevnes i samme åndedrag som Glomma Papp, men som er mindre og mer spesialisert, er **Vartdal Plast AS** (som også jobber med emballasje for sjømat, men med en større andel plast). Det er imidlertid få andre navn som dukker opp med omsetning i 30–50 millioner-klassen og med klar spesialisering på bølgepapp for sjømat.\n\nDe fleste andre aktørene i Norden med tilsvarende spesialisering er enten mye større (som Glomma Papp, Peterson, DS Smith, Ranheim Papirfabrikk) eller så små at de ikke er direkte sammenlignbare på omsetning. Mange av de mindre aktørene er også mer generelle emballasjeleverandører uten klar spesialisering på sjømat.\n\n**Sammenlignbare aktører:**\nGlomma Papp er den eneste nordiske aktøren med klar spesialisering på spesialemballasje i bølgepapp for sjømateksport og en omsetning som tidligere har vært nærmere 40 millioner (før vekst de siste årene). De er derfor fortsatt den beste sammenligningen for strategi, marked og produktportefølje, selv om de nå er større enn dere.\n\n**Aktører som ikke kvalifiserer:**\n- Peterson, DS Smith, Ranheim Papirfabrikk: For store (omsetning i milliardklassen).\n- Små lokale emballasjeprodusenter: For små og/eller uten spesialisering på sjømat.\n- Vartdal Plast og tilsvarende: Spesialisert på plast, ikke bølgepapp.\n\n**Spørsmål for å avgrense videre:**\nHvor viktig er det at sammenligningskandidatene har nøyaktig samme omsetning som dere, eller er det viktigere at de har samme spesialisering og marked?",
+  "steps": null,
+  "thoughts": [
+    "Du trenger sammenlignbare aktører som er omtrent på samme størrelse som dere, altså med omsetning rundt 40 millioner kroner, og som spesialiserer seg på spesialemballasje i bølgepapp for sjømateksport i Norden. Jeg har funnet én klar kandidat, og må sjekke om det finnes flere i samme segment og størrelse.\n\nDet viktigste kriteriet her er altså omsetning rundt 40 millioner og spesialisering på bølgepappemballasje for sjømat, ikke bare generell emballasje eller standardløsninger. Jeg sjekker nå om Glomma Papp har omsetning i riktig størrelsesorden, og om det finnes andre nordiske aktører som matcher."
+  ],
+  "thought_count": 1,
+  "rounds": 3,
+  "searches": 3,
+  "fetches": 0,
+  "sources": 12,
+  "prompt_tokens": 18429,
+  "completion_tokens": 832,
+  "total_ms": 36161,
+  "handoff": false
+}

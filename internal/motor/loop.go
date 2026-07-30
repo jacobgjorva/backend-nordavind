@@ -2,7 +2,6 @@ package motor
 
 import (
 	"context"
-	"os"
 	"strings"
 )
 
@@ -169,11 +168,18 @@ func (e *Engine) runTools(ctx context.Context, payload map[string]any, turn *Tur
 // --- Systemprompten -------------------------------------------------------
 
 // BuildSystem setter sammen turens systeminstruks: husets faste regler
-// (bygget av api-laget som i dag) + metodeteksten + tenk-regelen.
+// + tenk-regelen + metodeteksten.
 //
-// Rekkefølgen er bevisst. Metoden kommer SIST av innholdsreglene fordi den
-// er turens mest spesifikke instruks, og tenk-regelen helt til slutt fordi
-// den styrer FORMEN på neste melding, ikke innholdet i svaret.
+// REKKEFØLGEN ER MÅLT, ikke resonnert fram. Den første versjonen la
+// tenk-regelen SIST, med den plausible begrunnelsen at den styrer formen
+// på neste melding. Resultatet var at tankekanalen var helt død: 0 av 5
+// ekte kjøringer ga prosa sammen med verktøykallene. Med regelen FORAN
+// metodeteksten kom tanken i 6 av 9 (docs/MOTOR-V6-PROBER.md, del 3).
+//
+// Mekanismen er trolig at metodeteksten ender i en svarkontrakt, og at en
+// formregel plassert etter den leses som en del av svaret modellen ennå
+// ikke skal skrive. Uansett årsak: rekkefølgen er en målt egenskap, og
+// enhver endring av den må måles på nytt.
 //
 // Kun ÉN metodetekst kan komme med — stabling av regler er målt å gjøre
 // svarene verre (feedback-no-prompt-stuffing), og klassene er gjensidig
@@ -184,21 +190,12 @@ func BuildSystem(base string, method MethodKey, tools bool) string {
 	// Tenk-regelen gir bare mening når det finnes verktøy å tenke foran.
 	// Uten verktøy ville den bedt modellen skrive et arbeidsnotat til en
 	// jobb den ikke kan utføre.
-	if tools && thinkFirst {
+	if tools {
 		b.WriteString(ThinkRule)
 	}
 	b.WriteString(TextFor(method))
-	if tools && !thinkFirst {
-		b.WriteString(ThinkRule)
-	}
 	return b.String()
 }
-
-// thinkFirst avgjør om tenk-regelen står foran eller bak metodeteksten.
-// MIDLERTIDIG under måling (del 3) — settes til den vinnende rekkefølgen
-// og fjernes så. En permanent bryter her ville vært en kodegren for noe
-// som skal være avgjort.
-var thinkFirst = os.Getenv("V6_THINK_FIRST") != "off"
 
 // ThinkRule ber modellen tenke kort høyt i SAMME svar som verktøykallene.
 //

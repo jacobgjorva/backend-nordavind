@@ -1,0 +1,22 @@
+{
+  "case": {
+    "id": "a1",
+    "class": "anbefaling",
+    "text": "Vi trenger et vaktplansystem for 25 ansatte i turnus, helst norsk leverandør. Hva bør vi velge?"
+  },
+  "method": "anbefaling",
+  "answer": "Jeg har funnet tre gode, norske vaktplansystemer som passer for 25 ansatte i turnus: Smartplan, Toly og Timelista. Alle er utviklet i Norge, har god støtte for turnus, integrasjon mot lønnssystemer, og er laget for å følge norske arbeidsmiljøregler.\n\n**Anbefaling: Smartplan**\nSmartplan er spesielt godt egnet for din situasjon. Systemet er enkelt å bruke, har gode anmeldelser fra over 2900 norske bedrifter, og tilbyr alt du trenger for turnusplanlegging, timeregistrering, vaktbytte, fravær og direkte eksport til lønn. Prisen er ikke oppgitt på nettsiden, men du kan få et tilbud ved å kontakte dem direkte. Smartplan har også en app for de ansatte, noe som gjør det enkelt å holde alle oppdatert og involvert.\n\n**Hvorfor Smartplan passer for deg:**\n- Norsk utviklet og støttet, med fokus på norske regler og behov.\n- Enkel vaktplanlegging, selvbygger-funksjon, og automatisk varsling om dobbeltbooking eller hull i turnusen.\n- Timeregistrering og lønnseksport med ett klikk.\n- Gode brukeromtaler og høy tilfredshet med kundeservice.\n\n**Hvordan komme i gang:**\nGå til [smartplanapp.com/no](https://smartplanapp.com/no), registrer deg for en gratis prøveperiode, og be om et tilbud for 25 ansatte.\n\n**Den ene beslutningsregelen som ville snudd valget:**\nHvis dere trenger et system som er spesialisert for helse- og omsorgssektoren, med avansert kompetansehåndtering og AI-støtte, bør dere vurdere Dynamon. For alle andre turnusbaserte virksomheter er Smartplan det beste valget fordi det er enkelt, fleksibelt og har bredest brukergrunnlag i Norge.",
+  "steps": null,
+  "thoughts": [
+    "Du trenger et vaktplansystem som er skreddersydd for turnus, passer for 25 ansatte, og helst er norsk både i utvikling og support. Jeg vet at norske løsninger ofte har god integrasjon mot norske regelverk (som arbeidstid, overtid, HSE) og lokal kundestøtte, noe som er verdifullt for turnusbaserte virksomheter.\n\nJeg skal sjekke hvilke norske leverandører som er mest relevante for akkurat denne størrelsen og behovet, og se på pris, funksjoner og brukeromtaler. La meg først finne en oversikt over aktuelle systemer."
+  ],
+  "thought_count": 1,
+  "rounds": 2,
+  "searches": 1,
+  "fetches": 0,
+  "sources": 4,
+  "prompt_tokens": 5594,
+  "completion_tokens": 649,
+  "total_ms": 22965,
+  "handoff": false
+}

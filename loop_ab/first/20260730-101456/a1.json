@@ -1,0 +1,22 @@
+{
+  "case": {
+    "id": "a1",
+    "class": "anbefaling",
+    "text": "Vi trenger et vaktplansystem for 25 ansatte i turnus, helst norsk leverandør. Hva bør vi velge?"
+  },
+  "method": "anbefaling",
+  "answer": "Du bør velge **Shyft** som vaktplansystem for 25 ansatte i turnus. Shyft er en norsk leverandør som spesialiserer seg på vaktplanlegging, timeføring og compliance for bedrifter med 10–500 ansatte. Systemet er skreddersydd for turnus og tilbyr AI-drevet autogenerering av vaktplaner på få minutter, med automatisk hensyn til fravær, kompetanse, ønsker og tariffavtaler. Du får også sanntidsoversikt over lønnskostnader, overtid og fravær, samt direkte eksport til lønnssystemet. Prøveperioden er gratis i 3 måneder, og oppstart tar under 10 minutter. Prisen er ikke oppgitt på nettsiden, men du kan be om et tilbud direkte hos dem.\n\n**Beslutningsregel som snur valget:**\nHvis dere trenger et system som også håndterer prosjektstyring og feltarbeid (for eksempel bygg, anlegg eller service), er Shyft det eneste av alternativene som har full integrert prosjektmodul. Hvis dere kun trenger enkel vaktplanlegging og lønnsflyt, kan Toly eller VaktFlyt være mer kostnadseffektive.",
+  "steps": null,
+  "thoughts": [
+    "Du trenger et vaktplansystem som er skreddersydd for turnus, enkelt å bruke for 25 ansatte, og helst fra en norsk leverandør for å sikre god support og samsvar med norske regler. Jeg vet at det finnes flere norske aktører som spesialiserer seg på vaktplanlegging, men jeg må sjekke hvilke som passer best for akkurat deres behov og hva som er mest anbefalt i 2024.\n\nJeg vil først søke etter de mest aktuelle norske vaktplansystemene for turnus, og så sjekke pris, funksjoner og brukeromtaler for å finne den beste matchen."
+  ],
+  "thought_count": 1,
+  "rounds": 2,
+  "searches": 1,
+  "fetches": 0,
+  "sources": 4,
+  "prompt_tokens": 4728,
+  "completion_tokens": 490,
+  "total_ms": 13474,
+  "handoff": false
+}

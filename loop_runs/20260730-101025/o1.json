@@ -1,0 +1,20 @@
+{
+  "case": {
+    "id": "o1",
+    "class": "oppslag",
+    "text": "hva er styringsrenten nå?"
+  },
+  "method": "oppslag",
+  "answer": "Styringsrenten i Norge er nå 4,25 prosent. Siste vedtak ble gjort 14. august 2025, og renten ble holdt uendret på dette nivået.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 2,
+  "searches": 1,
+  "fetches": 0,
+  "sources": 4,
+  "prompt_tokens": 5786,
+  "completion_tokens": 69,
+  "total_ms": 7438,
+  "handoff": false
+}

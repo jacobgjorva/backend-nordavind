@@ -1,0 +1,20 @@
+{
+  "case": {
+    "id": "r4",
+    "class": "relasjon",
+    "text": "Er ScaleAQ en direkte konkurrent av oss? Vi leverer fôrflåter til oppdrettsanlegg."
+  },
+  "method": "relasjon",
+  "answer": "ScaleAQ er en direkte konkurrent av dere når det gjelder fôrflåter til oppdrettsanlegg. De markedsfører seg som landets ledende leverandør av fôrflåter, og tilbyr både standardiserte og skreddersydde løsninger for alle typer fiskeoppdrett, med lastekapasitet fra 150 til 900 tonn fôr. De legger vekt på robuste, driftssikre konstruksjoner som er tilpasset ulike lokaliteter og værforhold, og integrerer avanserte fôringssystemer og styringssoftware i sine flåter.\n\nAndre aktører som også leverer fôrflåter, men som ikke har samme bredde eller posisjon som ScaleAQ, er blant andre Ulstein Betong Marine, Hydema, Preplast Industrier, og flere mindre lokale aktører. De fleste av disse leverer imidlertid ikke komplette fôrflåtesystemer med samme grad av integrerte løsninger som dere og ScaleAQ tilbyr. De som kun leverer komponenter, tjenester eller alternative materialer (for eksempel betongflåter), er ikke direkte konkurrenter på fôrflåter som produktområde.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 2,
+  "searches": 3,
+  "fetches": 0,
+  "sources": 12,
+  "prompt_tokens": 13212,
+  "completion_tokens": 370,
+  "total_ms": 14697,
+  "handoff": false
+}

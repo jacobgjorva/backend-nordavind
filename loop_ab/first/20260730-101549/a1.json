@@ -1,0 +1,22 @@
+{
+  "case": {
+    "id": "a1",
+    "class": "anbefaling",
+    "text": "Vi trenger et vaktplansystem for 25 ansatte i turnus, helst norsk leverandør. Hva bør vi velge?"
+  },
+  "method": "anbefaling",
+  "answer": "Du bør velge **Timelista** som vaktplansystem for 25 ansatte i turnus. Timelista er en norsk leverandør som er skreddersydd for små og mellomstore virksomheter med turnus, og som oppfyller alle krav i arbeidsmiljøloven § 10-3. Systemet gir deg visuell oversikt over vakter, varsler om dobbeltbooking eller hull i bemanningen, og sender planen direkte til de ansattes mobil. Det er enkelt å komme i gang, og du kan prøve det gratis for én bruker før du eventuelt oppgraderer for hele teamet. Prisene er rimelige og oppgis på nettsiden uten binding eller kredittkort.\n\nDen ene beslutningsregelen som snur valget: Hvis dere trenger et system som er 100 % norsk, intuitivt og som automatisk håndterer varsling og lovkrav, er Timelista det beste valget.",
+  "steps": null,
+  "thoughts": [
+    "Du trenger et vaktplansystem for 25 ansatte i turnus, med fokus på norsk leverandør, brukervennlighet, turnusstøtte og integrasjonsmuligheter. Jeg vet at det finnes flere norske aktører som spesialiserer seg på vaktplanlegging for små til mellomstore virksomheter, men jeg må sjekke hvilke som er mest anbefalt for akkurat denne størrelsen og bransjen, samt hvilke funksjoner de tilbyr og prisnivå.\n\nJeg skal først søke etter aktuelle norske leverandører av vaktplansystemer, og deretter sjekke detaljene på deres nettsider for å finne den beste matchingen."
+  ],
+  "thought_count": 1,
+  "rounds": 2,
+  "searches": 1,
+  "fetches": 0,
+  "sources": 4,
+  "prompt_tokens": 4929,
+  "completion_tokens": 418,
+  "total_ms": 13545,
+  "handoff": false
+}

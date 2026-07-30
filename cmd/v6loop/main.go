@@ -226,9 +226,6 @@ func (m *liveModel) Call(ctx context.Context, req motor.ModelRequest) (motor.Mod
 		return motor.ModelResponse{}, fmt.Errorf("uparsbart svar: %s", brief(string(raw)))
 	}
 	msg := out.Choices[0].Message
-	if os.Getenv("V6_DEBUG") == "on" {
-		fmt.Fprintf(os.Stderr, "[debug] content=%q kall=%d\n", contentText(msg.Content), len(msg.ToolCalls))
-	}
 	res := motor.ModelResponse{
 		Text:  contentText(msg.Content),
 		Usage: motor.Usage{PromptTokens: out.Usage.PromptTokens, CompletionTokens: out.Usage.CompletionTokens},

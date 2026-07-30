@@ -1,0 +1,20 @@
+{
+  "case": {
+    "id": "r2",
+    "class": "relasjon",
+    "text": "Selskapet vårt lager spesialemballasje i bølgepapp for sjømateksport, rundt 40 millioner i omsetning. Finn sammenlignbare aktører i Norden."
+  },
+  "method": "relasjon",
+  "answer": "Her er sammenlignbare aktører i Norden for et selskap som lager spesialemballasje i bølgepapp for sjømateksport, med omsetning rundt 40 millioner NOK:\n\nGlomma Papp AS i Norge er en direkte sammenlignbar aktør. De har lang erfaring med å utvikle og produsere skreddersydd emballasje i både bølge- og massivpapp, spesielt for sjømat og eksportmarkedet. Bedriften leverer frysekasser og fiskeemballasje tilpasset transport og lagring, og har et tydelig fokus på innovasjon og bærekraft. Glomma Papp er en familiebedrift med omsetning i samme størrelsesorden som deres eget selskap, og de jobber med mange av de samme kundene og utfordringene i sjømatnæringen.\n\nSmurfit Kappa er en stor internasjonal aktør med virksomhet i hele Norden, og de leverer også spesialemballasje i bølgepapp for sjømat. De er imidlertid betydelig større enn deres selskap, med en omsetning som er mange ganger høyere, og de fungerer mer som en global leverandør enn en lokal samarbeidspartner.\n\nAndre nordiske produsenter av bølgepappemballasje for sjømat finnes, men de fleste er enten mye større eller mindre, eller de har ikke like tydelig fokus på sjømat og eksport. De fleste mindre aktørene i Sverige, Danmark og Finland er ikke like synlige på sjømatsegmentet, eller de oppgir ikke omsetningstall som gjør det mulig å sammenligne direkte.\n\nAktører som kun leverer standardemballasje eller som ikke har spesialisert seg på sjømat og eksport, er ikke relevante for sammenligningen.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 2,
+  "searches": 3,
+  "fetches": 0,
+  "sources": 12,
+  "prompt_tokens": 14155,
+  "completion_tokens": 504,
+  "total_ms": 22700,
+  "handoff": false
+}

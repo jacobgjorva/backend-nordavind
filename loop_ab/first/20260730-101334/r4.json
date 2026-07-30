@@ -1,0 +1,20 @@
+{
+  "case": {
+    "id": "r4",
+    "class": "relasjon",
+    "text": "Er ScaleAQ en direkte konkurrent av oss? Vi leverer fôrflåter til oppdrettsanlegg."
+  },
+  "method": "relasjon",
+  "answer": "ScaleAQ er en direkte konkurrent av dere når det gjelder fôrflåter til oppdrettsanlegg. De markedsfører seg som en totalleverandør til havbruksnæringen og tilbyr fôrflåter som en sentral del av sin produktportefølje, med løsninger for både små og store anlegg, ulike værforhold og kapasiteter fra 150 til 900 tonn fôr. De legger vekt på robuste, driftssikre og funksjonelle flåter, og har lang erfaring med utvikling og bygging av slike løsninger.\n\nAndre aktører som leverer fôrflåter i Norge, og som også er konkurrenter, er AKVA group og Marina Solutions. AKVA group er en av de største og mest etablerte leverandørene, med over 450 leverte flåter globalt og et bredt spekter av modeller og teknologier. Marina Solutions leverer betongflåter, som er et alternativ til stålflåter, men har et noe smalere fokus enn både dere og ScaleAQ.\n\nAktører som leverer andre typer utstyr eller tjenester til oppdrett, men som ikke leverer fôrflåter, er ikke direkte konkurrenter på dette produktområdet.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 2,
+  "searches": 2,
+  "fetches": 0,
+  "sources": 8,
+  "prompt_tokens": 8788,
+  "completion_tokens": 348,
+  "total_ms": 11207,
+  "handoff": false
+}

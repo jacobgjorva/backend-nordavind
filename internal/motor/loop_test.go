@@ -301,8 +301,13 @@ func TestBuildSystemComposesOneMethodAndThinkRule(t *testing.T) {
 	if !strings.Contains(got, Catalog[MethodRelation].Text) {
 		t.Error("metodeteksten mangler")
 	}
-	if !strings.HasSuffix(got, ThinkRule) {
-		t.Error("tenk-regelen skal stå sist — den styrer formen på neste melding")
+	// Rekkefølgen er MÅLT: tenk-regelen må stå FORAN metodeteksten, ellers
+	// dør tankekanalen (0 av 5 ekte kjøringer mot 6 av 9).
+	if strings.Index(got, ThinkRule) > strings.Index(got, Catalog[MethodRelation].Text) {
+		t.Error("tenk-regelen skal stå foran metodeteksten")
+	}
+	if !strings.HasSuffix(got, Catalog[MethodRelation].Text) {
+		t.Error("metodeteksten er turens mest spesifikke instruks og skal stå sist")
 	}
 	// Ingen andre metodetekster får sive inn.
 	for key, m := range Catalog {

@@ -189,3 +189,42 @@ P1 ✓ P2 avgjort (N/A) ✓ P3 ✓ P4 ✓ P5 ✓ P6 ✓ (5/6 → 6/6 med metode 
 Designet i MOTOR-V6.md står. Neste steg er del 10: implementasjon bak
 ENGINE=v6 med metodeklassene oppslag + relasjonsresearch + samtale først,
 holdt-tilbake-sett skrevet ulest, A/B med blindlesing mot dagens motor.
+
+## Kjøring 6 — del 3: tenk-regelens plassering (ekte løkke)
+
+Første gang den FAKTISKE arbeidsløkka (`internal/motor`) kjørte mot modellen,
+via `cmd/v6loop`. Enhetstestene var grønne og `BuildSystem` gjorde nøyaktig
+det den var skrevet for — og tankekanalen var likevel helt død.
+
+Årsaken var rekkefølgen i systemprompten. Designet la tenk-regelen SIST, med
+den plausible begrunnelsen at den styrer formen på neste melding. Proben
+hadde tilfeldigvis motsatt rekkefølge.
+
+```
+tenk-regel SIST  (som designet):  tanke i 0 av 5 verktøyturer
+tenk-regel FØRST (som proben):    tanke i 6 av 9 verktøyturer
+```
+
+(samtale-klassen er utelatt: den har ingen verktøy, så regelen legges
+aldri på.)
+
+Sekundærfunn, samme datagrunnlag: turer der modellen faktisk tenkte høyt
+brukte **1,33 søk i snitt mot 2,67** for turer uten tanke. Å si hensikten
+høyt før hentingen halverer altså hentekostnaden — det er designets
+hypotese om relevansankeret, bekreftet på kostnadssiden før ankeret selv
+er koblet inn (det kommer i del 4).
+
+Konsekvens: rekkefølgen er låst til base → tenk-regel → metodetekst, den
+midlertidige bryteren er fjernet, og loop_test håndhever rekkefølgen med
+begrunnelsen i klartekst. Mekanismen er trolig at metodeteksten ender i en
+svarkontrakt, og at en formregel plassert etter den leses som en del av
+svaret modellen ennå ikke skal skrive — men årsaken er hypotese, tallene er
+målingen.
+
+LÆRDOM: grønne enhetstester sier at koden gjør det den er skrevet for. De
+sier ingenting om at det virker. Hver del må ha minst én ekte kjøring før
+den regnes som ferdig.
+
+Åpent, til del 6: `a1` leverte i én kjøring «tre gode norske
+vaktplansystemer» — en meny, som anbefalingskontrakten forbyr. Metodetekst
+alene holder ikke formen hver gang; leveransegulvet må ta det.

@@ -1,0 +1,20 @@
+{
+  "case": {
+    "id": "s1",
+    "class": "samtale",
+    "text": "morn, lang natt på kontoret her"
+  },
+  "method": "samtale",
+  "answer": "Det høres ut som det er godt trengt med en kopp kaffe og litt hjelp til å lette dagen! Si gjerne hva du sitter med, så skal jeg prøve å gjøre det litt enklere for deg.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 698,
+  "completion_tokens": 55,
+  "total_ms": 2399,
+  "handoff": false
+}
