@@ -129,3 +129,19 @@
 {"text": "send møtereferatet til Ola Nordmann", "want": "email"}
 {"text": "lag et søylediagram over kostnader per avdeling", "want": "create_widget"}
 {"text": "hva sier arbeidsmiljøloven om nattarbeid?", "want": "web_fact"}
+{"text": "hvem er de største konkurrentene våre egentlig?", "want": "research_relation"}
+{"text": "finn ut hvem vi konkurrerer mot i det danske markedet", "want": "research_relation"}
+{"text": "hvilke firmaer er mest sammenlignbare med oss?", "want": "research_relation"}
+{"text": "lag en oversikt over konkurrentene i bransjen vår", "want": "research_relation"}
+{"text": "er det noen nye aktører som utfordrer oss?", "want": "research_relation"}
+{"text": "hvordan står vi i forhold til de andre i markedet?", "want": "research_relation"}
+{"text": "hvem burde vi følge med på av konkurrenter?", "want": "research_relation"}
+{"text": "kartlegg aktørene som selger det samme som oss", "want": "research_relation"}
+{"text": "hvilket lønnssystem burde vi gå for?", "want": "recommendation"}
+{"text": "anbefal meg et timeføringsverktøy", "want": "recommendation"}
+{"text": "vi må ha nytt kassasystem, hva velger vi?", "want": "recommendation"}
+{"text": "hva bør et lite byggefirma bruke til HMS-dokumentasjon?", "want": "recommendation"}
+{"text": "hjelp meg å finne riktig regnskapsfører-programvare", "want": "recommendation"}
+{"text": "hvilken fraktleverandør passer for en liten nettbutikk?", "want": "recommendation"}
+{"text": "trenger et verktøy for kundeoppfølging, forslag?", "want": "recommendation"}
+{"text": "hva er smartest å bruke til fakturering som frilanser?", "want": "recommendation"}

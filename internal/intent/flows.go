@@ -223,6 +223,31 @@ var Flows = map[string]Flow{
 		Fallback: FreeChatKey,
 	},
 
+	"research_relation": {
+		// Motor v6: relasjonsresearch. Fullt lesebelte (profilen kan ligge i
+		// interne data ELLER på nettet); Knowledge PÅ fordi subjektet oftest er
+		// brukerens egen virksomhet. Sticky: «og i Sverige?» arver klassen.
+		// MaxChars 900: svarkontrakten har tre obligatoriske deler
+		// (kandidater, negativ avgrensning, skjerpingsspørsmål) — et trangt
+		// budsjett amputerer den (målt i probene, MOTOR-V6-PROBER.md).
+		Knowledge: true,
+		Tools:     []string{ToolWebSearch, ToolFetchURL, ToolQueryDatabase, ToolShowTable},
+		Model:     "mid",
+		MaxChars:  900,
+		Fallback:  FreeChatKey,
+		Sticky:    true,
+	},
+	"recommendation": {
+		// Motor v6: anbefaling. Samme belte; ÉN anbefaling med
+		// beslutningsregel trenger mindre plass enn relasjonssvaret.
+		Knowledge: true,
+		Tools:     []string{ToolWebSearch, ToolFetchURL, ToolQueryDatabase, ToolShowTable},
+		Model:     "mid",
+		MaxChars:  700,
+		Fallback:  FreeChatKey,
+		Sticky:    true,
+	},
+
 	"web_fact": {
 		Tools:    []string{ToolWebSearch, ToolFetchURL},
 		Model:    "mid",

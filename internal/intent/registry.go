@@ -269,6 +269,44 @@ var Registry = []Intent{
 		},
 	},
 	{
+		// Motor v6 (docs/MOTOR-V6.md): relasjonsresearch er egen metodeklasse —
+		// svaret krever profil av brukerens egen virksomhet før kandidatsøk.
+		// Skillet mot web_fact er forankringen i «oss/vår»: relasjonen måles
+		// MOT brukerens virksomhet, ikke mellom to eksterne ting.
+		Key:         "research_relation",
+		Description: "Kartlegge aktører rundt brukerens egen virksomhet: direkte konkurrenter, sammenlignbare selskaper, markedsposisjon, hvem ligner på oss",
+		Examples: []string{
+			"hvem er våre direkte konkurrenter?",
+			"finn konkurrentene til selskapet vårt",
+			"hvilke aktører ligner mest på oss?",
+			"hvem konkurrerer vi egentlig med?",
+			"finn sammenlignbare selskaper i vår bransje",
+			"hvordan er vi posisjonert mot resten av markedet?",
+			"hvem tar markedsandeler fra oss?",
+			"kartlegg konkurrentlandskapet vårt",
+			"er de en direkte konkurrent av oss?",
+			"konkurrentanalyse",
+		},
+	},
+	{
+		// Motor v6: anbefaling er egen metodeklasse — behov → kandidatsider
+		// leses → ÉN anbefaling med beslutningsregel. Skillet mot free_chat-råd
+		// er at brukeren skal VELGE noe konkret (produkt/system/leverandør).
+		Key:         "recommendation",
+		Description: "Anbefale et eksternt produkt, system, verktøy eller leverandør å kjøpe eller ta i bruk: hva bør vi bruke til dette, hjelp oss å velge — aldri spørsmål om denne appens egne funksjoner, tilkoblinger eller oppsett",
+		Examples: []string{
+			"hvilket regnskapssystem bør vi velge?",
+			"anbefal et CRM for et lite firma",
+			"vi trenger et system for vaktplanlegging, hva bør vi bruke?",
+			"hva er det beste verktøyet for prosjektstyring for oss?",
+			"hjelp oss å velge leverandør av bedriftshelsetjeneste",
+			"foreslå en plattform for nettbutikken vår",
+			"hva slags forsikring trenger et firma som vårt?",
+			"trenger et bookingsystem",
+			"hvilket verktøy anbefaler du for nyhetsbrev?",
+		},
+	},
+	{
 		Key:         "web_fact",
 		Description: "Faktaspørsmål om verden utenfor bedriften: nyheter, priser, satser, regelverk, begreper, personer, hendelser — alt som må slås opp på nettet",
 		Examples: []string{

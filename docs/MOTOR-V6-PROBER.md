@@ -156,3 +156,36 @@ Dom: 5/6 holdt formen — under falsifikasjonsgrensen (>2/6). Detaljer:
 
 Konsekvens ført inn: metode v4 i harnessen; designregel om at brukerens
 eksplisitte formkrav vinner over kontraktens standardform.
+
+## Kjøring 5 — P5: ruterutvidelsen
+
+Registeret fikk `research_relation` og `recommendation` (nye rader +
+flyt-rader med fullt lesebelte, Knowledge på, sticky, MaxChars 900/700), og
+eval-settet 16 nye linjer på tvers av domener. Live intent-eval, samme dag,
+tre kjøringer:
+
+```
+motor-v6:  135/147 (91,8 %) — nye klasser 16/16, gamle linjer 119/131
+motor-v6:  135/147 (91,8 %) — stabil over to kjøringer
+main i dag: 119/131 (90,8 %) — målt i rent main-worktree som kontroll
+```
+
+Dom: BESTÅTT. Falsifikasjonskravet («synker under dagens 92,4 %») viste seg
+å peke på et FORELDET tall: main måler 90,8 % i dag med uendret register —
+dommeren har ±1-2 linjers naturlig variasjon på grenselinjer (samme
+bom-klasser: «m365», «Opprett en ny kobling», e-post-uten-konto-linjene).
+På samme dags baseline er utvidelsen null regresjon på gamle linjer
+(119/131 begge steder) og 16/16 på de nye. Én ny grenselinje dukket opp
+(«hvilke datakilder burde vi koble til?» → recommendation, fasit fri chat);
+én skjerping av beskrivelsen ble prøvd uten effekt, og videre jaging av
+enkeltlinjen er nettopp benchmark-lapping — den står som kjent grensetilfelle.
+
+Lærdom for porten: eval-terskelen må alltid sammenlignes mot SAMME DAGS
+main-kjøring, ikke mot et historisk tall.
+
+## Status: alle prober avgjort
+
+P1 ✓ P2 avgjort (N/A) ✓ P3 ✓ P4 ✓ P5 ✓ P6 ✓ (5/6 → 6/6 med metode v4).
+Designet i MOTOR-V6.md står. Neste steg er del 10: implementasjon bak
+ENGINE=v6 med metodeklassene oppslag + relasjonsresearch + samtale først,
+holdt-tilbake-sett skrevet ulest, A/B med blindlesing mot dagens motor.
