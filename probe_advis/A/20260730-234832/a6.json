@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "a6",
+    "class": "raadgivning",
+    "text": "Hvordan bør jeg strukturere prisene mine?"
+  },
+  "method": "",
+  "answer": "Du bør legge opp prisene slik at de både speiler verdien kunden får, er enkle å forstå, og gjør det lett for deg å justere etter markedet.\n\nDet viktigste er å velge en modell som passer til hva du selger: enten fast pris per enhet, abonnement, timebasert, eller pakkeløsninger. Start med å sjekke hva konkurrentene gjør, og sett en pris som både føles rettferdig for kunden og gir deg god fortjeneste. Hvis du selger tjenester, er det ofte lurt å tilby noen få klare pakker med ulikt innhold, slik at kunden enkelt kan velge det som passer best. For produkter kan du vurdere å gi rabatt ved kjøp av flere enheter, eller tilby tilleggstjenester mot ekstra betaling.\n\nVil du ha hjelp til å finne ut hva konkurrentene tar for lignende produkter eller tjenester i ditt marked? Da trenger jeg å vite hva du selger og gjerne hvilken bransje eller geografisk område du opererer i.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 660,
+  "completion_tokens": 256,
+  "total_ms": 7174,
+  "handoff": false,
+  "evidence": null
+}

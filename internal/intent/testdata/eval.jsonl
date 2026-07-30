@@ -69,7 +69,7 @@
 {"text": "hjelp meg å svare på denne e-posten fra Skatteetaten", "want": ""}
 {"text": "hvordan ligger vi an mot bransjesnittet vi la inn i fjor?", "want": "data_question"}
 {"text": "lag en graf over oljeprisen siste år", "want": "create_widget"}
-{"text": "hva synes du om prisstrategien vår?", "want": ""}
+{"text": "hva synes du om prisstrategien vår?", "want": "advisory"}
 {"text": "hvor mange filer har jeg?", "want": "m365_files"}
 {"text": "kan du se filene mine?", "want": "m365_files"}
 {"text": "er det trygt å gi dere databasetilgang?", "want": ""}
@@ -93,7 +93,7 @@
 {"text": "husk at Marie har ansvaret for tollkoder på import", "want": "teach_fact"}
 {"text": "hvor mange nye produkter har vi lansert i år?", "want": "data_question"}
 {"text": "hvem er de største kundene våre på eksport?", "want": "data_question"}
-{"text": "hva synes du om lanseringsplanen vår?", "want": "free_chat"}
+{"text": "hva synes du om lanseringsplanen vår?", "want": "advisory"}
 {"text": "aha hva med 2024? hvilken dato ble ordet for det året annonsert?", "want": "uklart"}
 {"text": "hva ble den satt til?", "want": "uklart"}
 {"text": "sammenlign de to", "want": "uklart"}
@@ -145,3 +145,11 @@
 {"text": "hvilken fraktleverandør passer for en liten nettbutikk?", "want": "recommendation"}
 {"text": "trenger et verktøy for kundeoppfølging, forslag?", "want": "recommendation"}
 {"text": "hva er smartest å bruke til fakturering som frilanser?", "want": "recommendation"}
+{"text": "hva bør vi gjøre med den eldste maskinparken vår?", "want": "advisory"}
+{"text": "bør vi ansette en selger til eller satse på nettmarkedsføring?", "want": "advisory"}
+{"text": "gi meg råd om hvordan vi bør ta betalt for kurset", "want": "advisory"}
+{"text": "hvordan bør vi legge opp vaktordningen i produksjonen?", "want": "advisory"}
+{"text": "jeg vurderer å starte enda et selskap, hva tenker du?", "want": "advisory"}
+{"text": "hva er den smarteste måten å strukturere kundedataene våre på?", "want": "advisory"}
+{"text": "vurder ideen min: abonnement på verktøyutleie for borettslag", "want": "advisory"}
+{"text": "burde vi flytte lageret nærmere kundene?", "want": "advisory"}

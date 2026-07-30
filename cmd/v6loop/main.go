@@ -72,7 +72,19 @@ func main() {
 	omit := flag.Bool("omit", false, "legg på utelatelsesregelen (probe)")
 	verify := flag.Bool("verify", false, "legg på verifiser-påstanden-regelen (probe)")
 	precision := flag.Bool("precision", false, "legg på presisjonsregelen (probe)")
+	advis := flag.Bool("advis", false, "legg på rådgivningsmetoden (probe)")
 	flag.Parse()
+	if *advis {
+		omitRule = " METODE: Brukeren ber om råd — leveransen er et standpunkt, ikke en oversikt. " +
+			"(1) Utled hva brukeren faktisk skal beslutte eller oppnå, og la rådet svare på DET. " +
+			"(2) Gi ETT klart råd tilpasset akkurat deres situasjon, med begrunnelsen — aldri en meny " +
+			"av muligheter. Generiske råd som passer alle, er ikke leveranse. " +
+			"(3) Avslører brukeren ny kontekst, tilpass rådet til den nye situasjonen i stedet for å " +
+			"gjenta det forrige. (4) Gi rådet på det du VET — anta det rimelige og si antakelsen. " +
+			"Ville én opplysning endret rådet, avslutt med ETT spørsmål om akkurat den — ETTER rådet, " +
+			"aldri i stedet for det. Kun når spørsmålet er umulig å råde uten (som i helt åpne " +
+			"bestillinger), spør du først."
+	}
 	if *precision {
 		omitRule = " Tall kildene ikke oppgir gir du bare som avrundede anslag, tydelig merket som anslag " +
 			"i din egen setning — aldri med desimal- eller ørepresisjon. Eksakte tall kun når kilden " +

@@ -1,0 +1,9 @@
+# Rådgivningsagn: «hva bør vi»-spørsmål på tvers av domener. a1/a3 har rik
+# kontekst (skal gi direkte råd, IKKE spørsmål); a6 er vag (skal gi ETT
+# oppklarende spørsmål). Ingen case gjenbruker RAG-samtalen.
+{"id":"a1","class":"raadgivning","text":"Vi er fire ansatte og vurderer å bytte fra timepris til fastpris på nettsideprosjekter. Kundene klager på uforutsigbarhet. Hva bør vi gjøre?"}
+{"id":"a2","class":"raadgivning","text":"Hvordan bør vi legge opp backup for en liten bedrift med mye bildemateriale?"}
+{"id":"a3","class":"raadgivning","text":"Bør vi bygge kundeportalen selv eller kjøpe en ferdig løsning? Vi har to utviklere og stramt budsjett."}
+{"id":"a4","class":"raadgivning","text":"Hva er den beste måten å samle inn kundefeedback for en nettbutikk?"}
+{"id":"a5","class":"raadgivning","text":"Gi meg råd om hvordan vi bør håndtere en storkunde som stadig betaler for sent."}
+{"id":"a6","class":"raadgivning","text":"Hvordan bør jeg strukturere prisene mine?"}

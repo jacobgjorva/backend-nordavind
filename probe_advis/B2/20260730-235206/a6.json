@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "a6",
+    "class": "raadgivning",
+    "text": "Hvordan bør jeg strukturere prisene mine?"
+  },
+  "method": "",
+  "answer": "Skal du prise en tjeneste, et produkt, eller en kombinasjon — og er det for bedrifter eller forbrukere? Det avgjør om du bør bruke fast pris, timepris, abonnement, pakkeløsninger eller noe helt annet. Fortell gjerne hva du selger og til hvem, så kan jeg gi et konkret råd tilpasset akkurat din situasjon.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 884,
+  "completion_tokens": 94,
+  "total_ms": 3565,
+  "handoff": false,
+  "evidence": null
+}

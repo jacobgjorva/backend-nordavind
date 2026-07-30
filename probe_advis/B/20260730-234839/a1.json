@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "a1",
+    "class": "raadgivning",
+    "text": "Vi er fire ansatte og vurderer å bytte fra timepris til fastpris på nettsideprosjekter. Kundene klager på uforutsigbarhet. Hva bør vi gjøre?"
+  },
+  "method": "",
+  "answer": "Du vil altså fjerne kundenes bekymring for uforutsigbare regninger, samtidig som dere ikke skal tape penger eller fleksibilitet på å gå over til fastpris. Det viktigste er å finne en modell som gir kunden trygghet på pris, uten at dere binder dere til et omfang dere ikke kjenner på forhånd.\n\nFør jeg anbefaler noe, må jeg vite: Har dere i dag en standard mal eller prosess for hvordan dere leverer nettsider, eller er hvert prosjekt helt unikt i omfang og funksjoner? Det avgjør om fastpris er praktisk gjennomførbart uten store risikotillegg.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 868,
+  "completion_tokens": 151,
+  "total_ms": 4705,
+  "handoff": false,
+  "evidence": null
+}

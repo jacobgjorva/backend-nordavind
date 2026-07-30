@@ -66,6 +66,7 @@ func TestCatalogKeysMatchRows(t *testing.T) {
 func TestEveryMethodHasCoherentBudget(t *testing.T) {
 	needsTools := map[MethodKey]bool{
 		MethodLookup: true, MethodRelation: true, MethodAdvice: true, MethodAnalysis: true,
+		MethodAdvisory: true,
 	}
 	for key, m := range Catalog {
 		b := m.Budget

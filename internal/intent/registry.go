@@ -269,6 +269,27 @@ var Registry = []Intent{
 		},
 	},
 	{
+		// Motor v6: rådgivning/sparring er egen metodeklasse — standpunkt
+		// med begrunnelse, aldri meny (probet, kjøring 14). Skillet mot
+		// recommendation: her velges TILNÆRMING/VEIVALG, ikke et konkret
+		// produkt å kjøpe. Skillet mot free_chat: brukeren ber om et RÅD,
+		// ikke tekstarbeid eller oppsummering.
+		Key:         "advisory",
+		Description: "Be om råd, sparring eller veivalg for egen virksomhet eller idé: hva bør vi gjøre, hvordan bør vi løse dette, bygge selv eller kjøpe, vurder ideen min",
+		Examples: []string{
+			"hva synes du vi burde gjøre her?",
+			"gi meg råd om prisstrategien vår",
+			"hvordan bør vi organisere onboarding av nye kunder?",
+			"bør vi bygge dette selv eller kjøpe en ferdig løsning?",
+			"hva er beste måten å redusere svinn på lageret?",
+			"jeg har en idé jeg vil sparre om",
+			"hvordan bør jeg legge opp backupstrategien vår?",
+			"er det lurt å outsource regnskapet?",
+			"hva bør vi prioritere først i nysatsingen?",
+			"vurder forretningsideen min",
+		},
+	},
+	{
 		// Motor v6 (docs/MOTOR-V6.md): relasjonsresearch er egen metodeklasse —
 		// svaret krever profil av brukerens egen virksomhet før kandidatsøk.
 		// Skillet mot web_fact er forankringen i «oss/vår»: relasjonen måles
@@ -360,12 +381,10 @@ var Registry = []Intent{
 		Key:         FreeChatKey,
 		Description: "Rådgivning, meninger, tekstarbeid og åpne spørsmål: hva bør vi gjøre, er dette trygt, hjelp meg å skrive eller oppsummere",
 		Examples: []string{
-			"hva synes du vi burde gjøre her?",
 			"er det trygt å dele dataene våre?",
 			"hjelp meg å formulere en vanskelig beskjed",
 			"oppsummer det vi har snakket om",
 			"oversett dette til engelsk",
-			"gi meg råd om prisstrategien vår",
 			"hvilke muligheter gir denne plattformen oss?",
 		},
 	},

@@ -53,6 +53,7 @@ const (
 	MethodRelation  MethodKey = "relasjon"
 	MethodAdvice    MethodKey = "anbefaling"
 	MethodAnalysis  MethodKey = "analyse"
+	MethodAdvisory  MethodKey = "raadgivning"
 	MethodCreative  MethodKey = "skapende"
 	MethodSmalltalk MethodKey = "samtale"
 )
@@ -121,6 +122,23 @@ var Catalog = map[MethodKey]Method{
 			"bisetning hva du brukte.",
 	},
 
+	MethodAdvisory: {
+		Key: MethodAdvisory,
+		// Sparring og veivalg. Probet i to runder (kjøring 14): standpunkt
+		// slo meny, og «råd først, spørsmål etter» reddet kontrollcasen som
+		// første versjon brøt. Søkebudsjettet er moderat: probene brukte
+		// 1-2 søk per tur, og rådets kjerne er dømmekraft, ikke henting.
+		Budget: Budget{Searches: 2, Fetches: 1, Rounds: 4, MaxChars: 700},
+		Text: " METODE: Brukeren ber om råd — leveransen er et standpunkt, ikke en oversikt. " +
+			"(1) Utled hva brukeren faktisk skal beslutte eller oppnå, og la rådet svare på DET. " +
+			"(2) Gi ETT klart råd tilpasset akkurat deres situasjon, med begrunnelsen — aldri en meny " +
+			"av muligheter. Generiske råd som passer alle, er ikke leveranse. " +
+			"(3) Avslører brukeren ny kontekst, tilpass rådet til den nye situasjonen i stedet for å " +
+			"gjenta det forrige. (4) Gi rådet på det du VET — anta det rimelige og si antakelsen. " +
+			"Ville én opplysning endret rådet, avslutt med ETT spørsmål om akkurat den — ETTER rådet, " +
+			"aldri i stedet for det. Kun når spørsmålet er umulig å råde uten (som i helt åpne " +
+			"bestillinger), spør du først.",
+	},
 	MethodCreative: {
 		Key: MethodCreative,
 		// Påfunn ER leveransen: kildekontroll på diktede navn er å sabotere
@@ -144,6 +162,7 @@ var Catalog = map[MethodKey]Method{
 // Det er den trygge standarden: en flyt uten bevist metode skal aldri
 // arve en fremmed fremgangsmåte bare fordi den lignet.
 var flowMethod = map[string]MethodKey{
+	"advisory":          MethodAdvisory,
 	"research_relation": MethodRelation,
 	"recommendation":    MethodAdvice,
 	"web_fact":          MethodLookup,

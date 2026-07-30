@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "a3",
+    "class": "raadgivning",
+    "text": "Bør vi bygge kundeportalen selv eller kjøpe en ferdig løsning? Vi har to utviklere og stramt budsjett."
+  },
+  "method": "",
+  "answer": "For å gi deg et godt svar må jeg vite hva slags funksjonalitet dere trenger i kundeportalen, og om dere har noen spesielle krav til integrasjoner, sikkerhet eller skalerbarhet. Men generelt, med to utviklere og stramt budsjett, er det sjelden lønnsomt å bygge alt selv.\n\n**Tanken bak:**\nDe fleste ferdige kundeportaler dekker 80–90 % av vanlige behov som innlogging, dokumentdeling, meldinger og enkel selvbetjening. Å bygge selv krever både utvikling, vedlikehold, sikkerhetsoppdateringer og støtte – noe som fort blir dyrere på sikt enn en ferdig løsning, selv med månedlige lisenskostnader.\n\nHvis dere ikke har helt unike behov, anbefaler jeg å kjøpe en ferdig løsning og eventuelt tilpasse den der det trengs. Da kan utviklerne deres bruke tiden på å tilpasse og integrere, ikke på å vedlikeholde en egen portal.\n\nFor å gi et mer konkret råd: Hva er de viktigste funksjonene dere trenger i portalen?",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 680,
+  "completion_tokens": 269,
+  "total_ms": 7272,
+  "handoff": false,
+  "evidence": null
+}

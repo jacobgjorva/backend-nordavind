@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "a6",
+    "class": "raadgivning",
+    "text": "Hvordan bør jeg strukturere prisene mine?"
+  },
+  "method": "",
+  "answer": "For å gi deg et konkret råd om prisstruktur, trenger jeg å vite hva slags tjeneste eller produkt du selger, og om du har en bestemt målgruppe eller konkurranse du forholder deg til. Er det snakk om timebasert prising, prosjektbasert, abonnement, eller noe helt annet? Fortell gjerne litt om hva du driver med og hvem kundene dine er!",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 833,
+  "completion_tokens": 96,
+  "total_ms": 2982,
+  "handoff": false,
+  "evidence": null
+}

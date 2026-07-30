@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "a5",
+    "class": "raadgivning",
+    "text": "Gi meg råd om hvordan vi bør håndtere en storkunde som stadig betaler for sent."
+  },
+  "method": "",
+  "answer": "En storkunde som stadig betaler for sent, kan både presse likviditeten og skape unødvendig administrativt arbeid. Det viktigste er å sikre at dere får betalt uten å skade kundeforholdet.\n\nJeg trenger å vite om dere allerede har en skriftlig avtale med klare betalingsfrister og eventuelle konsekvenser for sen betaling, og om dere har prøvd noen tiltak fra før. Det vil hjelpe meg å gi et konkret råd tilpasset deres situasjon.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 672,
+  "completion_tokens": 123,
+  "total_ms": 3749,
+  "handoff": false,
+  "evidence": null
+}

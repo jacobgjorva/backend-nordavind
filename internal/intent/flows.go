@@ -223,6 +223,19 @@ var Flows = map[string]Flow{
 		Fallback: FreeChatKey,
 	},
 
+	"advisory": {
+		// Motor v6: rådgivning/sparring. Kunnskap PÅ (rådet skal kjenne
+		// bedriften), fullt lesebelte (interne tall kan avgjøre rådet),
+		// sticky (sparring er flerturs av natur — «hva med X da?» skal
+		// beholde rådgiverrollen).
+		Knowledge: true,
+		Tools:     []string{ToolQueryDatabase, ToolShowTable, ToolWebSearch, ToolFetchURL},
+		Model:     "mid",
+		MaxChars:  700,
+		Fallback:  FreeChatKey,
+		Sticky:    true,
+	},
+
 	"research_relation": {
 		// Motor v6: relasjonsresearch. Fullt lesebelte (profilen kan ligge i
 		// interne data ELLER på nettet); Knowledge PÅ fordi subjektet oftest er

@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "a4",
+    "class": "raadgivning",
+    "text": "Hva er den beste måten å samle inn kundefeedback for en nettbutikk?"
+  },
+  "method": "",
+  "answer": "For å samle inn kundefeedback til en nettbutikk, er det smart å kombinere flere metoder slik at du får både bredde og dybde i innsikten. Du vil typisk både ha kvantitative data (tall, rangeringer) og kvalitative data (meninger, forklaringer). Jeg vet at vanlige metoder er nettskjema, e-postundersøkelser, pop-up-spørsmål på nettsiden, produktanmeldelser, live chat, og sosiale medier. Men for å gi deg den beste anbefalingen, trenger jeg å vite om du allerede har noen systemer på plass, eller om du vil ha råd til både verktøy og metode. Er det noen spesielle områder du er mest opptatt av å få feedback på, for eksempel nettsideopplevelse, produktkvalitet, levering eller kundeservice?",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 669,
+  "completion_tokens": 203,
+  "total_ms": 5232,
+  "handoff": false,
+  "evidence": null
+}
