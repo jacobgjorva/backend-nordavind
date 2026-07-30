@@ -638,11 +638,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	// Handlings-verktøy (endrer tilstand: rutine, widget, agent, m365 …) gir
 	// korte kvitteringer med vilje — de skal ALDRI utløse backstop-syntesen.
 	actionTool := false
-	readTools := map[string]bool{
-		"web_search": true, "fetch_url": true, "query_database": true,
-		"m365_search": true, "m365_read": true, "mail_search": true, "mail_read": true,
-		"list_agents": true, "show_table": true,
-	}
+	readTools := legacyReadTools
 	// Tabell-garanti: show_table-verktøyet rendrer siste databasesvar
 	// deterministisk, og ba brukeren om tabell rendrer vi uansett fra første
 	// svar med rader — prompt alene er ikke til å stole på her.
@@ -1474,6 +1470,15 @@ func (s *Server) recordUsage(ctx context.Context, full map[string]any, promptTok
 type sourceRef struct {
 	Title string `json:"title"`
 	URL   string `json:"url"`
+}
+
+// legacyReadTools: verktøy hvis resultat legacy-løkka behandler som lest
+// innhold. Hevet ut av runAgentLoop uendret, så motor v6 kan måle sitt eget
+// evidens-sett mot det (motorwire_test.go) i stedet for å duplisere lista.
+var legacyReadTools = map[string]bool{
+	"web_search": true, "fetch_url": true, "query_database": true,
+	"m365_search": true, "m365_read": true, "mail_search": true, "mail_read": true,
+	"list_agents": true, "show_table": true,
 }
 
 // wallCharLimit: over dette regnes svaret som en «vegg» og komprimeres (nødbrems).

@@ -28,6 +28,7 @@ type Config struct {
 	AnswerStyle     string   // husets svarstil i chat: "off" (default) | "on"
 	BrainMode       string   // hjernen (påstandsgrafen): "off" (default) | "on"
 	IntentMode      string   // intent-motoren: "off" (default) | "shadow" (rut + logg, endrer ingenting)
+	Engine          string   // assistentmotoren: "" (default, dagens løype) | "v6" (metodemotoren)
 	SearxURL        string   // SEARXNG_URL: self-hostet søkeinstans; tom = DuckDuckGo-fallback (lokal dev)
 	SerperKey       string   // SERPER_API_KEY: Googles resultater via API; tom = av. Omgår IP-blokkeringen
 
@@ -65,6 +66,7 @@ func Load() (Config, error) {
 		AnswerStyle:     getenv("ANSWER_STYLE", "on"),
 		BrainMode:       getenv("BRAIN", "off"),
 		IntentMode:      getenv("INTENT_ENGINE", "off"),
+		Engine:          getenv("ENGINE", ""),
 		SearxURL:        getenv("SEARXNG_URL", ""),
 		SerperKey:       getenv("SERPER_API_KEY", ""),
 		Mail: MailConfig{
