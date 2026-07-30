@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/connector"
@@ -536,7 +537,16 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	flusher, _ := w.(http.Flusher)
+	// SSE-skriveren er DELT: narratorens treghets-melding kommer fra en egen
+	// goroutine (narrate.go, slow()) og kan treffe samtidig som svaret
+	// skrives. Uten låsen fletter de to skrivingene seg inn i hverandre og
+	// spiser tegn — målt i A/B-en: seks av tjue v6-svar hadde tapte tegn
+	// midt i teksten («lokal produksjonNS Herning»), null i legacy, som
+	// streamer i mindre biter og derfor treffer vinduet sjeldnere.
+	var emitMu sync.Mutex
 	emit := func(line string) {
+		emitMu.Lock()
+		defer emitMu.Unlock()
 		w.Write([]byte(line + "\n"))
 		if flusher != nil {
 			flusher.Flush()
