@@ -1,0 +1,122 @@
+# Motor v6 — probelogg
+
+Alle kjøringer mot ekte `mistral-large-2512` (La Plateforme) med ekte websøk
+(DDG + Wikipedia lokalt; prod bruker SearXNG). Ingen mocks. Transkript i
+`probe_runs*` — rå tall her er skrevet FØR konklusjonene, per protokollen i
+MOTOR-V6.md del 9. Dev-sett: `cmd/v6probe/testdata/dev.jsonl` (10 prompts,
+ingen fra tidligere feilsaker eller benchmarks). Holdt-tilbake-settet er ikke
+skrevet ennå og skrives først ved A/B-aksept.
+
+## Kjøring 1 — variant B1 (tenk + metode v1), hele settet
+
+`probe_runs/20260730-015629`
+
+```
+r1 relasjon    runder=2 søk=1 hent=0 tok=5727/366   13,4s  (uten tanke)
+r2 relasjon    runder=2 søk=1 hent=0 tok=6384/678   18,0s  TANKE
+r3 relasjon    runder=3 søk=3 hent=1 tok=11593/552  18,7s  TANKE
+r4 relasjon    runder=2 søk=1 hent=0 tok=5218/239    8,0s  TANKE
+a1 anbefaling  runder=2 søk=1 hent=0 tok=4400/490   14,0s  TANKE
+a2 anbefaling  runder=3 søk=1 hent=2 tok=12282/576  15,5s  TANKE
+o1 oppslag     runder=2 søk=1 hent=0 tok=6273/50     2,5s
+o2 oppslag     runder=2 søk=1 hent=0 tok=5109/73     3,1s
+s1 samtale     runder=1 søk=0 hent=0 tok=729/42      1,4s
+u1 uklar       runder=1 søk=0 hent=0 tok=687/70      2,4s
+```
+
+## Kjøring 2 — variant A (naken baseline), de 6 komplekse
+
+`probe_runs_naken/*`
+
+```
+r1 søk=1 hent=0 tok=5173/197   7,2s
+r2 søk=1 hent=0 tok=4950/300  10,1s
+r3 søk=1 hent=0 tok=3196/134   5,7s
+r4 søk=1 hent=0 tok=4570/62    3,9s
+a1 søk=1 hent=0 tok=4767/127   6,4s
+a2 søk=1 hent=0 tok=4120/178   6,4s
+```
+
+## Kjøring 3 — variant B2 (tenk + metode v2), de 6 komplekse
+
+`probe_runs_v2/*`. v2 la inn: svarkontrakt med tre obligatoriske deler,
+kandidatsider skal leses (fetch_url) før dom, tall kun ordrett fra kilde,
+pris utelates ærlig når den ikke er lest, beslutningsregel merkes som skjønn
+uten kildegrunnlag, aldri «beste X»-søk.
+
+```
+r1 søk=1 hent=0 tok=5897/723   18,8s
+r2 søk=2 hent=4 tok=17579/1098 32,7s
+r3 søk=1 hent=2 tok=9974/565   16,7s
+r4 søk=1 hent=0 tok=4641/273   11,0s
+a1 søk=1 hent=2 tok=11598/567  16,0s
+a2 søk=5 hent=0 tok=18044/359  25,6s
+```
+
+## Dommer per probe
+
+**P1 — tenk-så-handle i samme completion: BESTÅTT.**
+Tanke levert sammen med verktøykall i 5/6 komplekse (r1 hoppet over — brukeren
+hadde alt gitt profilen, akseptabelt), fraværende på trivielle (o1/o2/s1/u1 —
+ønsket adferd: ingen tankekost der den ikke trengs). Null tilfeller av
+plan-uten-handling. Null protokoll-lekkasje i samtlige 28 kjøringer på tvers
+av alle varianter. Tankene var norske, tette og informative (P4 samtidig
+bestått): «trenger et klart kriterium: bølgepapp, sjømat, 30-50 MNOK …»,
+«det eneste som gjør dem til direkte konkurrent i ditt segment …». Egnet som
+live-narrasjon uten redigering.
+
+**P2 — reasoning-feltet: AVGJORT SOM IKKE AKTUELT.**
+La Plateforme svarer 422 på Scaleway-feltet `reasoning` (målt i prod,
+sanering finnes alt i server.go). Tenk-prosaen i samme completion er dermed
+resonneringskanalen. Ingen videre måling nødvendig.
+
+**P3 — metodeblokk-effekten: BESTÅTT med v2, med ett åpent avvik.**
+
+B1 mot A: metoden kjøpte dybde og kalibrering der oppgaven var hard (r3: tre
+søk + sidelesing + ærlig «vanskelig å finne dokumentert», mot A sine to navn
+fra ett søk; r4: evidens fra produktsider mot A sitt tynne ja; a1/a2: ÉN
+anbefaling med beslutningsregel mot A sin vagere prosa). Uavgjort der
+brukeren selv ga profilen (r1, r2). Men v1 ignorerte negativ avgrensning
+(0/4) og skjerpingsspørsmålet (0/6), og «lever pris» uten lest side ga
+diktede tall (r2: omsetning; a2: prismodell «fast per bedrift» og terskel
+«30 ansatte» fantes ikke i kildene — nøyaktig MVP-rundens feilklasse).
+
+B2 (metode v2): svarkontrakten holdt. Skjerpingsspørsmål 6/6 (mot 0/6 i v1),
+negativ avgrensning eksplisitt i 4/6 og relevant formulert, sidelesing der
+det trengtes (r2: 4 hentinger, a1: 2, r3: 2), ærlig prishåndtering («prisen
+for 25 ansatte er ikke oppgitt direkte»), beslutningsregel MED
+kildeattribusjon («dette bygger på at leverandøren selv fremhever …»), og
+grounding-sjekken mot kildeteksten fant at alle kandidatnavn og alle
+kontrollerte tall sto i kildene — de tre mistenkte («137,7», «åtte ansatte»,
+«10–500») var omformateringer som prods normDigits-toleranse godtar.
+
+Åpent avvik: r4s negative avgrensning navnga to store aktører fra
+HUKOMMELSEN, ikke kildene (én av dem trolig konfabulert). Mønster: kravet om
+negativ avgrensning drar uverifiserte navn inn i nettopp den setningen.
+Fiks i metode v3 (én linje): avgrensningen følger samme kildekrav som
+kandidatene — navngi kun aktører som står i kildene eller samtalen, ellers
+beskriv kategorien uten navn. Prods navnekontroll fanger resten som gulv.
+
+Bikostnad B2: research-turer koster 10-18k prompt-tokens og 16-33 s når
+sidelesing faktisk skjer — som designet forventer (målrettet dybde), men
+svarene ble lange (opptil 1 100 tokens ut) og brukte fete overskrifter.
+Håndteres som gulv, ikke prompt: research-flytene får eget MaxChars-budsjett,
+og fet skrift strippes deterministisk i leveransen.
+
+Stabilitet: a2 valgte ulikt produkt i B1 og B2 (begge reelle, begge
+begrunnet). Nondeterminisme på tvers av kjøringer er ventet; aksepttesten
+(del 10 i designet) måler anatomi, ikke navnelikhet.
+
+**P5 (ruterutvidelse) og P6 (kontrakt under press): IKKE KJØRT ennå.**
+P5 krever registerendring + intent-eval; P6 krever eget pressett. Neste økt.
+
+## Konsekvenser for designet (ført inn i MOTOR-V6.md)
+
+1. Metodekatalogen oppdatert til v2-tekstene + avgrensnings-kildekravet (v3).
+2. Nytt gulv: fet skrift/overskrifter strippes i leveransen (deterministisk).
+3. Research-flyter trenger eget svarbudsjett (MaxChars ~800) så
+   kompresjonsgulvet ikke ødelegger anatomien.
+4. P2-mekanismen strøket; tenk-prosa er kanalen.
+5. Tallkontrollen (normDigits-toleranse) bekreftet nødvendig og tilstrekkelig
+   for omformateringsklassen; navnekontrollen må også dekke
+   avgrensningssetningen.

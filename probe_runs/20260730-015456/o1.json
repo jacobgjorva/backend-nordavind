@@ -1,0 +1,16 @@
+{
+  "case": {
+    "id": "o1",
+    "class": "oppslag",
+    "text": "hva er styringsrenten nå?"
+  },
+  "variant": "think=true method=auto reason= model=mistral-large-2512",
+  "rounds": null,
+  "answer": "",
+  "searches": 0,
+  "fetches": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "total_ms": 333,
+  "err": "HTTP 422: {\"status\":422,\"error\":\"MODEL NOT FOUND\",\"message\":\"model 'mistral-large-2512' not found\"}"
+}

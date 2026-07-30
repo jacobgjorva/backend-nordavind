@@ -1,0 +1,19 @@
+{
+  "case": {
+    "id": "u1",
+    "class": "uklar",
+    "text": "sammenlign oss med de andre"
+  },
+  "variant": "think=true method=auto reason= model=mistral-large-2512",
+  "rounds": [
+    {
+      "latency_ms": 2351
+    }
+  ],
+  "answer": "Kan du si hvilke selskaper, produkter eller tjenester du vil sammenligne «oss» med? For eksempel: konkurrenter i samme bransje, lignende produkter, eller kanskje bestemte merkevarer? Da kan jeg hente oppdaterte fakta og sammenligne direkte.",
+  "searches": 0,
+  "fetches": 0,
+  "prompt_tokens": 687,
+  "completion_tokens": 70,
+  "total_ms": 2351
+}

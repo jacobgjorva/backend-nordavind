@@ -1,7 +1,8 @@
 # Motor v6 — metodemotoren
 
-Design før kode. Skrevet 2026-07-30. Ingenting under er implementert;
-probeplanen i del 9 avgjør hva som overlever møtet med den faktiske modellen.
+Design før kode. Skrevet 2026-07-30, revidert samme dag etter proberunde
+1-3 (se MOTOR-V6-PROBER.md). P1, P2, P3 og P4 er avgjort mot ekte modell;
+P5 og P6 gjenstår før implementasjonseksperimentet i del 10.
 
 ## 1. Målbildet
 
@@ -215,6 +216,14 @@ neste-steg-lag, tabellgaranti, kildenote, historikk-kapp, samtaleutdrag,
 søke-cache, kvotehåndhevelse i verktøyene, junk-/ekko-filtre, graceful
 degradering. Dette er ikke arkitektur, det er gulv — og de er målt.
 
+To nye gulv fra probene: (1) fet skrift og overskrifter strippes
+deterministisk i leveransen — modellen bolder kandidatnavn uansett
+instruks; (2) research- og anbefalingsflyter får eget svarbudsjett
+(MaxChars ~800) slik at kompresjonsgulvet ikke amputerer svarkontraktens
+tre deler. Navnekontrollen skal dekke avgrensningssetningen — probene
+viste at kravet om negativ avgrensning ellers drar uverifiserte navn fra
+hukommelsen inn i nettopp den setningen.
+
 ## 6. Metodekatalogen (utkast — probes i P3)
 
 Hver blokk er generell: ingen bransje, ingen entitet, ingen eksempler.
@@ -227,24 +236,32 @@ Budsjett: 1 søk, 0 hentinger, 2 runder.
 > faktumet og tidspunktet det gjelder for. Ikke utred.
 
 **relasjonsresearch** (konkurrenter, alternativer, sammenlignbare, posisjon)
-Budsjett: 4 søk, 4 hentinger, 6 runder.
+Budsjett: 4 søk, 4 hentinger, 6 runder. Tekst = v3, probet i to runder:
 > Svaret avhenger av hvem subjektet ER. Arbeidsrekkefølge: (1) Profiler
 > subjektet fra nærmeste kilde — interne data/kunnskap når subjektet er
-> brukerens egen virksomhet, aktørens egne sider ellers. Les siden helt,
-> ikke søkeutdrag. (2) Si eksplisitt hvilket kriterium relasjonen krever
-> her, utledet av det brukeren skal beslutte. (3) Let etter kandidater
-> INNENFOR det segmentet. (4) Svar på nisjenivå: navngi kandidatene med
-> hver sin korte begrunnelse mot kriteriet, og avgrens eksplisitt mot de
-> prominente aktørene som IKKE kvalifiserer — si hvorfor. (5) Avdekket
-> profilen et hull som begrenser svaret: still ETT konkret spørsmål om det.
+> brukerens egen virksomhet, aktørens egne sider ellers. (2) Si i
+> arbeidsnotatet hvilket kriterium relasjonen krever her, utledet av det
+> brukeren skal beslutte. (3) Let etter kandidater INNENFOR det segmentet,
+> og les kandidatenes egne sider (fetch_url) før du feller dom om
+> portefølje eller posisjon — søkeutdrag og topplister er ikke evidens.
+> SVARKONTRAKT, alle tre delene: (a) kandidatene i løpende tekst med hver
+> sin korte begrunnelse mot kriteriet; (b) én setning som avgrenser mot
+> aktørene som IKKE kvalifiserer — navngi kun aktører som står i kildene
+> eller samtalen, ellers beskriv kategorien uten navn; (c) hvis profilen
+> har et konkret hull som begrenser svaret: avslutt med ETT spørsmål om
+> akkurat det hullet — spørsmålet er en del av leveransen, ikke vegring.
+> Tall og fakta om kandidater KUN ordrett fra kildene.
 
 **anbefaling** («hva bør vi bruke/kjøpe/velge»)
-Budsjett: 3 søk, 4 hentinger, 6 runder.
-> Etabler behovet fra samtalen og intern kontekst før du leter. Kandidaters
-> pris og innhold leses fra deres egne sider — aldri fra utdrag, aldri fra
-> hukommelse. Lever ÉN anbefaling med pris og innhold ordrett fra kilden,
-> hvorfor den passer akkurat denne situasjonen, og den ENE
-> beslutningsregelen som ville snudd valget. Aldri en meny av alternativer.
+Budsjett: 3 søk, 4 hentinger, 6 runder. Tekst = v2, probet:
+> Etabler behovet fra samtalen og intern kontekst før du leter. Søk etter
+> kategorien og segmentet, aldri «beste X»-fraser — topplister er ikke
+> evidens. Les leverandørens EGEN side (fetch_url) før du anbefaler. Lever
+> ÉN anbefaling: hvorfor den passer akkurat denne situasjonen, med pris og
+> innhold KUN ordrett fra kilden — har du ikke lest prisen, ikke oppgi den;
+> si hvor den finnes. Avslutt med den ENE beslutningsregelen som ville
+> snudd valget: bygger den på noe kildene sier, si det; ellers merk den som
+> din vurdering. Aldri en meny, aldri diktede terskler.
 
 **analyse** (interne tall, hybrid intern×ekstern)
 Budsjett: db fritt, 2 søk, 1 henting, 6 runder.
@@ -318,9 +335,9 @@ leses ikke under design (anti-overtilpasning, samme regel som plan-eval).
 - **P1 — tenk-så-handle i samme completion.** 8 dev-prompts, instruks med
   kort-tanke-så-kall. Faller hvis: >1/8 leverer plan uten verktøykall, eller
   prosa-før-kall er tom/støy i >3/8.
-- **P2 — reasoning-feltet på Large 3.** Samme 8 med `reasoning` på/av.
-  Faller hvis: 422/tomme svar, eller ingen kvalitetsforskjell ved lesing,
-  eller >2x tokens uten lesbar gevinst.
+- **P2 — reasoning-feltet på Large 3: AVGJORT.** La Plateforme svarer 422
+  på feltet (målt i prod). Tenk-prosaen i samme completion er
+  resonneringskanalen. Ingen videre måling.
 - **P3 — metodeblokk-effekten.** 10 dev-prompts i relasjons- og
   anbefalingsklassen på tvers av ulike domener, A (naken) mot B (metode).
   Leses manuelt mot anatomi-kriteriene (profil-først, kriterium, negativ

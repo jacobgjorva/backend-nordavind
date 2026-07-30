@@ -1,0 +1,2 @@
+think=true method=auto reason= model=mistral-large-2512
+set=cmd/v6probe/testdata/dev.jsonl

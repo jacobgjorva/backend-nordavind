@@ -1,0 +1,19 @@
+{
+  "case": {
+    "id": "s1",
+    "class": "samtale",
+    "text": "morn, lang natt på kontoret her"
+  },
+  "variant": "think=true method=auto reason= model=mistral-large-2512",
+  "rounds": [
+    {
+      "latency_ms": 1405
+    }
+  ],
+  "answer": "Det høres ut som du trenger en kopp kaffe og en liten pause. Skal jeg hjelpe deg med noe konkret, eller trenger du bare en oppmuntring?",
+  "searches": 0,
+  "fetches": 0,
+  "prompt_tokens": 729,
+  "completion_tokens": 42,
+  "total_ms": 1405
+}

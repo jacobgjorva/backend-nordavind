@@ -65,16 +65,22 @@ var methods = map[string]string{
 		"ferskhet slår hukommelse. Én autoritativ kilde holder. Svar med faktumet og tidspunktet det " +
 		"gjelder for. Ikke utred.",
 	"relasjon": " METODE: Svaret avhenger av hvem subjektet ER. Arbeidsrekkefølge: (1) Profiler subjektet " +
-		"fra nærmeste kilde — det brukeren har fortalt, og aktørens egne sider når de finnes; les sider " +
-		"helt, ikke bare søkeutdrag. (2) Si eksplisitt hvilket kriterium relasjonen krever her, utledet " +
-		"av det brukeren skal beslutte. (3) Let etter kandidater INNENFOR det segmentet. (4) Svar på " +
-		"nisjenivå: navngi kandidatene med hver sin korte begrunnelse mot kriteriet, og avgrens " +
-		"eksplisitt mot de prominente aktørene som IKKE kvalifiserer — si hvorfor. (5) Avdekket " +
-		"profilen et hull som begrenser svaret: still ETT konkret spørsmål om det, til slutt.",
-	"anbefaling": " METODE: Etabler behovet fra samtalen før du leter. Kandidaters pris og innhold leses " +
-		"fra deres egne sider — aldri fra utdrag, aldri fra hukommelse. Lever ÉN anbefaling med pris og " +
-		"innhold ordrett fra kilden, hvorfor den passer akkurat denne situasjonen, og den ENE " +
-		"beslutningsregelen som ville snudd valget. Aldri en meny av alternativer.",
+		"fra nærmeste kilde — det brukeren har fortalt, og aktørens egne sider når de finnes. (2) Si i " +
+		"arbeidsnotatet hvilket kriterium relasjonen krever her, utledet av det brukeren skal beslutte. " +
+		"(3) Let etter kandidater INNENFOR det segmentet, og les kandidatenes egne sider (fetch_url) før " +
+		"du feller dom om portefølje eller posisjon — søkeutdrag og topplister er ikke evidens. " +
+		"SVARKONTRAKT, alle tre delene: (a) kandidatene i løpende tekst med hver sin korte begrunnelse " +
+		"mot kriteriet; (b) én setning som avgrenser mot aktørene som IKKE kvalifiserer — navngi kun " +
+		"aktører som står i kildene eller samtalen, ellers beskriv kategorien uten navn; (c) hvis profilen har et konkret hull som begrenser svaret: avslutt med ETT spørsmål " +
+		"om akkurat det hullet — dette spørsmålet er en del av leveransen, ikke vegring. " +
+		"Tall og fakta om kandidater KUN ordrett fra kildene.",
+	"anbefaling": " METODE: Etabler behovet fra samtalen før du leter. Søk etter kategorien og segmentet, " +
+		"aldri «beste X»-fraser — topplister er ikke evidens. Les den aktuelle leverandørens EGEN side " +
+		"(fetch_url) før du anbefaler. Lever ÉN anbefaling: hvorfor den passer akkurat denne " +
+		"situasjonen, med pris og innhold KUN ordrett fra kilden — har du ikke lest prisen, ikke oppgi " +
+		"den; si hvor den finnes. Avslutt med den ENE beslutningsregelen som ville snudd valget: bygger " +
+		"den på noe kildene sier, si det; ellers merk den som din vurdering. Aldri en meny, aldri " +
+		"diktede terskler.",
 	"samtale": " METODE: Ingen verktøy trengs. Svar kort med husets stemme. Er det et reelt behov bak " +
 		"småpraten, pek på det i én setning.",
 }
