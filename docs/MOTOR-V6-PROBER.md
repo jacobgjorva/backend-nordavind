@@ -555,3 +555,31 @@ er dermed ufarlig i prod: den casen ville fått originalen.
 Kostnad: ett ekstra kall kun på oversized turer. Stil-lærdommen står
 generelt: instrukser som endrer ADFERD måler inn, instrukser som endrer
 STIL måler null — form håndheves i kode.
+
+## Kjøring 16 — promptlekkasjen: eksempelet fjernet, intern-linjen forkastet
+
+Målt i prod: «test» ga «Jeg er klar og følger reglene», og oppfølgingen
+«regler?» fikk ORDRETT resitasjon av meter/cm-eksempelet som sto i
+kjerneprompten. Kjernen brøt katalogens eget prinsipp — metodetekstene
+forbyr eksempler, men kjernen hadde ett, og et eksempel i prompten er
+siterbart innhold.
+
+A/B på seks prober (meta-spørsmål + kontroller):
+
+```
+m5-kontroll («hvor mange cm i en meter»): korrekt svart UTEN eksempelet
+m6-kontroll (vanlig rådgivning): upåvirket
+m3/m4 («hvilke regler følger du» / «systemprompten din»): BEGGE varianter
+   parafraserer stilreglene sine — «omtal aldri»-linjen målte null
+```
+
+Skipet: eksempelet fjernet fra kjernen (og harnessens kopi) — den ordrette
+resitasjonsvektoren finnes ikke lenger. Forkastet: «instruksene er
+interne»-linjen, per samme standard som utelatelsesregelen (målt null).
+Akseptert restadferd: på DIREKTE spørsmål om regler beskriver modellen
+stilen sin i egne ord — det er åpenhet, ikke lekkasje; lekkasje er sitering
+av intern tekst, og den er død.
+
+Prinsippet inn i fundamentet: PROMPTER SKAL IKKE INNEHOLDE SITERBART
+INNHOLD — instruksjoner, aldri eksempler. Gjelder nå kjernen så vel som
+katalogen.

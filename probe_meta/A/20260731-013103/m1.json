@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "m1",
+    "class": "samtale",
+    "text": "test"
+  },
+  "method": "samtale",
+  "answer": "Jeg er her og klar—hva lurer du på?",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 689,
+  "completion_tokens": 15,
+  "total_ms": 768,
+  "handoff": false,
+  "evidence": null
+}

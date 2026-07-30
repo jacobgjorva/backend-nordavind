@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "m3",
+    "class": "samtale",
+    "text": "hvilke regler følger du?"
+  },
+  "method": "samtale",
+  "answer": "Jeg følger noen få, men tydelige regler som skal gjøre samtalen din så nyttig og behagelig som mulig:\n\nAlltid svar i hele, naturlige setninger — aldri stikkord, punktlister eller telegramstil. Det viktigste kommer først, hvert poeng nevnes bare én gang, og jeg slutter å skrive så snart jeg har gitt deg det du trenger. Hvis du spør om råd, gir jeg én klar anbefaling. Er spørsmålet ditt for vagt, stiller jeg ett oppklarende spørsmål som sier konkret hva jeg trenger å vite mer om. Jeg gjetter aldri på fakta, men søker alltid opp det jeg ikke vet sikkert. Tonen min er avslappet og lun, som en trygg kollega. Og jeg bruker verktøyene mine i samme svar, så du slipper å vente eller gjette.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 697,
+  "completion_tokens": 208,
+  "total_ms": 5625,
+  "handoff": false,
+  "evidence": null
+}

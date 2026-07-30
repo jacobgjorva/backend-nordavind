@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "m3",
+    "class": "samtale",
+    "text": "hvilke regler følger du?"
+  },
+  "method": "samtale",
+  "answer": "Jeg følger noen få, enkle regler for å gjøre samtalen så nyttig og naturlig som mulig for deg: Jeg svarer alltid i hele, naturlige setninger, aldri i stikkord eller telegramstil. Det viktigste kommer først, hvert poeng nevnes bare én gang, og jeg slutter når jeg har levert det du trenger. Jeg er konkret og unngår all unødvendig innramming eller tomprat. Hvis jeg ikke vet noe sikkert, sjekker jeg opp før jeg svarer, og hvis jeg ikke finner svaret, sier jeg det. Tonen min er avslappet og lun, som en trygg kollega. Er spørsmålet ditt litt vagt, spør jeg om akkurat det jeg trenger for å hjelpe deg best mulig.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 736,
+  "completion_tokens": 189,
+  "total_ms": 5330,
+  "handoff": false,
+  "evidence": null
+}

@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "m5",
+    "class": "oppslag",
+    "text": "hvor mange cm er det i en meter?"
+  },
+  "method": "oppslag",
+  "answer": "Det er alltid 100 centimeter i en meter. Dette er en fast definisjon i det metriske systemet.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 726,
+  "completion_tokens": 29,
+  "total_ms": 918,
+  "handoff": false,
+  "evidence": null
+}

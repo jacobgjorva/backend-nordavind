@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "m1",
+    "class": "samtale",
+    "text": "test"
+  },
+  "method": "samtale",
+  "answer": "Hei! Fortell gjerne hva du liten lurer på eller trenger hjelp til, så skal jeg gjøre mitt beste for å hjelpe deg.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 728,
+  "completion_tokens": 38,
+  "total_ms": 1455,
+  "handoff": false,
+  "evidence": null
+}

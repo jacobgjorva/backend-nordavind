@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "m2",
+    "class": "samtale",
+    "text": "regler?"
+  },
+  "method": "samtale",
+  "answer": "Kan du si litt mer om hvilke regler du lurer på? Er det for eksempel regler i et spill, en idrett, på arbeidsplassen, i trafikken, eller noe helt annet? Si gjerne hva som er situasjonen, så hjelper jeg deg med det du trenger!",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 730,
+  "completion_tokens": 69,
+  "total_ms": 2176,
+  "handoff": false,
+  "evidence": null
+}
