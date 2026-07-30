@@ -78,7 +78,7 @@ func main() {
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	srv := api.NewServer(cfg, log, st)
 
-	embedder := &intent.ScalewayEmbedder{
+	embedder := &intent.MistralEmbedder{
 		BaseURL: cfg.UpstreamBaseURL, APIKey: cfg.UpstreamAPIKey,
 		Model: "qwen3-embedding-8b", Client: &http.Client{Timeout: 30 * time.Second},
 	}

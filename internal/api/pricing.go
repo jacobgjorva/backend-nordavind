@@ -10,25 +10,20 @@ import (
 	"time"
 )
 
-// pricing holder pris per token (USD) per modell, hentet fra Scaleway.
+// pricing holder pris per token (USD) per modell.
 type pricing struct {
 	mu    sync.RWMutex
 	perTk map[string][2]float64 // model -> [input, output]
 }
 
-// fallbackPerTk: Scaleways offisielle listepriser (EUR/token, omregnet til USD
-// med fast kurs 1.08) — Scaleway sender IKKE priser i /models (eurouter
-// gjorde), så uten denne tabellen ble all kostnad stående på 0.
-// Kilde: scaleway.com/en/pricing/model-as-a-service, hentet 2026-07-25.
+// fallbackPerTk: Mistral La Plateforme sine listepriser (USD per token).
+// Leverandøren sender ikke priser i /models, så uten denne tabellen ville
+// all kostnad stått på 0.
+// Kilde: mistral.ai/pricing, hentet 2026-07-30.
 var fallbackPerTk = map[string][2]float64{
-	"mistral-medium-3.5-128b":             {1.62e-6, 8.10e-6},
-	"qwen3.5-397b-a17b":                   {0.648e-6, 3.888e-6},
-	"glm-5.2":                             {1.944e-6, 5.94e-6},
-	"qwen3.6-35b-a3b":                     {0.27e-6, 1.62e-6},
-	"qwen3-embedding-8b":                  {0.108e-6, 0},
-	"mistral-small-3.2-24b-instruct-2506": {0.162e-6, 0.378e-6},
-	"llama-3.3-70b-instruct":              {0.972e-6, 0.972e-6},
-	"gemma-3-27b-it":                      {0.27e-6, 0.54e-6},
+	"mistral-large-2512": {2e-6, 6e-6},
+	"pixtral-large-2411": {2e-6, 6e-6},
+	"mistral-embed":      {0.1e-6, 0},
 }
 
 func newPricing() *pricing {
@@ -67,7 +62,7 @@ func (p *pricing) load(ctx context.Context, client *http.Client, baseURL, apiKey
 	}
 
 	// Start fra fallback-tabellen og la upstream KUN overstyre der den faktisk
-	// oppgir priser — Scaleway sender ingen, og da skal listeprisene stå.
+	// oppgir priser — Mistral sender ingen, og da skal listeprisene stå.
 	next := make(map[string][2]float64, len(fallbackPerTk)+len(body.Data))
 	for k, v := range fallbackPerTk {
 		next[k] = v

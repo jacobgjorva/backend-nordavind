@@ -80,56 +80,21 @@ func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 	return s
 }
 
-// newUpstreamRequest lager en autentisert POST mot upstream chat/completions.
-// mistralModels: modeller som bor hos Mistral La Plateforme (EU, Frankrike).
-// Alt annet — embeddings og vision — går til Scaleway som før.
-var mistralModels = map[string]bool{
-	"mistral-large-2512": true,
-}
-
-// newUpstreamRequest lager en autentisert POST mot RIKTIG leverandør: ett
-// blikk på payloadens modellnavn avgjør vert og nøkkel.
+// newUpstreamRequest lager en autentisert POST mot Mistral La Plateforme.
 //
-// Målt (A/B mot holdt-tilbake-settet, docs/MOTOR-V6-AKSEPT.md): Large 3
-// leverer svarkontrakten metodene ber om — negativ avgrensning i 3 av 3 mot
-// 1 av 7 på medium, med samme motor og samme metodetekst. Medium er en god
-// skrivemotor når koden gir den ferdigregnet grunnlag, men følger ikke en
-// flerdelt kontrakt.
+// ÉN leverandør, ett endepunkt. Girkasser mellom leverandører skjulte hvem
+// som faktisk feilet, og kostet oss en hel prod-økt: dommeren i
+// intent-motoren sto igjen på feil vert med et felt Mistral ikke godtar,
+// feilet på hver eneste tur, og all ruting falt stille til fri chat.
 func (s *Server) newUpstreamRequest(ctx context.Context, body io.Reader) (*http.Request, error) {
-	b, err := io.ReadAll(body)
-	if err != nil {
-		return nil, err
-	}
-	var probe struct {
-		Model string `json:"model"`
-	}
-	_ = json.Unmarshal(b, &probe)
-
-	base, key := s.cfg.UpstreamBaseURL, s.cfg.UpstreamAPIKey
-	if mistralModels[probe.Model] && s.cfg.MistralAPIKey != "" {
-		base, key = "https://api.mistral.ai/v1", s.cfg.MistralAPIKey
-		// Mistral svarer 422 på Scaleway-feltet «reasoning» — målt: kallet
-		// døde på 80 ms og turen tok 78 sekunder i stedet for et halvt.
-		// Saneres HER, så alle kallsteder dekkes.
-		var payload map[string]any
-		if json.Unmarshal(b, &payload) == nil {
-			if _, has := payload["reasoning"]; has {
-				delete(payload, "reasoning")
-				if nb, err := json.Marshal(payload); err == nil {
-					b = nb
-				}
-			}
-		}
-	}
-
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		strings.TrimSuffix(base, "/")+"/chat/completions", bytes.NewReader(b))
+		strings.TrimSuffix(s.cfg.UpstreamBaseURL, "/")+"/chat/completions", body)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if key != "" {
-		req.Header.Set("Authorization", "Bearer "+key)
+	if s.cfg.UpstreamAPIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+s.cfg.UpstreamAPIKey)
 	}
 	return req, nil
 }

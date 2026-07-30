@@ -93,12 +93,12 @@ func (s *Server) initIntentEngine() {
 	countIntent := func(ctx context.Context, model string, in, out int) {
 		s.countLLM(ctx, model, "intent", in, out)
 	}
-	embedder := &intent.ScalewayEmbedder{
+	embedder := &intent.MistralEmbedder{
 		BaseURL: s.cfg.UpstreamBaseURL, APIKey: s.cfg.UpstreamAPIKey,
-		Model: "qwen3-embedding-8b", Client: s.client,
+		Model: embeddingModel, Client: s.client,
 		OnUsage: countIntent,
 	}
-	judge := &intent.ScalewayJudge{
+	judge := &intent.MistralJudge{
 		BaseURL: s.cfg.UpstreamBaseURL, APIKey: s.cfg.UpstreamAPIKey,
 		Model: router.MidModel, Client: s.client,
 		OnUsage: countIntent,

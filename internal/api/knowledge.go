@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	embeddingModel = "qwen3-embedding-8b"
+	embeddingModel = "mistral-embed"
 	// qwen3-embedding scorer urelatert tekst ~0.21 og klart relevant ~0.31–0.53.
 	// 0.28 er vektor-gulvet som skiller signal fra støy.
 	vecFloor   = 0.28
@@ -112,7 +112,7 @@ func lastUserText(full map[string]any) string {
 	return ""
 }
 
-// embed lager en vektor for en tekst via Scaleways embeddings-endepunkt.
+// embed lager en vektor for en tekst via Mistrals embeddings-endepunkt.
 // Global cache for query-embeddings. Embeddings er tenant-uavhengige (samme
 // tekst → samme vektor), så identiske spørsmål slipper et nytt kall.
 var (

@@ -2,7 +2,7 @@
 // fasit-settet i internal/intent/testdata/eval.jsonl og feiler under terskel.
 // Dette er porten: ingen register-endring merges uten grønn kjøring.
 //
-//	go run ./cmd/intent-eval            # full kjøring mot live Scaleway
+//	go run ./cmd/intent-eval            # full kjøring mot live Mistral
 //	go run ./cmd/intent-eval -verbose   # + hver enkelt avgjørelse
 package main
 
@@ -47,11 +47,11 @@ func main() {
 		os.Exit(2)
 	}
 	client := &http.Client{Timeout: 30 * time.Second}
-	embedder := &intent.ScalewayEmbedder{
+	embedder := &intent.MistralEmbedder{
 		BaseURL: cfg.UpstreamBaseURL, APIKey: cfg.UpstreamAPIKey,
 		Model: "qwen3-embedding-8b", Client: client,
 	}
-	judge := &intent.ScalewayJudge{
+	judge := &intent.MistralJudge{
 		BaseURL: cfg.UpstreamBaseURL, APIKey: cfg.UpstreamAPIKey,
 		Model: router.MidModel, Client: client,
 	}
@@ -101,7 +101,7 @@ func main() {
 	for _, c := range cases {
 		d := engine.Resolve(context.Background(), c.Text, true)
 		// Ett omforsøk på degraderte kall. Uten dette forsvant tilfeller ut av
-		// nevneren når Scaleway-embeddingen timet ut, og settet krympet fra
+		// nevneren når embedding-kallet timet ut, og settet krympet fra
 		// kjøring til kjøring (131, 130, 126) — vi målte aldri hele suiten,
 		// og de tregeste tilfellene falt systematisk ut først.
 		if d.Degraded {

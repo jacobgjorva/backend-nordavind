@@ -50,13 +50,13 @@ const (
 	// rådgivningsformuleringer scorer systematisk lavere på tekstlikhet.
 	freeChatMargin = 0.16
 	// embedTimeout/judgeTimeout: motoren skal aldri henge — fail-open. Stramme
-	// frister: p50 er ~100-250 ms, og en Scaleway-utstikker skal koste maks
+	// frister: p50 er ~100-250 ms, og en utstikker skal koste maks
 	// ~2 s ekstra før chatten går videre som fri chat, aldri 10+.
 	embedTimeout = 1500 * time.Millisecond
 	judgeTimeout = 2500 * time.Millisecond
 )
 
-// Embedder gjør tekster om til vektorer. Injiseres (Scaleway i produksjon,
+// Embedder gjør tekster om til vektorer. Injiseres (Mistral i produksjon,
 // stub i tester).
 type Embedder interface {
 	Embed(ctx context.Context, texts []string) ([][]float32, error)

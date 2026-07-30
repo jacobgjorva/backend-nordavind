@@ -10,9 +10,9 @@ import (
 	"strings"
 )
 
-// ScalewayEmbedder embedder tekster via Scaleways OpenAI-kompatible
+// MistralEmbedder embedder tekster via Mistrals OpenAI-kompatible
 // /embeddings-endepunkt (samme upstream som resten av appen).
-type ScalewayEmbedder struct {
+type MistralEmbedder struct {
 	BaseURL string
 	APIKey  string
 	Model   string
@@ -22,7 +22,7 @@ type ScalewayEmbedder struct {
 	OnUsage func(ctx context.Context, model string, promptTokens, completionTokens int)
 }
 
-func (s *ScalewayEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+func (s *MistralEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
 	body, _ := json.Marshal(map[string]any{"model": s.Model, "input": texts})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		strings.TrimSuffix(s.BaseURL, "/")+"/embeddings", bytes.NewReader(body))
@@ -68,19 +68,19 @@ func (s *ScalewayEmbedder) Embed(ctx context.Context, texts []string) ([][]float
 	return vecs, nil
 }
 
-// ScalewayJudge velger én nøkkel blant kandidatene med et minimalt,
+// MistralJudge velger én nøkkel blant kandidatene med et minimalt,
 // enum-begrenset chat-kall. Svarer modellen utenfor listen, håndterer
 // motoren det (fallback) — dommeren stoles aldri blindt på.
-type ScalewayJudge struct {
+type MistralJudge struct {
 	BaseURL string
 	APIKey  string
 	Model   string
 	Client  *http.Client
-	// OnUsage: se ScalewayEmbedder.
+	// OnUsage: se MistralEmbedder.
 	OnUsage func(ctx context.Context, model string, promptTokens, completionTokens int)
 }
 
-func (s *ScalewayJudge) Pick(ctx context.Context, message string, keys []string) (string, error) {
+func (s *MistralJudge) Pick(ctx context.Context, message string, keys []string) (string, error) {
 	// Dommeren får beskrivelsene, ikke bare nøkkelnavnene — nakne nøkler som
 	// «data_question» lyder riktige for verdensfakta og ga systematiske bom.
 	var b strings.Builder
@@ -113,7 +113,7 @@ func (s *ScalewayJudge) Pick(ctx context.Context, message string, keys []string)
 	}
 	b.WriteString("Svar KUN med én av nøklene, ingenting annet: " + strings.Join(keys, ", "))
 	system := b.String()
-	body, _ := json.Marshal(map[string]any{
+	payload := map[string]any{
 		"model": s.Model,
 		"messages": []any{
 			map[string]any{"role": "system", "content": system},
@@ -122,8 +122,11 @@ func (s *ScalewayJudge) Pick(ctx context.Context, message string, keys []string)
 		"stream":      false,
 		"temperature": 0,
 		"max_tokens":  16,
-		"reasoning":   map[string]any{"enabled": false},
-	})
+	}
+	// MERK: ingen «reasoning»-felt. Det var et Scaleway-felt, og Mistral
+	// svarer 422 på det. Da feilet dommeren på HVER tur og all ruting falt
+	// til fri chat — motoren kjørte uten metode i prod uten at noe krasjet.
+	body, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		strings.TrimSuffix(s.BaseURL, "/")+"/chat/completions", bytes.NewReader(body))
 	if err != nil {

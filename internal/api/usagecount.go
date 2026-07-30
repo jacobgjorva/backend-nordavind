@@ -11,7 +11,7 @@ import (
 // /forbruk-panelet var før bare agent-loopen; alt utenom (intent, faktadommer,
 // workjudge, agentplan, rutiner, dokument-jobber) gikk urapportert
 // (~10 % av prompt-tokens og over halvparten av completion-tokens i måling
-// 26.07.2026). Fasit mot Scaleway-fakturaen krever at alle kall telles.
+// 26.07.2026). Fasit mot leverandørfakturaen krever at alle kall telles.
 
 // countLLM logger ett LLM-kall med bruker hentet fra request-konteksten.
 // Brukes fra alle kallsteder som lever i en innlogget forespørsel.

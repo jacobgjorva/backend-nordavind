@@ -17,7 +17,7 @@ func atoiDefault(s string, def int) int {
 // Config holder all oppstartskonfigurasjon, lest fra miljøvariabler.
 type Config struct {
 	Port            string
-	UpstreamBaseURL string // OpenAI-kompatibelt endepunkt (Scaleway Generative APIs)
+	UpstreamBaseURL string // OpenAI-kompatibelt endepunkt (Mistral La Plateforme)
 	PublicBaseURL   string // utadvendt base-URL (live Excel-lenker, OAuth-callbacks)
 	MSClientID      string // Azure app-registrering (Microsoft 365-connector)
 	MSClientSecret  string
@@ -59,7 +59,7 @@ func Load() (Config, error) {
 		PublicBaseURL:   getenv("PUBLIC_BASE_URL", "http://localhost:8080"),
 		MSClientID:      getenv("MS_CLIENT_ID", ""),
 		MSClientSecret:  getenv("MS_CLIENT_SECRET", ""),
-		UpstreamBaseURL: getenv("UPSTREAM_BASE_URL", "https://api.scaleway.ai/v1"),
+		UpstreamBaseURL: getenv("UPSTREAM_BASE_URL", "https://api.mistral.ai/v1"),
 		UpstreamAPIKey:  os.Getenv("UPSTREAM_API_KEY"),
 		MistralAPIKey:   os.Getenv("MISTRAL_API_KEY"),
 		AllowedOrigins:  strings.Split(getenv("ALLOWED_ORIGIN", "http://localhost:5173,http://127.0.0.1:5173"), ","),

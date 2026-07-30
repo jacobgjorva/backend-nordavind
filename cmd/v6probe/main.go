@@ -347,17 +347,8 @@ func runCase(client *http.Client, sc *search.Client, cfg config.Config, c probeC
 }
 
 func post(client *http.Client, cfg config.Config, payload map[string]any) (int, []byte, error) {
-	// Leverandørvalg som i prod-eksperimentet: Large 3 bor hos Mistral La
-	// Plateforme (MISTRAL_API_KEY fra env via config.Load sin .env-lasting),
-	// alt annet hos Scaleway. Mistral svarer 422 på «reasoning»-feltet — det
-	// fjernes der (målt i prod: kallet døde på 80 ms).
+	// Én leverandør: Mistral La Plateforme, som resten av motoren.
 	base, key := strings.TrimSuffix(cfg.UpstreamBaseURL, "/"), cfg.UpstreamAPIKey
-	if m, _ := payload["model"].(string); strings.HasPrefix(m, "mistral-large") {
-		if mk := os.Getenv("MISTRAL_API_KEY"); mk != "" {
-			base, key = "https://api.mistral.ai/v1", mk
-			delete(payload, "reasoning")
-		}
-	}
 	b, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
 		base+"/chat/completions", bytes.NewReader(b))
