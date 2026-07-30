@@ -128,6 +128,11 @@ func (motorVerifier) Unsupported(answer string, basis []string) []string {
 	return nums
 }
 
+// motorForm er formgulvet: legacys målte isJunkAnswer (sse.go), uendret.
+type motorForm struct{}
+
+func (motorForm) IsJunk(text string) bool { return isJunkAnswer(text) }
+
 // motorFacts regner det koden kan regne selv av turens data.
 //
 // IKKE PORTERT ENNÅ: seriestatistikk og Pearson-korrelasjon finnes bare på

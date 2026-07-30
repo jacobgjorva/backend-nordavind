@@ -45,6 +45,9 @@ func (s *Server) relayRound(resp *http.Response, emit func(string), streamConten
 	// unna de strukturertes indekser.
 	var pending strings.Builder
 	textIdx := 1000
+	// suppressed: et utagget verktøykall er oppdaget — resten av rundens
+	// innhold er syntaks og skal aldri til brukeren.
+	suppressed := false
 
 	for scanner := newSSEScanner(resp.Body); scanner.Scan(); {
 		line := scanner.Text()
@@ -101,6 +104,14 @@ func (s *Server) relayRound(resp *http.Response, emit func(string), streamConten
 		}
 
 		if content := chunk.Choices[0].Delta.Content; content != "" {
+			// Etter et utagget verktøykall er RESTEN av runden syntaks.
+			// Uten sperren lakk fortsettelsen: klippet fjernet
+			// «query_database {» fra ett chunk, men neste chunk («"SELECT
+			// … FROM …"}») lignet ingen verktøystart og gikk rett til
+			// brukeren (målt i prod 2026-07-30).
+			if suppressed {
+				continue
+			}
 			pending.WriteString(content)
 			safe, rest, blocks := splitToolCallText(pending.String())
 			pending.Reset()
@@ -108,7 +119,8 @@ func (s *Server) relayRound(resp *http.Response, emit func(string), streamConten
 			// Utagget verktøykall midt i prosaen: klipp det og alt etter.
 			if cut := cutBareToolCall(safe); cut != safe {
 				safe = cut
-				pending.Reset() // resten av svaret er verktøysyntaks, ikke tekst
+				pending.Reset()
+				suppressed = true
 			}
 			visible.WriteString(safe)
 			for _, b := range blocks {
@@ -143,7 +155,7 @@ func (s *Server) relayRound(resp *http.Response, emit func(string), streamConten
 		emit(line)
 	}
 	// Uavsluttet buffer (aldri lukket tag): send det som innhold så ingenting mistes.
-	if pending.Len() > 0 {
+	if pending.Len() > 0 && !suppressed {
 		visible.WriteString(pending.String())
 		if streamContent {
 			if gate != nil {

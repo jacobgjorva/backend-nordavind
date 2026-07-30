@@ -40,6 +40,14 @@ type Verifier interface {
 	Unsupported(answer string, basis []string) []string
 }
 
+// FormChecker avgjør om en tekst er ødelagt struktur (lekket verktøykall-
+// JSON, degenerert output) som aldri skal vises. Dette er en FAKTA-sjekk
+// på form (klammer, anførselstegn, bokstavandel) — aldri på innhold, og
+// aldri på formulering.
+type FormChecker interface {
+	IsJunk(text string) bool
+}
+
 // Delivery er leveransen med alle sine deler. Alt bortsett fra Out er
 // valgfritt: mangler en del, hoppes den over.
 type Delivery struct {
@@ -48,7 +56,12 @@ type Delivery struct {
 	Writer   Writer
 	Facts    FactComputer
 	Verifier Verifier
-	Log      Logger
+	// Form er formgulvet. Legacy har sjekken på alle tre utslippspunktene
+	// sine (målt: uten den lakk verktøy-JSON som svar i 1 av 3 kjøringer);
+	// v6 manglet den, og et utkast fullt av verktøysyntaks gikk rett til
+	// brukeren (målt i prod 2026-07-30).
+	Form FormChecker
+	Log  Logger
 	// Limit er svarbudsjettet (metodens tak, ellers flytens).
 	Limit int
 	// EmptyExplain er databasens egen redegjørelse når alt feilet.
@@ -70,6 +83,18 @@ type Delivery struct {
 // Deliver leverer turen.
 func (d *Delivery) Deliver(ctx context.Context, turn *Turn, draft string) {
 	answer := strings.TrimSpace(draft)
+
+	// Formgulvet FØRST: et utkast som er ødelagt struktur er ikke et svar,
+	// det er råstoff. Turen har som regel ekte evidens — skriveren får
+	// lage svaret av den i stedet (ett kall), og bunnen er ærlig tomhet.
+	// Aldri vis brukeren verktøysyntaks.
+	if answer != "" && d.Form != nil && d.Form.IsJunk(answer) {
+		if d.Log != nil {
+			d.Log.Warn("motor v6: utkast forkastet på form", "metode", string(turn.Method),
+				"tegn", len([]rune(answer)))
+		}
+		answer = ""
+	}
 
 	// Kode-regnede fakta: modellen så dem ikke da den skrev, så svaret må
 	// skrives om med tallene inkludert. Dette er den ENESTE grunnen til et

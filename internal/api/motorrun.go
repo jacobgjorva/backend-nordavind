@@ -62,6 +62,7 @@ func (s *Server) runMotorV6(ctx context.Context, full map[string]any, emit func(
 		Writer:   &motorWriter{s: s, full: full, promptTokens: promptTokens, completionTokens: completionTokens},
 		Facts:    motorFacts{},
 		Verifier: motorVerifier{},
+		Form:     motorForm{},
 		Log:      s.log,
 		Limit:    motorAnswerLimit(turn.Method, full),
 		Convo:    recentTurn(full),
