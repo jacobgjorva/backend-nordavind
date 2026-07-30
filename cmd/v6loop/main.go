@@ -71,7 +71,13 @@ func main() {
 	model := flag.String("model", "mistral-large-2512", "modell")
 	omit := flag.Bool("omit", false, "legg på utelatelsesregelen (probe)")
 	verify := flag.Bool("verify", false, "legg på verifiser-påstanden-regelen (probe)")
+	precision := flag.Bool("precision", false, "legg på presisjonsregelen (probe)")
 	flag.Parse()
+	if *precision {
+		omitRule = " Tall kildene ikke oppgir gir du bare som avrundede anslag, tydelig merket som anslag " +
+			"i din egen setning — aldri med desimal- eller ørepresisjon. Eksakte tall kun når kilden " +
+			"faktisk oppgir dem."
+	}
 	if *verify {
 		omitRule = " Før du skriver sluttsvaret: pek ut den påstanden i svaret ditt som ville endret " +
 			"brukerens beslutning hvis den er feil, og verifiser akkurat den med ett målrettet søk mot " +

@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "pr3",
+    "class": "anbefaling",
+    "text": "Hva kan en liten kafé forvente å betale i kortgebyrer per måned?"
+  },
+  "method": "anbefaling",
+  "answer": "For å gi et konkret tall må jeg vite omtrent hvor mange korttransaksjoner kafeen har hver måned og hvilken kortleverandør eller betalingsløsning de bruker. Kortgebyrer varierer typisk mellom 1 og 3 % av transaksjonsbeløpet, pluss eventuelle faste månedsavgifter eller terminalleie. Kan du anslå hvor mange kortbetalinger dere har i måneden, og omtrent hvor store beløp det er snakk om?",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 960,
+  "completion_tokens": 114,
+  "total_ms": 4561,
+  "handoff": false,
+  "evidence": null
+}

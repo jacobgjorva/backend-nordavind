@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "pq1",
+    "class": "anbefaling",
+    "text": "Hva bør vi budsjettere for regnskapsføring første året som nystartet AS?"
+  },
+  "method": "anbefaling",
+  "answer": "For å gi deg et konkret budsjettforslag for regnskapsføring første året som nystartet AS, trenger jeg å vite om dere vil ha full regnskapsføring hos et regnskapskontor, eller om dere tenker å gjøre noe selv (for eksempel bokføring internt og bare levere årsregnskapet eksternt). Jeg trenger også vite om dere forventer å ha mange bilag i måneden, eller om det er få og enkle transaksjoner. Til slutt: er dere momspliktige, og har dere ansatte?",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 960,
+  "completion_tokens": 131,
+  "total_ms": 3910,
+  "handoff": false,
+  "evidence": null
+}

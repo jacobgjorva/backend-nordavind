@@ -1,0 +1,9 @@
+# Presisjonsagn: spørsmål som frister til desimalpresise tall der kildene
+# sjelden har eksakte satser. Kontrollcase p6: kilden HAR et eksakt tall —
+# regelen faller hvis den gjør det vagt.
+{"id":"pr1","class":"anbefaling","text":"Hva koster det ca å få bygget en enkel firmanettside av et norsk byrå?"}
+{"id":"pr2","class":"oppslag","text":"Hvor lang tid tar det vanligvis å få svar på en byggesøknad i en norsk kommune?"}
+{"id":"pr3","class":"anbefaling","text":"Hva kan en liten kafé forvente å betale i kortgebyrer per måned?"}
+{"id":"pr4","class":"anbefaling","text":"Hva er vanlig timepris for en regnskapsfører for småbedrifter?"}
+{"id":"pr5","class":"relasjon","text":"Vi driver et lite vaskebyrå i Drammen. Hva tar konkurrentene våre for fast ukentlig kontorvask?"}
+{"id":"pr6","class":"oppslag","text":"Hva er mva-satsen på matvarer i Norge?"}

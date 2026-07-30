@@ -471,3 +471,32 @@ v3 (anbefaling): hentet primærsiden direkte (fetch) — samme mål, annen vei
 
 Kost: verifiserende turer bruker 2-3 søk og ~10s mer. Det er prisen for å
 sjekke det viktigste man er i ferd med å si — kvalitet over tokens.
+
+## Kjøring 13 — presisjonsregelen: BESTÅTT for anbefaling, avgrenset dit
+
+Hypotese (fra Toloka-betalingssvaret): falsk presisjon er problemet, ikke
+anslaget — «0,10–0,30 kr» med desimaler ser ut som en kildesats. Regel:
+udekkede tall gis kun som avrundede, selvmerkede anslag; eksakte tall bare
+fra kildene.
+
+To runder, 9 agn + 2 kontroller (mva-sats, Brønnøysund-gebyr — eksakte,
+kildebare tall som IKKE skal bli vage):
+
+```
+pr1: A diktet «30 000–50 000 for de fleste byråer» — B DROPPET setningen
+pq2: A 6 udekkede presise beløp — B 3 (resten utledet aritmetikk)
+pr5: B «2 900–7 800» = 29/78 kr/m² × 100 — legitim utledning, ikke dikt
+kontroller: eksakte begge sider, begge runder — regelen gjorde intet vagt
+```
+
+Alle reelle gevinster lå i ANBEFALINGSKLASSEN. Relasjonscasen viste null
+effekt, og katalogens lengdevakt avviste dessuten teksten der (1 336 >
+1 200). Regelen går derfor kun inn i anbefaling — der den er målt, og der
+taket tillater den. Å legge den i relasjon ville vært ekstrapolering forbi
+dataene.
+
+Lærdom: «modellen skal aldri nevne udekkede tall» ble vurdert og forkastet
+som prinsipp — brukeren som spør «hva kan jeg forvente?» bestiller et
+anslag, og et system som svarer «vet ikke» er ærligere men ubrukelig.
+Linjen er presisjon som matcher evidens: eksakt fra kilde, avrundet og
+selvmerket ellers, dekningsgulvet som bakvakt.
