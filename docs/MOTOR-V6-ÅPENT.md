@@ -92,3 +92,13 @@ en samtale kan BYTTE klasse underveis (faktum → anbefaling). «ja gjerne»
 som aksept av et tilbud assistenten selv ga, arver forrige flyt i stedet
 for tilbudets klasse. Dokumentert med denne samtalen som belegg; avgjøres
 med holdout-måling, ikke fra caset.
+
+## 8. Prosamonotoni: temaordet gjentas
+
+Målt 2026-07-30 på 121 lagrede svar: median toppord-rate 5,2 %, verstinger
+9-10 % — alltid temaordet («kontormøbler», «loven», «oppgave»). Forsterkes
+når brukerens kriterium ER ordet (metoden begrunner hver kandidat mot
+kriteriet). Ikke en motorfeil; modellens norske prosa. En «varier
+språket»-regel er umålbar stapling og bygges ikke. Riktig spor hvis dette
+skal løftes: persona-/stemmearbeid i egen målt runde, eller sterkere
+skrivemodell.
