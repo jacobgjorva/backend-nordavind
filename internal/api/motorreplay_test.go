@@ -123,3 +123,27 @@ func TestStripEmphasisOnRealAnswers(t *testing.T) {
 		}
 	}
 }
+
+// Dekningsgulvet må være STILLE på alle de ti ekte, forankrede svarene —
+// en merknad på et korrekt svar underminerer tilliten gulvet skal bygge.
+func TestCoverageNoteSilentOnRealGroundedAnswers(t *testing.T) {
+	v := motorVerifier{}
+	for _, c := range loadReplay(t) {
+		basis := append(append([]string{}, c.Evidence...), c.Question)
+		off := v.Unsupported(c.Answer, basis)
+		turn := &motor.Turn{Method: motor.MethodAdvice, Evidence: c.Evidence}
+		if note := motor.CoverageNote(motor.MethodAdvice, turn, off); note != "" {
+			t.Errorf("%s: falsk merknad på forankret svar: %q (avvik %v)", c.ID, note, off)
+		}
+	}
+}
+
+// Årstall er kontekst, ikke påstander: «siden 2009» skal aldri flagges.
+func TestVerifierSkipsYears(t *testing.T) {
+	v := motorVerifier{}
+	off := v.Unsupported("Selskapet har levert naturvin siden 2009 og vokste i 2024.",
+		[]string{"kildetekst uten årstall"})
+	if len(off) != 0 {
+		t.Errorf("årstall skal ikke flagges, fikk %v", off)
+	}
+}

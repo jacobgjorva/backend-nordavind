@@ -54,6 +54,13 @@ type Delivery struct {
 	// EmptyExplain er databasens egen redegjørelse når alt feilet.
 	EmptyExplain func() string
 
+	// Convo er samtaleutdraget (siste turer). Det er GYLDIG grunnlag for
+	// tallkontrollen: en oppfølging som gjentar forrige turs tall skal
+	// aldri merkes som udekket (målt lærdom fra v3 — kildekontrollen
+	// felte navn fra historikken som dikting og kostet en 69-sekunders
+	// omvei).
+	Convo string
+
 	// Answer er det som faktisk ble levert. Hjernen lærer av utvekslingen,
 	// og uten dette stopper kunnskapstreet å vokse i nettopp de samtalene
 	// som betyr mest.
@@ -84,14 +91,24 @@ func (d *Delivery) Deliver(ctx context.Context, turn *Turn, draft string) {
 		answer = HonestEmpty(turn, explain)
 	}
 
-	// Tallkontroll som telemetri. Grunnlaget er alt turen faktisk hentet,
-	// pluss det koden regnet og brukerens eget spørsmål — et tall brukeren
-	// selv oppga er ikke dikting.
+	// Tallkontroll. Grunnlaget er alt turen faktisk hentet, det koden
+	// regnet, brukerens eget spørsmål OG samtalen — et tall brukeren selv
+	// oppga eller fikk i forrige tur er ikke dikting.
+	//
+	// Avvik logges som telemetri, og DEKNINGSGULVET (coverage.go) gjør dem
+	// synlige: i en kildekrevende metode får udekkede tall én ærlig
+	// merknad i svaret. Det er hele forskjellen på et anslag brukeren kan
+	// vurdere og et tall hen tar en beslutning på.
 	if d.Verifier != nil {
-		basis := append(append([]string{}, turn.Evidence...), facts, turn.Question)
-		if off := d.Verifier.Unsupported(answer, basis); len(off) > 0 && d.Log != nil {
-			d.Log.Warn("motor v6: tall uten dekning i verktøydata",
-				"avvik", strings.Join(off, ", "), "metode", string(turn.Method))
+		basis := append(append([]string{}, turn.Evidence...), facts, turn.Question, d.Convo)
+		if off := d.Verifier.Unsupported(answer, basis); len(off) > 0 {
+			if d.Log != nil {
+				d.Log.Warn("motor v6: tall uten dekning i verktøydata",
+					"avvik", strings.Join(off, ", "), "metode", string(turn.Method))
+			}
+			if note := CoverageNote(turn.Method, turn, off); note != "" {
+				answer = strings.TrimRight(answer, " \n") + "\n\n" + note
+			}
 		}
 	}
 

@@ -112,9 +112,18 @@ type motorVerifier struct{}
 func (motorVerifier) Unsupported(answer string, basis []string) []string {
 	var nums []string
 	for _, o := range offendersAgainst(motor.StripEmphasis(answer), basis, 3) {
-		if normDigits(o) != "" {
-			nums = append(nums, o)
+		d := normDigits(o)
+		if d == "" {
+			continue
 		}
+		// Årstall er ikke dikting: «siden 2009» og «i 2026» er kontekst,
+		// ikke påstander brukeren tar beslutninger på. Målt logikk fra
+		// engine-experiment (realOffenders) — uten filteret ble korrekte
+		// svar felt på årstall som ikke sto ordrett i kildene.
+		if len(d) == 4 && (strings.HasPrefix(d, "19") || strings.HasPrefix(d, "20")) {
+			continue
+		}
+		nums = append(nums, o)
 	}
 	return nums
 }

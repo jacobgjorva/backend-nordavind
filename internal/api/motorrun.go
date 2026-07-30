@@ -64,6 +64,7 @@ func (s *Server) runMotorV6(ctx context.Context, full map[string]any, emit func(
 		Verifier: motorVerifier{},
 		Log:      s.log,
 		Limit:    motorAnswerLimit(turn.Method, full),
+		Convo:    recentTurn(full),
 		EmptyExplain: func() string {
 			return floors.dbExplain()
 		},
