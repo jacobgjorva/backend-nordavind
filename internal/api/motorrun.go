@@ -39,6 +39,14 @@ func (s *Server) runMotorV6(ctx context.Context, full map[string]any, emit func(
 		Method:   motorMethod(full),
 	}
 
+	// Metodeteksten og tenk-regelen INN i systemprompten. Uten dette er v6
+	// bare budsjetter: metoden velges, kvoten brukes — men fremgangsmåten
+	// når aldri modellen. Rekkefølgen (tenk-regel FØR metodetekst) er målt
+	// og eies av BuildSystem.
+	if extra := motor.BuildSystem("", turn.Method, motorHasTools(full)); extra != "" {
+		injectSystem(full, extra)
+	}
+
 	state := &motorTurnState{}
 	floors := &motorFloors{
 		s: s, emit: emit, narr: narr, state: state,

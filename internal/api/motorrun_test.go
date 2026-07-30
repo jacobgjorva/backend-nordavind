@@ -2,9 +2,11 @@ package api
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/config"
+	"github.com/jacobgjorva/backend-nordavind/internal/motor"
 )
 
 // Med flagget av skal motoren aldri ta turen — og aldri sende noe.
@@ -57,5 +59,67 @@ func TestMotorDeclinesSpecialModes(t *testing.T) {
 		if _, took := s.runMotorV6(context.Background(), full, func(string) {}, nil, nil, nil, nil); took {
 			t.Errorf("%s er en spesialmodus og skal eie turen selv", field)
 		}
+	}
+}
+
+// Metodeteksten MÅ nå modellen. Uten denne testen kan v6 se ut til å virke
+// — metoden velges, budsjettet brukes, turen går raskere — mens
+// fremgangsmåten aldri injiseres. Det skjedde i første A/B-runde: 0 av 7
+// svar hadde negativ avgrensning, mens samme motor med teksten ga 3 av 3.
+func TestMethodTextReachesTheSystemPrompt(t *testing.T) {
+	full := map[string]any{
+		flowKeyField: "research_relation",
+		"tools":      []any{map[string]any{"type": "function"}},
+		"messages": []any{
+			map[string]any{"role": "system", "content": "HUSETS REGLER"},
+			map[string]any{"role": "user", "content": "hvem konkurrerer vi med?"},
+		},
+	}
+
+	method := motorMethod(full)
+	if extra := motor.BuildSystem("", method, motorHasTools(full)); extra != "" {
+		injectSystem(full, extra)
+	}
+
+	msgs, _ := full["messages"].([]any)
+	sys, _ := msgs[0].(map[string]any)
+	content, _ := sys["content"].(string)
+
+	if !strings.Contains(content, "HUSETS REGLER") {
+		t.Error("husets regler skal stå igjen")
+	}
+	if !strings.Contains(content, motor.Catalog[motor.MethodRelation].Text) {
+		t.Error("metodeteksten nådde ikke systemprompten")
+	}
+	if !strings.Contains(content, motor.ThinkRule) {
+		t.Error("tenk-regelen nådde ikke systemprompten")
+	}
+	// Rekkefølgen er målt: tenk-regelen foran metodeteksten.
+	if strings.Index(content, motor.ThinkRule) > strings.Index(content, motor.Catalog[motor.MethodRelation].Text) {
+		t.Error("tenk-regelen skal stå foran metodeteksten")
+	}
+}
+
+// Uten verktøy skal tenk-regelen utebli, men metodeteksten stå.
+func TestNoThinkRuleWithoutTools(t *testing.T) {
+	full := map[string]any{
+		flowKeyField: "smalltalk",
+		"messages":   []any{map[string]any{"role": "system", "content": "REGLER"}},
+	}
+	extra := motor.BuildSystem("", motorMethod(full), motorHasTools(full))
+	if strings.Contains(extra, motor.ThinkRule) {
+		t.Error("uten verktøy skal tenk-regelen utebli")
+	}
+	if !strings.Contains(extra, motor.Catalog[motor.MethodSmalltalk].Text) {
+		t.Error("metodeteksten skal med uansett")
+	}
+}
+
+// Uten metode skal ingenting injiseres på en verktøyløs tur — da er v6
+// byte-identisk med dagens oppførsel.
+func TestNoInjectionWithoutMethodOrTools(t *testing.T) {
+	full := map[string]any{flowKeyField: "free_chat"}
+	if extra := motor.BuildSystem("", motorMethod(full), motorHasTools(full)); extra != "" {
+		t.Errorf("uten metode og verktøy skal ingenting injiseres, fikk %q", extra)
 	}
 }

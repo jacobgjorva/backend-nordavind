@@ -28,3 +28,11 @@ func motorFlowKey(full map[string]any) string {
 	key, _ := full[flowKeyField].(string)
 	return key
 }
+
+// motorHasTools: har turen verktøy å arbeide med? Tenk-regelen gir bare
+// mening foran en handling — uten verktøy ville den bedt om et arbeidsnotat
+// til en jobb modellen ikke kan utføre.
+func motorHasTools(full map[string]any) bool {
+	tools, _ := full["tools"].([]any)
+	return len(tools) > 0
+}
