@@ -105,8 +105,24 @@ og navnekontroll som dekker hele svaret inkl. avgrensningssetningen.
 Der funksjonene i dag er private i api, flyttes de til motor-pakken og
 re-eksponeres — flytting, aldri omskriving (de er målt).
 
-Ferdig: eksisterende gulv-tester følger med flyttingen og er grønne;
-strip-testen ny.
+STATUS: FERDIG. Gulvene er KOBLET, ikke kopiert: `internal/motor/floor.go`
+eier kontrakten og rekkefølgen (tabell → observasjon → kildenote → neste
+steg → slutt), `internal/api/motorfloors.go` oppfyller den ved å kalle
+insight.go, dbstrategy.go og narrate.go der de står. Ingen målt kode er
+flyttet eller skrevet om.
+
+Nytt i motor-pakken: `StripEmphasis` (fet skrift og overskrifter ut av
+prosa, kodeblokker urørt) og `HonestEmpty` (skiller «prøvde ingenting» fra
+«fant ingenting», og lar databasens egen redegjørelse vinne).
+
+Svarbudsjettet avledes av metoden når den har eget tak (relasjon 900,
+anbefaling 700), ellers arves flytens — så research-svarets tre deler ikke
+amputeres av et budsjett satt for tallsvar.
+
+ÅPENT OG MERKET: neste-steg-laget er IKKE portert. Det finnes bare på
+engine-experiment, og å kopiere umålt kode hit ville brutt regelen om at
+gulv skal være verifiserte. Gulvet står som en tom, navngitt metode i
+stedet for å late som det er dekket.
 
 ## Del 6 — leveransen
 

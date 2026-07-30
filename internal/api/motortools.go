@@ -28,6 +28,9 @@ type motorTools struct {
 	// turnState bærer det gulvene trenger etter turen (siste tabell,
 	// db-forsøk). Motoren selv rører det aldri.
 	state *motorTurnState
+	// floors regner observasjonen mens radene finnes i minnet. Nil er
+	// lovlig (probe-kjøringer uten gulv).
+	floors *motorFloors
 }
 
 // motorTurnState er turens db-spor, som gulvene i del 5 bygger på.
@@ -132,6 +135,11 @@ func (t *motorTools) runDB(ctx context.Context, c motor.ToolCall, connID, sql st
 		if att.note != "" {
 			text += "\n" + att.note
 		}
+	}
+	// Observasjonen regnes HER, mens radene finnes: innsiktslaget trenger
+	// dem, og de er borte når svaret skrives.
+	if t.floors != nil {
+		t.floors.observeTurn(att, sql, motor.MaxRawRows)
 	}
 	t.narr.afterDB(att, att.text)
 	return motor.ToolResult{Text: text, Kind: kind, Evidence: true}
