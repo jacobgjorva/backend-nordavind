@@ -105,9 +105,14 @@ func (e *Engine) Run(ctx context.Context, payload map[string]any, turn *Turn) (h
 
 		// Tanken som fulgte med kallene er turens mest undervurderte
 		// ressurs: den ble betalt for og kastet i alle tidligere motorer.
-		// Del 4 gjør den til narrasjon og relevansanker; her fanges den.
+		// Den blir arbeidssteg til brukeren OG siktepunkt for
+		// kilderangeringen (thought.go). Uteblir den, skjer ingen av
+		// delene og turen går som før — den kan aldri antas.
 		if th := resp.Thought(); th != "" {
 			turn.Thoughts = append(turn.Thoughts, th)
+			if step := ThoughtStep(th); step != "" {
+				e.Out.Step(step, KindThink)
+			}
 		}
 
 		if e.runTools(ctx, payload, turn, budget, resp.Calls) {

@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"strings"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/motor"
 )
@@ -137,20 +136,8 @@ func (t *motorTools) runDB(ctx context.Context, c motor.ToolCall, connID, sql st
 	return motor.ToolResult{Text: text, Kind: kind, Evidence: true}
 }
 
-// motorRelevance er vektoren kildeutdragene rangeres mot: brukerens
-// spørsmål PLUSS det modellen sist sa den lette etter.
-//
-// Dette er hele grepet i del 4. Rangeres utdragene bare mot spørsmålets
-// ordlyd, får vi de mest prominente treffene i kategorien; rangeres de mot
-// turens uttalte hensikt, får vi det turen FAKTISK leter etter.
+// motorRelevance er vektoren kildeutdragene rangeres mot. Selve regelen
+// bor i motor-pakken (thought.go), så api-laget ikke kan drifte fra den.
 func motorRelevance(turn *motor.Turn) string {
-	q := strings.TrimSpace(turn.Question)
-	th := strings.TrimSpace(turn.LastThought())
-	switch {
-	case th == "":
-		return q
-	case q == "":
-		return th
-	}
-	return q + "\n" + th
+	return motor.Relevance(turn.Question, turn.LastThought())
 }
