@@ -22,6 +22,7 @@ type Config struct {
 	MSClientID      string // Azure app-registrering (Microsoft 365-connector)
 	MSClientSecret  string
 	UpstreamAPIKey  string
+	MistralAPIKey   string   // MISTRAL_API_KEY: Large 3 hos La Plateforme (EU)
 	AllowedOrigins  []string // CORS-origins for frontend (kommaseparert i env)
 	DBPath          string   // SQLite-fil for tenants/brukere/sesjoner
 	AuthRequired    bool     // krev innlogging på chat/extract (default på; sett AUTH_REQUIRED=false kun i dev)
@@ -60,6 +61,7 @@ func Load() (Config, error) {
 		MSClientSecret:  getenv("MS_CLIENT_SECRET", ""),
 		UpstreamBaseURL: getenv("UPSTREAM_BASE_URL", "https://api.scaleway.ai/v1"),
 		UpstreamAPIKey:  os.Getenv("UPSTREAM_API_KEY"),
+		MistralAPIKey:   os.Getenv("MISTRAL_API_KEY"),
 		AllowedOrigins:  strings.Split(getenv("ALLOWED_ORIGIN", "http://localhost:5173,http://127.0.0.1:5173"), ","),
 		DBPath:          getenv("DB_PATH", "data/nordavind.db"),
 		AuthRequired:    getenv("AUTH_REQUIRED", "true") != "false",

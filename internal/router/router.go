@@ -9,35 +9,31 @@ import (
 // (web_search) pålitelig og skrive korrekt norsk; kimi-modellene ignorerer
 // reasoning-av, flash er for svak til verktøybruk, og glm-5-turbo lekker
 // engelsk resonnering i norske svar. Mistral er også 58 % billigere.
+// ÉN modell. Motor v5 er designet for Mistral Large 3 og bare den: girkasser
+// mellom leverandører skjulte hvem som faktisk feilet, og hvert nivå krevde
+// egen kalibrering. Vision er unntaket — bilder krever en multimodal modell.
 const (
-	// Modellene kjøres på Scaleway (EU-eid, GDPR). Tre tekstnivåer:
-	// Bris (hverdag), Storm (tungt), Tornado (det aller tyngste).
-	MidModel   = "mistral-medium-3.5-128b"
-	HeavyModel = "qwen3.5-397b-a17b"
-	TopModel   = "glm-5.2"
-	// LightModel («flau») tar de letteste flytene (smalltalk, web-fakta):
-	// 10× billigere enn MidModel og raskere. Målt jevngod på verktøyvalg og
-	// korte svar; hallusinasjonsrisikoen bæres av kildekontroll-gaten (G1/G2),
-	// derfor slippes den kun til i flyter med søk-først eller uten fakta.
-	LightModel = "mistral-small-3.2-24b-instruct-2506"
-	// VisionModel tolker bilder — Qwen3.6-35B er multimodal og rimelig.
+	// Chat- og arbeidsmodellen. Hos Mistral La Plateforme (EU, Frankrike).
+	MidModel = "mistral-large-2512"
+	// Bakoverkompatible aliaser for lagrede modellvalg i klienter.
+	HeavyModel = MidModel
+	TopModel   = MidModel
+	LightModel = MidModel
+	// VisionModel tolker bilder (Scaleway) — Large 3 er tekst i vår bruk.
 	VisionModel = "qwen3.6-35b-a3b"
 )
 
-// Nordavind-aliaser: vindskalaen navngir modellnivåene utad.
+// Aliaser: vindskalaen navngir nivåene utad, men peker på samme modell.
 var Aliases = map[string]string{
-	"flau":   LightModel,
-	"bris":   MidModel,
-	"storm":  HeavyModel,
-	"orkan":  TopModel,
-	"kuling": VisionModel,
+	"flau": MidModel, "bris": MidModel, "storm": MidModel,
+	"orkan": MidModel, "kuling": VisionModel,
 }
 
 // katalog: modellene som FÅR gå upstream. Alt annet (utgåtte modeller fra
 // gamle klienter/localStorage, tastefeil) normaliseres til MidModel — en
 // deprekert modell skal aldri kunne overleve i omløp.
 var katalog = map[string]bool{
-	LightModel: true, MidModel: true, HeavyModel: true, TopModel: true, VisionModel: true,
+	MidModel: true, VisionModel: true,
 }
 
 // Resolve oversetter et alias til faktisk modellnavn; "auto" slippes gjennom
@@ -50,24 +46,6 @@ func Resolve(model string) string {
 		return model
 	}
 	return MidModel
-}
-
-// heavyMarkers er signaler på at spørsmålet krever tolkning, analyse
-// eller flerstegs resonnering (Storm).
-var heavyMarkers = []string{
-	"analyser", "analyse", "vurder", "sammenlign", "drøft", "resonner",
-	"strategi", "arkitektur", "refaktor", "implementer", "debug",
-	"bevis", "beregn", "regn ut", "kalkuler", "optimaliser",
-	"hvorfor", "forklar hvordan", "hva er konsekvensen", "fordeler og ulemper",
-	"plan for", "utred", "estimer", "risiko",
-}
-
-// topMarkers signaliserer de aller tyngste oppgavene (Tornado) — dyp,
-// flerstegs resonnering der Storm ikke strekker til.
-var topMarkers = []string{
-	"bevis", "utled", "optimaliser", "matematisk", "kompleks", "dypdykk",
-	"grundig analyse", "detaljert plan", "trinn for trinn", "steg for steg",
-	"omfattende", "avansert", "algoritme",
 }
 
 // Message er minimumsfeltene vi trenger fra chat-payloaden. Content er rå
@@ -137,46 +115,10 @@ func LastUserHasImage(messages []Message) bool {
 	return false
 }
 
-// Pick velger modell ut fra siste brukermelding og samtalens omfang.
+// Pick: én modell, så valget er trivielt. Bilder er unntaket.
 func Pick(messages []Message) string {
-	var last string
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == "user" {
-			last = messages[i].text()
-			break
-		}
-	}
-	if isTop(last) {
-		return TopModel
-	}
-	if isHeavy(last) {
-		return HeavyModel
+	if LastUserHasImage(messages) {
+		return VisionModel
 	}
 	return MidModel
-}
-
-func isHeavy(text string) bool {
-	// Lange spørsmål bærer som regel mer kontekst og krever mer av modellen.
-	if len(text) > 600 {
-		return true
-	}
-	return matchesAny(text, heavyMarkers)
-}
-
-func isTop(text string) bool {
-	// Svært lange eller eksplisitt tunge oppgaver går til Tornado.
-	if len(text) > 1600 {
-		return true
-	}
-	return matchesAny(text, topMarkers)
-}
-
-func matchesAny(text string, markers []string) bool {
-	lower := strings.ToLower(text)
-	for _, m := range markers {
-		if strings.Contains(lower, m) {
-			return true
-		}
-	}
-	return false
 }
