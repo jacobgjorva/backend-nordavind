@@ -43,7 +43,7 @@ type anchorCase struct {
 	Query    string `json:"query"`
 }
 
-const embeddingModel = "qwen3-embedding-8b"
+const embeddingModel = "mistral-embed"
 
 func main() {
 	setPath := flag.String("set", "cmd/v6anchor/testdata/anchors.jsonl", "casene")

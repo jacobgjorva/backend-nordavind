@@ -8,10 +8,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -46,10 +48,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "config:", err)
 		os.Exit(2)
 	}
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: 60 * time.Second, Transport: &retry{http.DefaultTransport}}
 	embedder := &intent.MistralEmbedder{
 		BaseURL: cfg.UpstreamBaseURL, APIKey: cfg.UpstreamAPIKey,
-		Model: "qwen3-embedding-8b", Client: client,
+		Model: "mistral-embed", Client: client,
 	}
 	judge := &intent.MistralJudge{
 		BaseURL: cfg.UpstreamBaseURL, APIKey: cfg.UpstreamAPIKey,
@@ -98,7 +100,16 @@ func main() {
 	// fordi ingenting talte den. Falske positive er den viktige halvdelen —
 	// en assistent som spør i stedet for å svare er verre enn ingen.
 	var unclearWant, unclearHit, unclearFalse int
-	for _, c := range cases {
+	// Pause mellom kall: porten skal måle RUTINGSKVALITET, ikke
+	// leverandørens rate-limit. Uten den fyrer evalen 147 kall på rappen,
+	// Mistral svarer 429 (målt: 93 av 147), og både accuracy og latens
+	// beskriver da burst-oppførsel ingen bruker utsettes for — i prod
+	// kommer ett kall om gangen fra én person.
+	const pace = 250 * time.Millisecond
+	for i, c := range cases {
+		if i > 0 {
+			time.Sleep(pace)
+		}
 		d := engine.Resolve(context.Background(), c.Text, true)
 		// Ett omforsøk på degraderte kall. Uten dette forsvant tilfeller ut av
 		// nevneren når embedding-kallet timet ut, og settet krympet fra
@@ -188,4 +199,36 @@ func orNone(k string) string {
 		return "(fri chat)"
 	}
 	return k
+}
+
+// retry: samme 429-backoff som produksjonsserveren. Uten den måler porten
+// leverandørens rate-limit i stedet for rutingen (målt: 93 av 147 kall
+// fikk 429 og falt stille tilbake på embedding-scoren).
+type retry struct{ base http.RoundTripper }
+
+func (t *retry) RoundTrip(req *http.Request) (*http.Response, error) {
+	var body []byte
+	if req.Body != nil {
+		b, _ := io.ReadAll(req.Body)
+		req.Body.Close()
+		body = b
+	}
+	delays := []time.Duration{400 * time.Millisecond, 1200 * time.Millisecond, 3 * time.Second}
+	for attempt := 0; ; attempt++ {
+		r := req.Clone(req.Context())
+		if body != nil {
+			r.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		resp, err := t.base.RoundTrip(r)
+		if err == nil && resp.StatusCode != http.StatusTooManyRequests && resp.StatusCode < 500 {
+			return resp, nil
+		}
+		if attempt >= len(delays) {
+			return resp, err
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+		time.Sleep(delays[attempt])
+	}
 }

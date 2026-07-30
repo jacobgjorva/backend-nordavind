@@ -59,7 +59,7 @@ func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 	s := &Server{
 		cfg: cfg,
 		// Ingen total timeout: streaming-svar kan stå åpne lenge.
-		client:   &http.Client{Timeout: 0},
+		client:   &http.Client{Timeout: 0, Transport: &retryTransport{base: http.DefaultTransport}},
 		log:      log,
 		search:   search.NewClient(cfg.SearxURL, cfg.SerperKey),
 		store:    st,
@@ -489,4 +489,46 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// retryTransport gjentar 429 og 5xx med eksponentiell backoff.
+//
+// MÅLT (2026-07-30): Mistral La Plateforme rate-limiter hardt — 93 av 147
+// kall i intent-evalen fikk 429. Rutingen falt da tilbake på
+// embedding-scoren alene, stille, uten at noe krasjet. Et tapt kall koster
+// hele turens metodevalg, så det er verdt tre forsøk.
+type retryTransport struct{ base http.RoundTripper }
+
+func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	var body []byte
+	if req.Body != nil {
+		b, err := io.ReadAll(req.Body)
+		if err != nil {
+			return nil, err
+		}
+		req.Body.Close()
+		body = b
+	}
+	delays := []time.Duration{400 * time.Millisecond, 1200 * time.Millisecond, 3 * time.Second}
+	var resp *http.Response
+	var err error
+	for attempt := 0; ; attempt++ {
+		r := req.Clone(req.Context())
+		if body != nil {
+			r.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		resp, err = t.base.RoundTrip(r)
+		retryable := err != nil || resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
+		if !retryable || attempt >= len(delays) {
+			return resp, err
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+		select {
+		case <-time.After(delays[attempt]):
+		case <-req.Context().Done():
+			return nil, req.Context().Err()
+		}
+	}
 }

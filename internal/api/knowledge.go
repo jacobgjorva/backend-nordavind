@@ -19,7 +19,9 @@ import (
 
 const (
 	embeddingModel = "mistral-embed"
-	// qwen3-embedding scorer urelatert tekst ~0.21 og klart relevant ~0.31–0.53.
+	// TERSKLENE UNDER ER KALIBRERT FOR qwen3-embedding-8b (urelatert ~0.21,
+	// klart relevant ~0.31–0.53). Etter byttet til mistral-embed er de
+	// UKALIBRERTE — skalaen er en annen. Mål faktisk cosine før de justeres.
 	// 0.28 er vektor-gulvet som skiller signal fra støy.
 	vecFloor   = 0.28
 	candDepth  = 30   // hvor mange kandidater fra hver kilde (vektor / nøkkelord)

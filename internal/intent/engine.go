@@ -49,11 +49,18 @@ const (
 	// dommeren i stedet for direct — romsligere enn directMargin fordi
 	// rådgivningsformuleringer scorer systematisk lavere på tekstlikhet.
 	freeChatMargin = 0.16
-	// embedTimeout/judgeTimeout: motoren skal aldri henge — fail-open. Stramme
-	// frister: p50 er ~100-250 ms, og en utstikker skal koste maks
-	// ~2 s ekstra før chatten går videre som fri chat, aldri 10+.
-	embedTimeout = 1500 * time.Millisecond
-	judgeTimeout = 2500 * time.Millisecond
+	// embedTimeout/judgeTimeout: motoren skal aldri henge — fail-open.
+	//
+	// MÅLT PÅ MISTRAL (2026-07-30, 20 kall hver): embed p50 176 ms, p95
+	// 395 ms, max 1588 ms. Dommer p50 350 ms, p95 1175 ms, max 4039 ms.
+	// Halen er lang. De gamle fristene (1500/2500) var kalibrert for en
+	// annen leverandør og kuttet 93 av 147 kall i evalen — rutingen falt da
+	// stille tilbake på embedding-scoren alene.
+	//
+	// Fristene dekker nå målt max med margin. De er fortsatt et TAK mot
+	// hengende kall, ikke en forventning: p50 avgjør hva brukeren føler.
+	embedTimeout = 2500 * time.Millisecond
+	judgeTimeout = 5 * time.Second
 )
 
 // Embedder gjør tekster om til vektorer. Injiseres (Mistral i produksjon,
@@ -271,6 +278,12 @@ func (e *Engine) judgeDecision(ctx context.Context, msg string, isAdmin bool, ca
 		// Dommeren feilet eller svarte utenfor enum: fall tilbake til beste
 		// kandidat hvis den er godt over gulvet, ellers fri chat.
 		if cands[0].Score >= directScore {
+			// Reddet av embedding-scoren, men degraderingen SKAL logges:
+			// en stille degradering er usynlig i drift, og vi brukte en hel
+			// økt på å lete etter nettopp denne (dommeren feilet på hver
+			// tur uten at noe krasjet).
+			e.log.Warn("intent: dommer feilet, reddet av score", "err", err, "pick", pick,
+				"valgt", cands[0].Key, "score", cands[0].Score)
 			return Decision{Key: cands[0].Key, Method: MethodDirect, Candidates: cands,
 				Degraded: true, Elapsed: time.Since(start)}
 		}

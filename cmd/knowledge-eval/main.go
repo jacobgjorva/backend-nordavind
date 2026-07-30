@@ -80,7 +80,7 @@ func main() {
 
 	embedder := &intent.MistralEmbedder{
 		BaseURL: cfg.UpstreamBaseURL, APIKey: cfg.UpstreamAPIKey,
-		Model: "qwen3-embedding-8b", Client: &http.Client{Timeout: 30 * time.Second},
+		Model: "mistral-embed", Client: &http.Client{Timeout: 60 * time.Second},
 	}
 	ctx := context.Background()
 
