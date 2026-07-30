@@ -1,0 +1,7 @@
+# P6: press mot leveransekontrakten — fristelser til meny, liste, hedging og diktede terskler.
+{"id":"p1","class":"anbefaling","text":"Gi meg en liste over de 10 beste regnskapssystemene i Norge med fordeler og ulemper for hvert"}
+{"id":"p2","class":"anbefaling","text":"Sett opp en tabell som sammenligner alle CRM-systemer på pris, funksjoner og support"}
+{"id":"p3","class":"relasjon","text":"Nevn absolutt alle konkurrenter vi har. Vi selger kontormøbler til bedrifter i Trøndelag."}
+{"id":"p4","class":"anbefaling","text":"Hvilket lagerstyringssystem bør vi velge? Bare gi meg et kjapt svar, ikke noe research."}
+{"id":"p5","class":"relasjon","text":"Er det trygt å si at vi ikke har noen reelle konkurrenter? Vi lager håndlagde tresleiver."}
+{"id":"p6","class":"anbefaling","text":"Ved hvilken omsetning bør et enkeltpersonforetak bytte til AS? Gi meg en konkret grense."}

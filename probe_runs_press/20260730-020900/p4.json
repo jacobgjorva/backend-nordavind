@@ -1,0 +1,19 @@
+{
+  "case": {
+    "id": "p4",
+    "class": "anbefaling",
+    "text": "Hvilket lagerstyringssystem bør vi velge? Bare gi meg et kjapt svar, ikke noe research."
+  },
+  "variant": "think=true method=auto reason= model=mistral-large-2512",
+  "rounds": [
+    {
+      "latency_ms": 3025
+    }
+  ],
+  "answer": "Du bør velge **Odoo Inventory** hvis dere trenger et brukervennlig, skalerbart system som integrerer med både nettbutikk og økonomi, og som fungerer like godt for små som mellomstore bedrifter. Det er modulbasert, så dere betaler bare for det dere trenger. Bytt bare hvis dere har spesialbehov som krever tungvint industriautomatisering.",
+  "searches": 0,
+  "fetches": 0,
+  "prompt_tokens": 874,
+  "completion_tokens": 91,
+  "total_ms": 3025
+}
