@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "h20",
+    "class": "relasjon",
+    "text": "Vi driver et lite bryggeri i Trøndelag som bare selger fatøl til utesteder, ingen flasker. Hvem konkurrerer vi egentlig med?"
+  },
+  "side": "B",
+  "answer": "De største konkurrentene dine i Trøndelag er de etablerte grossistene som leverer fatøl til utesteder, først og fremst Storcash og Servicegrossistene, samt andre lokale bryggerier som selger fatøl direkte til serveringsstedene.",
+  "steps": [
+    "Ute etter \"største fatøl leverandører til utesteder Trøndel...\".",
+    "Nettet er tregt akkurat nå. Leter videre.",
+    "4 treff. Siler ut det som duger.",
+    "Leter etter \"største ølleverandører til utesteder Trøndelag 2...\".",
+    "4 kilder å gå gjennom.",
+    "Googler \"største grossister fatøl utesteder Trøndelag 202...\", i mangel av et bedre verb.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 12,
+  "ttft_ms": 15532,
+  "total_ms": 15533
+}

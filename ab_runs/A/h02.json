@@ -1,0 +1,19 @@
+{
+  "case": {
+    "id": "h02",
+    "class": "relasjon",
+    "text": "Firmaet vårt reparerer og vedlikeholder heiser i næringsbygg i Bergensområdet, ni montører. Hvilke aktører konkurrerer vi mot?"
+  },
+  "side": "A",
+  "answer": "De viktigste konkurrentene for heisvedlikehold og reparasjon i Bergensområdet er Alt Heis AS og Scan Heis AS.",
+  "steps": [
+    "Slår opp \"heisvedlikehold og reparasjon bedrifter Bergenso...\".",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom.",
+    "Søker på \"heisvedlikehold bedrifter Bergen konkurrerende a...\".",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 8,
+  "ttft_ms": 11036,
+  "total_ms": 11037
+}

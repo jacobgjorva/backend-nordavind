@@ -1,0 +1,18 @@
+{
+  "case": {
+    "id": "h05",
+    "class": "relasjon",
+    "text": "Hvilke aktører ligner mest på oss? Vi driver mobil dekkskift og hjulhotell for bedriftsflåter i Stavanger."
+  },
+  "side": "A",
+  "answer": "De aktørene som ligner mest på dere i Stavanger er DekkTeam Stavanger og Dekkpartner, som begge tilbyr dekkskift og dekkhotell, og har fokus på bedriftsmarkedet. DekkTeam nevner spesifikt dekkhotell og hjulskift for bedriftsflåter, mens Dekkpartner har flere lokaler i Stavanger-området og tilbyr dekkskift og lagring.",
+  "steps": [
+    "Ute etter \"bedrifter mobil dekkskift hjulhotell flåte Stava...\".",
+    "4 kilder å gå gjennom.",
+    "Søker på \"mobil dekkskift hjulhotell bedriftsflåter Stavan...\".",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 8,
+  "ttft_ms": 9795,
+  "total_ms": 9797
+}

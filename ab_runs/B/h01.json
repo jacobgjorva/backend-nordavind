@@ -1,0 +1,25 @@
+{
+  "case": {
+    "id": "h01",
+    "class": "relasjon",
+    "text": "Vi driver Nordre Dalen Trelast, et lite sagbruk i Innlandet som leverer spesialskåret furu til restaurering av verneverdige bygg. Hvem er våre direkte konkurrenter?"
+  },
+  "side": "B",
+  "answer": "Dine direkte konkurrenter i Innlandet som leverer spesialskåret furu til restaurering av verneverdige bygg er blant annet Vesetrud Sag (Hønefoss, Buskerud/Innlandet-grensen) som leverer trelast i spesialdimensjoner og samarbeider med 3-Tek om gamle profiler, samt Gryting Trelast AS (Innlandet) som er medlem i Norsk Bygdesagforening og leverer restaureringsvirke og kopiering av gamle profiler. Andre relevante aktører i regionen finner du i [Norsk Bygdesagforenings medlemsliste](https://sag.no/medlemmer/) under kategoriene \"Restaureringsvirke\" og \"Kopiering av gamle profiler og dekorprodukt\" for Innlandet.",
+  "steps": [
+    "Sjekker \"sagbruk Innlandet spesialskåret furu restaurerin...\" på nettet.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser.",
+    "Ser hva nettet vet om \"sagbruk Norge spesialskåret furu restaurering ve...\".",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser.",
+    "Ute etter \"Norsk Bygdesagforening medlemmer sagbruk spesial...\".",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser.",
+    "Åpner sag.no.",
+    "Gjennomlest. Siler ut poenget."
+  ],
+  "sources": 12,
+  "ttft_ms": 38849,
+  "total_ms": 38850
+}

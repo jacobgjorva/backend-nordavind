@@ -1,0 +1,17 @@
+{
+  "case": {
+    "id": "h08",
+    "class": "anbefaling",
+    "text": "Anbefal et verktøy for å planlegge og dokumentere vedlikehold på et mindre gårdsbruk."
+  },
+  "side": "B",
+  "answer": "Skifteplan er et komplett verktøy for planlegging og dokumentasjon av vedlikehold på gårdsbruk, med mulighet for gjødselplan, sprøytevernjournal og registrering av utførte tiltak både på web og mobil.",
+  "steps": [
+    "Sjekker \"beste verktøy for vedlikeholdsplanlegging og dok...\" på nettet.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 4,
+  "ttft_ms": 5954,
+  "total_ms": 5955
+}

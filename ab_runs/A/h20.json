@@ -1,0 +1,19 @@
+{
+  "case": {
+    "id": "h20",
+    "class": "relasjon",
+    "text": "Vi driver et lite bryggeri i Trøndelag som bare selger fatøl til utesteder, ingen flasker. Hvem konkurrerer vi egentlig med?"
+  },
+  "side": "A",
+  "answer": "Dere konkurrerer først og fremst med de etablerte lokale håndverksbryggeriene i Trøndelag som Austmann Bryggeri i Trondheim, Hammerhead Brewing Company på Frøya, Hogna Brygg på Singsås og Klostergården Håndbryggeri på Tautra, som alle leverer fatøl til utesteder i regionen. I tillegg kommer de store nasjonale aktørene som E.C. Dahls, som også har en bred fatølportefølje og distribusjon til utesteder.",
+  "steps": [
+    "Ute etter \"største fatøl leverandører Trøndelag 2026\".",
+    "4 kilder å gå gjennom.",
+    "Søker på \"største bryggerier som selger fatøl til utestede...\".",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom."
+  ],
+  "sources": 8,
+  "ttft_ms": 12041,
+  "total_ms": 12042
+}

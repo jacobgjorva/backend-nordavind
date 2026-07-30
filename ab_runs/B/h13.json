@@ -1,0 +1,22 @@
+{
+  "case": {
+    "id": "h13",
+    "class": "oppslag",
+    "text": "når trer den nye åpenhetsloven i kraft for mindre virksomheter?"
+  },
+  "side": "B",
+  "answer": "Den nye åpenhetsloven gjelder foreløpig kun for større virksomheter, og det er per i dag ingen fastsatt dato for når den trer i kraft for mindre virksomheter.",
+  "steps": [
+    "Søker på \"når trer den nye åpenhetsloven i kraft for mindr...\".",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser.",
+    "Den nye åpenhetsloven gjelder foreløpig kun for større virksomheter, og det er per i dag ingen fastsatt dato for når den trer i kraft for mindre virksomheter.",
+    "Slår opp \"når trer den nye åpenhetsloven i kraft for mindr...\".",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom.",
+    "Søker med nye vinkler"
+  ],
+  "sources": 8,
+  "ttft_ms": 7110,
+  "total_ms": 12517
+}

@@ -1,0 +1,13 @@
+{
+  "case": {
+    "id": "h17",
+    "class": "samtale",
+    "text": "jeg er litt usikker på om vi gjør dette riktig, egentlig"
+  },
+  "side": "A",
+  "answer": "Hva er det konkrete du er usikker på?",
+  "steps": null,
+  "sources": 0,
+  "ttft_ms": 305,
+  "total_ms": 308
+}

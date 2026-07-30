@@ -1,0 +1,17 @@
+{
+  "case": {
+    "id": "h11",
+    "class": "anbefaling",
+    "text": "Hva slags kassasystem passer for en liten gårdsbutikk som også selger på markeder?"
+  },
+  "side": "B",
+  "answer": "For en liten gårdsbutikk som også selger på markeder, passer et mobilt, nettbasert kassasystem best. Velg en løsning som fungerer på nettbrett eller smarttelefon, med offline-modus for markedsdager uten stabil nettforbindelse, og som synkroniserer salg og lager i sanntid mellom butikk og marked. Sitoo og PCKasse er eksempler på brukervennlige, norske systemer som dekker både stasjonært og mobilt salg, med støtte for kvitteringer, lagerstyring og betalingsløsninger.\n\nSjekk at systemet støtter SAF-T Kasse og integreres med regnskap som Fiken eller Tripletex, slik at du unngår manuell bokføring. Test offline-funksjonaliteten før du velger.",
+  "steps": [
+    "Søker på \"beste kassasystem for liten gårdsbutikk og marke...\".",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 4,
+  "ttft_ms": 8296,
+  "total_ms": 8298
+}

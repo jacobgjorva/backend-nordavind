@@ -1,0 +1,24 @@
+{
+  "case": {
+    "id": "h01",
+    "class": "relasjon",
+    "text": "Vi driver Nordre Dalen Trelast, et lite sagbruk i Innlandet som leverer spesialskåret furu til restaurering av verneverdige bygg. Hvem er våre direkte konkurrenter?"
+  },
+  "side": "A",
+  "answer": "Dere konkurrerer direkte med Vesetrud Sag i Tyristrand ved Hønefoss og TreVit.",
+  "steps": [
+    "Sjekker \"sagbruk spesialskåret furu restaurering vernever...\" på nettet.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser.",
+    "Ser hva nettet vet om \"sagbruk spesialskåret furu restaurering vernever...\".",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser.",
+    "Ute etter \"sagbruk spesialskåret furu restaurering vernever...\".",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser.",
+    "Dobbeltsjekker mot kildene"
+  ],
+  "sources": 12,
+  "ttft_ms": 47450,
+  "total_ms": 47451
+}

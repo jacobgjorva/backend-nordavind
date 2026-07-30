@@ -1,0 +1,15 @@
+{
+  "case": {
+    "id": "h10",
+    "class": "anbefaling",
+    "text": "Vi må ha noe for å holde styr på sertifikater og kurs for 40 ansatte i en elektrobedrift. Forslag?"
+  },
+  "side": "A",
+  "answer": "Det har jeg ikke grunnlag for å svare på ut fra det jeg har her.",
+  "steps": [
+    "Dobbeltsjekker mot kildene"
+  ],
+  "sources": 0,
+  "ttft_ms": 3760,
+  "total_ms": 3761
+}

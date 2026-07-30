@@ -1,0 +1,16 @@
+{
+  "case": {
+    "id": "h18",
+    "class": "uklar",
+    "text": "kan du finne ut hvor mye de tar?"
+  },
+  "side": "B",
+  "answer": "Hvilke tjenester mener du?",
+  "steps": [
+    "Slår opp \"priser for tjenester 2026\".",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 4,
+  "ttft_ms": 4576,
+  "total_ms": 4577
+}

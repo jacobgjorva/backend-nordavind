@@ -1,0 +1,18 @@
+{
+  "case": {
+    "id": "h03",
+    "class": "relasjon",
+    "text": "Which companies are the closest peers to a small Norwegian studio that localises video games into Nordic languages?"
+  },
+  "side": "A",
+  "answer": "Jeg fikk ikke formulert dette kildefast — se kildene over for detaljene.",
+  "steps": [
+    "Slår opp \"Norwegian game localization studios Nordic langu...\".",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom.",
+    "Dobbeltsjekker mot kildene"
+  ],
+  "sources": 4,
+  "ttft_ms": 7822,
+  "total_ms": 7824
+}

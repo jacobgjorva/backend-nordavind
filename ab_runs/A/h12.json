@@ -1,0 +1,17 @@
+{
+  "case": {
+    "id": "h12",
+    "class": "oppslag",
+    "text": "hva er maksimal tillatt totalvekt for en bil du kan kjøre på førerkort klasse B?"
+  },
+  "side": "A",
+  "answer": "Maksimal tillatt totalvekt for en bil du kan kjøre på førerkort klasse B er 3 500 kg.",
+  "steps": [
+    "Sjekker \"maksimal tillatt totalvekt bil førerkort klasse...\" på nettet.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 4,
+  "ttft_ms": 6640,
+  "total_ms": 6641
+}

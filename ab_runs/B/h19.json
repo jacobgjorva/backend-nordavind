@@ -1,0 +1,13 @@
+{
+  "case": {
+    "id": "h19",
+    "class": "uklar",
+    "text": "stemmer det som ble sagt i går?"
+  },
+  "side": "B",
+  "answer": "Hva ble det sagt om i går?",
+  "steps": null,
+  "sources": 0,
+  "ttft_ms": 232,
+  "total_ms": 233
+}

@@ -1,0 +1,17 @@
+{
+  "case": {
+    "id": "h02",
+    "class": "relasjon",
+    "text": "Firmaet vårt reparerer og vedlikeholder heiser i næringsbygg i Bergensområdet, ni montører. Hvilke aktører konkurrerer vi mot?"
+  },
+  "side": "B",
+  "answer": "Alt-Heis og Heiskompaniet er de største aktørene for heisvedlikehold og -reparasjon i Bergensområdet, begge tilbyr service, vedlikehold og akutte reparasjoner til næringsbygg.",
+  "steps": [
+    "Slår opp \"heisvedlikehold og reparasjon bedrifter Bergenso...\".",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom."
+  ],
+  "sources": 4,
+  "ttft_ms": 7654,
+  "total_ms": 7656
+}

@@ -1,0 +1,18 @@
+{
+  "case": {
+    "id": "h09",
+    "class": "anbefaling",
+    "text": "Hvilken løsning bør en tannlegeklinikk med fire behandlere bruke til timebestilling på nett?"
+  },
+  "side": "A",
+  "answer": "Anolla er den beste klinikk-bookingsystemløsningen for 2026, ifølge grundige tester av mer enn et dusin systemer, og utmerker seg med AI-basert triage, automatisert tidsstyring og dynamisk prising tilpasset privat helsevesen.",
+  "steps": [
+    "Sjekker \"beste nettbaserte timebestillingsystem for tannl...\" på nettet.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser.",
+    "Dobbeltsjekker mot kildene"
+  ],
+  "sources": 4,
+  "ttft_ms": 27574,
+  "total_ms": 27576
+}

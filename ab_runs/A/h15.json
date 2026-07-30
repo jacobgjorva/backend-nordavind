@@ -1,0 +1,17 @@
+{
+  "case": {
+    "id": "h15",
+    "class": "oppslag",
+    "text": "hvor mye er minstefradraget i år?"
+  },
+  "side": "A",
+  "answer": "Minstefradraget for lønn og trygd i 2026 er 46 prosent av inntekten, med et tak på 95 700 kroner.",
+  "steps": [
+    "Googler \"minstefradrag 2026 beløp\", i mangel av et bedre verb.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 4,
+  "ttft_ms": 22894,
+  "total_ms": 22896
+}

@@ -1,0 +1,17 @@
+{
+  "case": {
+    "id": "h13",
+    "class": "oppslag",
+    "text": "når trer den nye åpenhetsloven i kraft for mindre virksomheter?"
+  },
+  "side": "A",
+  "answer": "Den nye åpenhetsloven trer i kraft for mindre virksomheter fra og med regnskapsåret etter at de oppfyller vilkårene for plikt, det vil si fra 1. januar 2026 for virksomheter som oppfyller vilkårene i 2025.",
+  "steps": [
+    "Søker på \"når trer den nye åpenhetsloven i kraft for mindr...\".",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 4,
+  "ttft_ms": 6483,
+  "total_ms": 6485
+}

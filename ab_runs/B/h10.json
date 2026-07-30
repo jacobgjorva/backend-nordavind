@@ -1,0 +1,13 @@
+{
+  "case": {
+    "id": "h10",
+    "class": "anbefaling",
+    "text": "Vi må ha noe for å holde styr på sertifikater og kurs for 40 ansatte i en elektrobedrift. Forslag?"
+  },
+  "side": "B",
+  "answer": "Bruker et dedikert kompetanseadmin-system som KursAdmin eller Competence Manager, som er skreddersydd for elektrobransjen og håndterer sertifikater, frister og påminnelser automatisk.\n\nStart med en prøveperiode på KursAdmin for å se om det dekker dine behov.",
+  "steps": null,
+  "sources": 0,
+  "ttft_ms": 1307,
+  "total_ms": 1308
+}

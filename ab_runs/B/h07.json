@@ -1,0 +1,13 @@
+{
+  "case": {
+    "id": "h07",
+    "class": "anbefaling",
+    "text": "Vi trenger et system for å håndtere utleie av anleggsmaskiner med timeregistrering og fakturering. Hva bør vi velge?"
+  },
+  "side": "B",
+  "answer": "For utleie av anleggsmaskiner med timeregistrering og fakturering er et dedikert utleiesystem som Rentman eller Booqable best egnet, da de håndterer timebasert fakturering, maskinoversikt og vedlikeholdsplanlegging direkte. Rentman er særlig sterk på anleggsbransjen og integrerer med regnskapssystemer.\n\nHvis dere allerede bruker et regnskapssystem som Visma eller Xledger, sjekk om de har en utleiemodul — det sparer dobbeltregistrering.\n\nJeg ville startet med en demo av Rentman for å se om det dekker deres behov.",
+  "steps": null,
+  "sources": 0,
+  "ttft_ms": 2511,
+  "total_ms": 2512
+}

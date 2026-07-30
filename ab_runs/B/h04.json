@@ -1,0 +1,18 @@
+{
+  "case": {
+    "id": "h04",
+    "class": "relasjon",
+    "text": "Vi selger abonnement på digitale kurs i førstehjelp til barnehager. Er Røde Kors en direkte konkurrent for oss?"
+  },
+  "side": "B",
+  "answer": "Røde Kors tilbyr digitale førstehjelpskurs, men disse er gratis og åpne for alle, ikke et abonnementstilbud rettet mot barnehager som betalende kunder. De har imidlertid også kommersielle kurs for bedrifter og organisasjoner, så de er en potensiell konkurrent på markedet for førstehjelpsopplæring til barnehager.",
+  "steps": [
+    "Leter etter \"Røde Kors digitale førstehjelpskurs abonnement b...\".",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom.",
+    "Ja, Røde Kors er en direkte konkurrent, for de tilbyr digitale førstehjelpskurs, også til bedrifter og organisasjoner, og har i tillegg et nyhetsbrev som annonserer gratis digitale kurs til alle interesserte, inkludert …"
+  ],
+  "sources": 4,
+  "ttft_ms": 8452,
+  "total_ms": 9054
+}

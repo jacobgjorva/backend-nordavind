@@ -1,0 +1,17 @@
+{
+  "case": {
+    "id": "h09",
+    "class": "anbefaling",
+    "text": "Hvilken løsning bør en tannlegeklinikk med fire behandlere bruke til timebestilling på nett?"
+  },
+  "side": "B",
+  "answer": "For en tannlegeklinikk med fire behandlere er Anolla den beste løsningen for nettbasert timebestilling i 2026, da den er testet og kåret som ledende for klinikker, med optimal støtte for pasientflyt og fleksibel timeplanlegging for flere behandlere. Anolla håndterer avansert kalenderadministrasjon og integreres smidig med klinikkens øvrige systemer.\n\nStart med en prøveperiode hos Anolla for å teste oppsett og funksjonalitet for fire behandlere.",
+  "steps": [
+    "Sjekker \"beste nettbaserte timebestillingsystem for tannl...\" på nettet.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 4,
+  "ttft_ms": 8898,
+  "total_ms": 8900
+}

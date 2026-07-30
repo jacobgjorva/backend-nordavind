@@ -1,0 +1,15 @@
+{
+  "case": {
+    "id": "h07",
+    "class": "anbefaling",
+    "text": "Vi trenger et system for å håndtere utleie av anleggsmaskiner med timeregistrering og fakturering. Hva bør vi velge?"
+  },
+  "side": "A",
+  "answer": "Det har jeg ikke grunnlag for å svare på ut fra det jeg har her.",
+  "steps": [
+    "Dobbeltsjekker mot kildene"
+  ],
+  "sources": 0,
+  "ttft_ms": 4013,
+  "total_ms": 4015
+}

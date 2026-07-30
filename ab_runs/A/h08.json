@@ -1,0 +1,17 @@
+{
+  "case": {
+    "id": "h08",
+    "class": "anbefaling",
+    "text": "Anbefal et verktøy for å planlegge og dokumentere vedlikehold på et mindre gårdsbruk."
+  },
+  "side": "A",
+  "answer": "For et mindre gårdsbruk anbefaler jeg **BondeLogg**, som er skreddersydd for norske gårdbrukere med 10–500 dekar. Det dekker vedlikeholdsplanlegging, dokumentasjon av sprøytejournal, gjødsling, utstyrsstatus og oppfyllelse av krav fra Mattilsynet — alt samlet og klart til tilsyn.",
+  "steps": [
+    "Sjekker \"beste verktøy for vedlikeholdsplanlegging og dok...\" på nettet.",
+    "Fortsatt på jakt.",
+    "Fant 4 kilder. Leser."
+  ],
+  "sources": 4,
+  "ttft_ms": 26625,
+  "total_ms": 26627
+}

@@ -1,0 +1,17 @@
+{
+  "case": {
+    "id": "h18",
+    "class": "uklar",
+    "text": "kan du finne ut hvor mye de tar?"
+  },
+  "side": "A",
+  "answer": "Du må presisere hvem «de» er, for eksempel hvilken tjeneste, butikk, bedrift eller organisasjon du spør om.",
+  "steps": [
+    "Slår opp \"hvor mye tar de\".",
+    "Dette tar lengre tid enn det burde. Står på.",
+    "4 kilder å gå gjennom."
+  ],
+  "sources": 4,
+  "ttft_ms": 6146,
+  "total_ms": 6147
+}
