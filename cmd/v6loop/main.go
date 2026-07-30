@@ -114,6 +114,16 @@ type record struct {
 	ComplTok  int       `json:"completion_tokens"`
 	TotalMS   int64     `json:"total_ms"`
 	Handoff   bool      `json:"handoff"`
+	// Evidence er ALT verktøyene returnerte, ordrett. Uten dette kan et
+	// svar ikke etterprøves mot kildene, og da måler vi bare at det ser
+	// bra ut — nøyaktig feilen v5 gjorde.
+	Evidence []toolTrace `json:"evidence"`
+}
+
+type toolTrace struct {
+	Name   string `json:"name"`
+	Args   string `json:"args"`
+	Result string `json:"result"`
 }
 
 func run(client *http.Client, sc *search.Client, cfg config.Config, log *slog.Logger,
@@ -132,10 +142,11 @@ func run(client *http.Client, sc *search.Client, cfg config.Config, log *slog.Lo
 	}
 
 	out := &collector{}
+	tools := &liveTools{sc: sc}
 	turn := &motor.Turn{Question: c.Text, Method: method}
 	e := &motor.Engine{
 		Model:   &liveModel{client: client, cfg: cfg},
-		Tools:   &liveTools{sc: sc},
+		Tools:   tools,
 		Out:     out,
 		Deliver: out,
 		Log:     log,
@@ -150,7 +161,7 @@ func run(client *http.Client, sc *search.Client, cfg config.Config, log *slog.Lo
 		Rounds: turn.Rounds, Searches: turn.Searches, Fetches: turn.Fetches,
 		Sources: len(turn.Sources), PromptTok: turn.Usage.PromptTokens,
 		ComplTok: turn.Usage.CompletionTokens, TotalMS: time.Since(start).Milliseconds(),
-		Handoff: handoff,
+		Handoff: handoff, Evidence: tools.trace,
 	}
 }
 
@@ -236,9 +247,18 @@ func (m *liveModel) Call(ctx context.Context, req motor.ModelRequest) (motor.Mod
 	return res, nil
 }
 
-type liveTools struct{ sc *search.Client }
+type liveTools struct {
+	sc    *search.Client
+	trace []toolTrace
+}
 
 func (t *liveTools) Run(ctx context.Context, c motor.ToolCall, b motor.Budget, turn *motor.Turn) motor.ToolResult {
+	res := t.run(ctx, c, b, turn)
+	t.trace = append(t.trace, toolTrace{Name: c.Name, Args: c.Args, Result: res.Text})
+	return res
+}
+
+func (t *liveTools) run(ctx context.Context, c motor.ToolCall, b motor.Budget, turn *motor.Turn) motor.ToolResult {
 	kind := motor.KindOther
 	switch c.Name {
 	case "web_search":
