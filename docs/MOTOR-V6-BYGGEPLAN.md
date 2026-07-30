@@ -158,9 +158,15 @@ branchen, P5-målt). Klebrighet: elliptisk oppfølging arver forrige metode
 via eksisterende sticky-mekanisme — ingen ny tilstand. Lav
 ruter-sikkerhet → ingen metode → naken løkke.
 
-Ferdig: intent-eval grønn MOT SAMME DAGS main-baseline (P5-lærdommen:
-aldri sammenlign med historiske tall); sticky-testene utvidet med
-metodearv.
+STATUS: FERDIG. Metoden avledes av flyten — ingen ny tilstand, og
+klebrighet arves gratis. Fire strukturvakter fester koblingen (sticky,
+verktøytilgang, utfører-flyter uten metode, smalltalk uten verktøy).
+Intent-eval 135/147 mot samme dags main 119/131: null regresjon på gamle
+linjer, 16/16 på nye.
+
+Innkoblingen (`runMotorV6`) står før legacy-løkka med samme kontrakt som
+den gamle motoren: took=false betyr at ingenting er sendt, og legacy tar
+turen. Tre tester fester at flagget av gir en helt inert motor.
 
 ## Del 8 — A/B-aksept og utrulling
 

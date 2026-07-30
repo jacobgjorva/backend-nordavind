@@ -53,6 +53,11 @@ type Delivery struct {
 	Limit int
 	// EmptyExplain er databasens egen redegjørelse når alt feilet.
 	EmptyExplain func() string
+
+	// Answer er det som faktisk ble levert. Hjernen lærer av utvekslingen,
+	// og uten dette stopper kunnskapstreet å vokse i nettopp de samtalene
+	// som betyr mest.
+	Answer string
 }
 
 // Deliver leverer turen.
@@ -90,5 +95,6 @@ func (d *Delivery) Deliver(ctx context.Context, turn *Turn, draft string) {
 		}
 	}
 
+	d.Answer = StripEmphasis(answer)
 	DeliverWithFloors(d.Out, d.Floors, turn, answer, d.Limit)
 }

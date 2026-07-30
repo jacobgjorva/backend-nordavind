@@ -657,6 +657,17 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 		s.learnFromExchange(ctx, learnFrom, userMsg, lastAnswer)
 	}()
 
+	// Motor v6 (internal/motor) eier vanlig chat når ENGINE=v6. Tar den
+	// ikke turen — flagget er av, flyten har egen leveransekontrakt, eller
+	// et verktøy krevde overlevering — er ingenting sendt til brukeren, og
+	// løkka under kjører som før.
+	if answer, took := s.runMotorV6(ctx, full, emit, dbCtx, narr, &promptTokens, &completionTokens); took {
+		// Hjernen skal lære av motor-turer også: uten dette stopper
+		// kunnskapstreet å vokse i akkurat de samtalene som betyr mest.
+		lastAnswer = answer
+		return
+	}
+
 	for round := 0; round <= roundCap; round++ {
 		body, err := json.Marshal(full)
 		if err != nil {

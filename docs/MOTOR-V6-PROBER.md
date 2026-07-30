@@ -369,3 +369,35 @@ Navnekontroll er ikke «glemt», den er FRAVALGT: den krever en mekanisme v6
 ikke har, og skal ikke late som den virker. Metodetekstene bærer kravet i
 stedet («navngi kun aktører som står i kildene»), og det ble målt å virke i
 kjøring 3.
+
+## Kjøring 10 — del 7: ruting, klebrighet og innkobling
+
+Metoden avledes av flyten (`motor.For`), og flyten ligger allerede på
+payloaden fra intent-motoren. Det gir to ting gratis:
+
+- **Klebrighet.** En kort oppfølging («og i Sverige?») arver forrige flyt
+  via applyIntent, og siden metoden er en ren funksjon av flyten, arves den
+  med. Ingen egen metode-tilstand som kan komme i utakt med rutingen.
+- **Fail-open.** Bommer ruteren, blir det MethodNone og naken løkke —
+  dagens oppførsel. En feilrutet tur arver aldri en fremmed fremgangsmåte.
+
+Fire strukturvakter fester koblingen: flyter med metode må være sticky i
+flyt-tabellen, de må ha verktøyene metoden forutsetter (en metode som ber
+om kildelesing i en flyt uten websøk er en stille feil), utfører-flyter må
+verken ha metode eller tas av porten, og smalltalk må stå uten verktøy.
+
+**Intent-eval, samme dag, begge grener** (P5-lærdommen: aldri sammenlign
+med et historisk tall):
+
+```
+motor-v6:   135/147 (91,8 %)   uklart 13/15, 0 falske
+main i dag: 119/131 (90,8 %)   uklart 13/15, 0 falske
+```
+
+Null regresjon på de 131 gamle linjene; de 16 nye klassifiseres korrekt.
+
+**Innkoblingen** står i `runMotorV6`, kalt FØR legacy-løkka med samme
+kontrakt som den gamle motoren hadde: kjør hvis du kan, ellers took=false
+uten å ha sendt noe. Tre tester fester sikkerhetsnettet — flagget av gir
+inert motor, utfører-flyter faller gjennom, og et åpent lerret eier turen
+selv. Hele suiten er grønn med ENGINE=v6 både på og av.
