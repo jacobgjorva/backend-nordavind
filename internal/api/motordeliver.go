@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"strings"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/motor"
@@ -109,9 +110,19 @@ func (w *motorWriter) Write(ctx context.Context, turn *motor.Turn, facts, draft 
 // («DA** Regnskapsbyrå**») og kontrollen måler sin egen formatering.
 type motorVerifier struct{}
 
+// pureNumberRe: tokenet ER et tall — sifre med vanlige skilletegn. Skiller
+// «0,50» fra «BM25»: produktnavn med sifre i seg (BM25, M365, x86) er NAVN,
+// og navnekontroll er bevisst fravalgt. Målt i prod 2026-07-30: «BM25»
+// havnet i avvikslista og kunne endt i en «les som anslag»-merknad.
+var pureNumberRe = regexp.MustCompile(`^[0-9][0-9 .,:%–-]*$`)
+
 func (motorVerifier) Unsupported(answer string, basis []string) []string {
 	var nums []string
 	for _, o := range offendersAgainst(motor.StripEmphasis(answer), basis, 3) {
+		o = strings.TrimSpace(o)
+		if !pureNumberRe.MatchString(o) {
+			continue
+		}
 		d := normDigits(o)
 		if d == "" {
 			continue

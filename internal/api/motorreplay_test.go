@@ -147,3 +147,29 @@ func TestVerifierSkipsYears(t *testing.T) {
 		t.Errorf("årstall skal ikke flagges, fikk %v", off)
 	}
 }
+
+// Produktnavn med sifre i seg er NAVN, ikke tall. Målt i prod: «BM25»
+// havnet i avvikslista fordi filteret godtok alt som inneholder sifre.
+func TestVerifierIgnoresAlphanumericNames(t *testing.T) {
+	v := motorVerifier{}
+	answer := "Bruk BM25 sammen med embeddings, gjerne via M365-integrasjonen, på x86-servere. " +
+		"Chunk på 200 til 500 ord."
+	off := v.Unsupported(answer, []string{"kildetekst uten noe av dette"})
+	for _, o := range off {
+		for _, name := range []string{"BM25", "M365", "x86"} {
+			if strings.Contains(o, name) {
+				t.Errorf("%q er et navn og skal ikke flagges som tall", o)
+			}
+		}
+	}
+	// De ekte tallene skal fortsatt fanges.
+	found := false
+	for _, o := range off {
+		if normDigits(o) == "200" || normDigits(o) == "500" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("ekte udekkede tall skal fortsatt flagges, fikk %v", off)
+	}
+}
