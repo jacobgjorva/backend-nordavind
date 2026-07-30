@@ -1,5 +1,10 @@
-// v6anchor måler om relevansankeret FAKTISK endrer hvilke kildeutdrag som
-// overlever rangeringen.
+// v6anchor måler om et relevansanker («spørsmål + modellens tanke») endrer
+// hvilke kildeutdrag som overlever rangeringen.
+//
+// RESULTAT (docs/MOTOR-V6-PROBER.md, kjøring 8): 1 av 32 topputdrag byttet.
+// Mekanismen ble derfor FJERNET fra motoren. Verktøyet står igjen som
+// målemetoden — enhver senere idé om å endre rangeringsvektoren skal måles
+// her før den bygges.
 //
 // Uten denne målingen vet vi bare at strengen settes sammen riktig — ikke
 // at den gjør noen forskjell. Den kjører ekte søk og ekte embeddings, og
@@ -25,7 +30,6 @@ import (
 	"time"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/config"
-	"github.com/jacobgjorva/backend-nordavind/internal/motor"
 	"github.com/jacobgjorva/backend-nordavind/internal/search"
 )
 
@@ -91,11 +95,11 @@ func main() {
 			continue
 		}
 
-		base, err := embed([]string{motor.Relevance(c.Question, "")})
+		base, err := embed([]string{c.Question})
 		if err != nil {
 			continue
 		}
-		withThought, err := embed([]string{motor.Relevance(c.Question, c.Thought)})
+		withThought, err := embed([]string{c.Question + "\n" + c.Thought})
 		if err != nil {
 			continue
 		}

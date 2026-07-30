@@ -269,3 +269,60 @@ Tanken er verdifull når den kommer — turer med tanke bruker halvparten så
 mange søk — men den kan ikke ANTAS. Narrasjonen og relevansankeret må
 derfor være fullstendig valgfrie: uten tanke faller begge tilbake til
 dagens oppførsel uten tap.
+
+## Kjøring 8 — del 4: tankekanalen, og ankeret som ble forkastet
+
+Tanken skulle brukes to steder: som arbeidsnarrasjon til brukeren, og som
+siktepunkt for kilderangeringen («spørsmål + tanke» i stedet for spørsmålet
+alene). Begge ble målt.
+
+**Frekvens.** Over 15 verktøyturer kom tanken i 8 (53 %). Den svinger
+mellom kjøringer (2/7, 3/4, 6/9) og kan aldri antas. Begge bruksmåtene ble
+derfor bygget rent additive.
+
+**Narrasjonen: BEHOLDT.** Tankene er korte, norske og informative, og de
+sier noe brukeren ikke ser noe annet sted — hva assistenten forsto
+spørsmålet som. Ordrett fra kjøringene:
+
+```
+«Du trenger å vite om ScaleAQ er en direkte konkurrent innenfor fôrflåter
+ til oppdrettsanlegg, ikke bare generelt i oppdrettsbransjen.»
+«Du trenger sammenlignbare aktører som er omtrent på samme størrelse som
+ dere, altså med omsetning rundt 40 millioner kroner …»
+```
+
+Formateringen er mekanisk: normaliser mellomrom, maks to setninger og 220
+tegn, klipp på setnings- eller ordgrense. Én vakt slipper aldri gjennom et
+ekko av VÅRE egne instrukser — den sammenligner mot kjente interne strenger
+(«METODE:», «SVARKONTRAKT»), ikke mot formuleringer, og testen krever at
+hver metodetekst i katalogen fanges av den.
+
+**Ankeret: FORKASTET.** Målt med `cmd/v6anchor`, som rangerer de SAMME
+sidene to ganger med ekte embeddings — én gang mot spørsmålet, én gang mot
+spørsmål + tanke:
+
+```
+a2   utdrag=13  uendret=8/8  byttet=0   snitt-cos 0,572 → 0,574
+p1   utdrag=35  uendret=8/8  byttet=0   snitt-cos 0,598 → 0,653
+r4   utdrag=30  uendret=7/8  byttet=1   snitt-cos 0,529 → 0,535
+a1   utdrag=9   uendret=8/8  byttet=0   snitt-cos 0,389 → 0,433
+
+Totalt byttet 1 av 32 topputdrag (3 %)
+```
+
+Snitt-cosinus stiger konsekvent, men `rankExcerpts` sorterer bare på
+rekkefølge og har ingen terskel — en jevn løftning av alle score velger
+nøyaktig samme utdrag. Årsaken er at tanken i praksis omformulerer
+spørsmålet i stedet for å navngi et nytt segment, så vektoren flytter seg
+lite.
+
+Mekanismen er derfor fjernet fra motoren, ikke merket «ubevist og beholdt».
+Ubevist maskineri som blir stående er nøyaktig slik v5 vokste seg umulig å
+endre. `cmd/v6anchor` står igjen som MÅLEMETODEN: enhver senere idé om å
+endre rangeringsvektoren skal måles her før den bygges.
+
+Konsekvens for designet: del 5.2 i MOTOR-V6.md lovet ankeret som «den
+generelle mekanismen som erstatter scope-parameteren og profil-regexen».
+Det løftet er ikke innfridd, og påstanden er strøket. Tanken har fortsatt
+en målt verdi — turer med tanke brukte halvparten så mange søk — men den
+verdien kommer av at modellen tenker, ikke av at vi gjenbruker teksten.

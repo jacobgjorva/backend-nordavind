@@ -81,27 +81,3 @@ func TestShowTableIsActionNotEvidence(t *testing.T) {
 		t.Errorf("andre visning skal peke videre, fikk %q", second.Text)
 	}
 }
-
-// Relevansankeret: spørsmål + siste tanke. Dette er hele grepet som gjør at
-// utdragene rangeres mot det turen LETER etter, ikke mot ordlyden i
-// spørsmålet.
-func TestRelevanceAnchorCombinesQuestionAndThought(t *testing.T) {
-	turn := &motor.Turn{Question: "hvem konkurrerer vi med?"}
-	if got := motorRelevance(turn); got != "hvem konkurrerer vi med?" {
-		t.Errorf("uten tanke er ankeret spørsmålet, fikk %q", got)
-	}
-
-	turn.Thoughts = []string{"først noe annet", "nisjeimportører mot horeca"}
-	got := motorRelevance(turn)
-	if !strings.Contains(got, "hvem konkurrerer vi med?") || !strings.Contains(got, "nisjeimportører mot horeca") {
-		t.Errorf("ankeret skal bære begge deler, fikk %q", got)
-	}
-	if strings.Contains(got, "først noe annet") {
-		t.Error("kun SISTE tanke er ankeret — eldre tanker er utdatert hensikt")
-	}
-
-	// Tomt spørsmål (agent-/rutinekjøring) skal ikke gi en ledende linjeskift.
-	if got := motorRelevance(&motor.Turn{Thoughts: []string{"bare tanke"}}); got != "bare tanke" {
-		t.Errorf("uten spørsmål er ankeret tanken alene, fikk %q", got)
-	}
-}

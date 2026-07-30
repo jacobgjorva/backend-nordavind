@@ -102,21 +102,6 @@ func TestThoughtStepIgnoresNoise(t *testing.T) {
 	}
 }
 
-// Ankeret er additivt: uten tanke skal det være spørsmålet alene, altså
-// nøyaktig dagens rangering.
-func TestRelevanceFallsBackToQuestionAlone(t *testing.T) {
-	if got := Relevance("hvem konkurrerer vi med?", ""); got != "hvem konkurrerer vi med?" {
-		t.Errorf("uten tanke skal ankeret være uendret, fikk %q", got)
-	}
-	if got := Relevance("", "  "); got != "" {
-		t.Errorf("uten noe skal ankeret være tomt, fikk %q", got)
-	}
-	got := Relevance("hvem konkurrerer vi med?", realThoughtR4)
-	if !strings.Contains(got, "hvem konkurrerer vi med?") || !strings.Contains(got, "ScaleAQ") {
-		t.Errorf("ankeret skal bære begge deler: %q", got)
-	}
-}
-
 // Løkka skal sende tanken som arbeidssteg, og ikke sende noe når tanken
 // uteblir. Kontrollflyten er uendret i begge tilfeller.
 func TestLoopEmitsThoughtAsStep(t *testing.T) {

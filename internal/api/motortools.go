@@ -65,9 +65,10 @@ func (t *motorTools) Run(ctx context.Context, c motor.ToolCall, budget motor.Bud
 
 	switch c.Name {
 	case "web_search":
-		// Relevansankeret er spørsmålet PLUSS det modellen sist sa den
-		// lette etter. Det er del 4s mekanisme; her sendes den bare med.
-		text, srcs := t.s.runWebSearchFor(ctx, args.Query, motorRelevance(turn))
+		// Relevansvektoren er brukerens spørsmål, som i dag. Å legge til
+		// modellens tanke ble målt og forkastet: det endret 1 av 32
+		// topputdrag (docs/MOTOR-V6-PROBER.md, kjøring 8).
+		text, srcs := t.s.runWebSearchFor(ctx, args.Query, turn.Question)
 		t.narr.afterHits(c.Name, len(srcs))
 		out := motor.ToolResult{Text: text, Kind: kind, Evidence: true}
 		for _, r := range srcs {
@@ -134,10 +135,4 @@ func (t *motorTools) runDB(ctx context.Context, c motor.ToolCall, connID, sql st
 	}
 	t.narr.afterDB(att, att.text)
 	return motor.ToolResult{Text: text, Kind: kind, Evidence: true}
-}
-
-// motorRelevance er vektoren kildeutdragene rangeres mot. Selve regelen
-// bor i motor-pakken (thought.go), så api-laget ikke kan drifte fra den.
-func motorRelevance(turn *motor.Turn) string {
-	return motor.Relevance(turn.Question, turn.LastThought())
 }

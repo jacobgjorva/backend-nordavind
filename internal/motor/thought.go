@@ -11,11 +11,17 @@ import "strings"
 // kastet den: assistentmeldingen ble skrevet tilbake med content: "".
 // v6 bruker den to steder uten et eneste ekstra kall.
 //
-// HVORFOR DEN ALDRI KAN ANTAS. Målt over flere kjøringer kommer tanken i
-// 2 av 7 til 6 av 9 turer — verdifull når den er der (turer med tanke
-// bruker halvparten så mange søk), men aldri garantert. Begge bruksmåtene
-// er derfor rent additive: uten tanke faller narrasjonen tilbake på
-// verktøystegene og ankeret på spørsmålet alene, nøyaktig som i dag.
+// HVORFOR DEN ALDRI KAN ANTAS. Målt over 15 verktøyturer kommer tanken i
+// 8 av dem (53 %) — verdifull når den er der, men aldri garantert. Uten
+// tanke er motoren stille og turen går nøyaktig som før.
+//
+// DET DEN IKKE BLE. Designet ville også bruke tanken som siktepunkt for
+// kilderangeringen — «spørsmål + tanke» i stedet for spørsmålet alene.
+// Målt på fire ekte caser (cmd/v6anchor) endret det 1 av 32 topputdrag.
+// Snitt-cosinus steg konsekvent, men rangeringen sorterer bare på
+// rekkefølge og har ingen terskel, så en jevn løftning av alle score
+// velger nøyaktig samme utdrag. Mekanismen er derfor FJERNET i stedet for
+// å stå som ubevist maskineri — det var slik v5 vokste seg umulig.
 
 // KindThink er steg-typen for tanken. Frontend faller tilbake til
 // standardikonet for ukjente typer, så den er trygg å innføre alene.
@@ -95,23 +101,4 @@ func firstSentences(s string, n, maxRunes int) string {
 		head = head[:sp]
 	}
 	return strings.TrimSpace(head) + " …"
-}
-
-// Relevance er siktepunktet kildeutdragene rangeres mot: brukerens
-// spørsmål pluss det modellen SIST sa den lette etter.
-//
-// Dette er den generelle mekanismen som erstatter både profil-regexen og
-// scope-parameteren tidligere runder foreslo: ingen trigger, ingen
-// skjemafelt, bare gjenbruk av en tanke vi allerede har betalt for.
-// Eldre tanker er utdatert hensikt og brukes aldri.
-func Relevance(question, thought string) string {
-	q := strings.TrimSpace(question)
-	th := strings.TrimSpace(thought)
-	switch {
-	case th == "":
-		return q
-	case q == "":
-		return th
-	}
-	return q + "\n" + th
 }

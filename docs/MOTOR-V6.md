@@ -169,13 +169,13 @@ v6 gjenbruker den to steder, gratis:
    nisjeimportør mot horeca — leter etter tilsvarende, ikke volumhusene»).
    Brukeren ser ekte tenkning live i stedet for skriptede fraser. Filtrert
    av eksisterende junk-/ekko-vakter, merket som steg, aldri som svar.
-2. **Relevansanker.** Utdragsrangeringen bruker i dag brukerens siste
-   melding som vektor. v6 bruker spørsmål + modellens egen uttalte hensikt
-   fra samme runde. Dermed rangeres kildeutdrag mot det turen FAKTISK leter
-   etter — subjektets segment, ikke spørsmålets ordlyd. Dette er den
-   generelle mekanismen som erstatter både scope-parameteren (syklus 3) og
-   profil-regexen: ingen skjemafelt, ingen trigger, bare gjenbruk av tanke
-   som allerede er betalt.
+2. ~~**Relevansanker.**~~ FORKASTET etter måling (probelogg kjøring 8):
+   å rangere utdragene mot spørsmål + tanke i stedet for spørsmålet alene
+   endret 1 av 32 topputdrag. Cosinus steg, men rangeringen sorterer kun
+   på rekkefølge, så en jevn løftning velger samme utdrag. Mekanismen er
+   fjernet i stedet for beholdt som ubevist. Tanken har fortsatt målt
+   verdi — turer med tanke brukte halvparten så mange søk — men verdien
+   kommer av at modellen TENKER, ikke av at vi gjenbruker teksten.
 
 Målt risiko som må avkreftes i probe P1: at prosa-før-kall glir over i
 planlegging-uten-handling. Mottiltak er utfør-regelen som allerede fjernet
