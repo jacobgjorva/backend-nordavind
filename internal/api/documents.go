@@ -113,6 +113,9 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 		Title    string `json:"title"`
 		Text     string `json:"text"`
 		ChatID   string `json:"chat_id"`
+		// Scope (KUNNSKAP-V2 del 3): "" = arv (opplasterens enhet, ellers
+		// tenant), "tenant" = hele firmaet (bevisst valg), "unit", "private".
+		Scope string `json:"scope"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "ugyldig request")
@@ -151,8 +154,13 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 		notes = append(notes, store.KnowledgeNote{Text: p, Context: summary, Embedding: vec})
 	}
 
+	docScope := ""
+	if s.cfg.KnowledgeMode == "v2" {
+		docScope = s.resolveDocScope(user.TenantID, user.ID, req.Scope)
+	}
 	docID, err := s.store.CreateDocumentNotes(user.TenantID, store.DocumentInput{
 		Filename: req.Filename, RawText: text, Title: title, Summary: summary,
+		Scope: docScope,
 	}, notes)
 	if err != nil {
 		s.log.Error("kunne ikke lagre dokument", "err", err)
@@ -160,9 +168,13 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("dokument lagret", "tittel", title, "lapper", len(notes))
-	// G4: destiller dokumentet til strukturerte grafnoder i bakgrunnen —
-	// prosedyrer/regler/termer med kant til dok-noden, pending til godkjenning.
-	go s.runDocExtraction(user.TenantID, user.ID, docID, title, summary, text)
+	// G4: destiller dokumentet i bakgrunnen. v2: prosedyrer som hentbare
+	// lapper med scope-arv, liten modell. v1-veien består til del 5.
+	if s.cfg.KnowledgeMode == "v2" {
+		go s.runDocIngestV2(user.TenantID, user.ID, docID, title, docScope, text)
+	} else {
+		go s.runDocExtraction(user.TenantID, user.ID, docID, title, summary, text)
+	}
 	writeJSON(w, map[string]any{"id": docID, "title": title, "summary": summary, "chunks": len(notes)})
 }
 

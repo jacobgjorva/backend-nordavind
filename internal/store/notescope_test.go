@@ -89,3 +89,47 @@ func TestScopedRetrievalNeverLeaksAcrossUnits(t *testing.T) {
 		t.Errorf("eieren ser ikke sitt private notat: %+v", gotOla)
 	}
 }
+
+// Del 3: dokument-scope arves av alle lappene, og prosedyre-lappen er
+// synlig via både porten (direkte) og kanten (nabo) — men aldri utenfor
+// sitt scope.
+func TestDocumentScopeInheritanceAndProcedureNeighbors(t *testing.T) {
+	s := scopeStore(t)
+	vec := make([]float32, 8)
+	vec[0] = 1
+
+	docID, err := s.CreateDocumentNotes("t1", DocumentInput{
+		Filename: "rutine.pdf", Title: "Kredittrutinen", Scope: UnitScope("unit-a"),
+	}, []KnowledgeNote{{Text: "kreditnota krever årsakskode", Embedding: vec}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	procID, err := s.AddProcedureNote("t1", docID, "Kreditering",
+		"Prosedyre: Kreditering\n  1. Finn faktura\n  2. Opprett kreditnota", UnitScope("unit-a"), vec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddEdge("t1", KnowledgeEdge{FromID: procID, ToID: docID, Relation: "definert i"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Innenfor enheten: dok-bit synlig, og prosedyren nås som kant-nabo.
+	inA, err := s.ScopedVectorCandidates("t1", Scope{UnitID: "unit-a"}, "u1", vec, 10)
+	if err != nil || len(inA) != 2 {
+		t.Fatalf("enhet A skulle sett dok-bit + prosedyre: %d, err=%v", len(inA), err)
+	}
+	nbs, err := s.ScopedNeighbors("t1", Scope{UnitID: "unit-a"}, "u1", []string{docID}, 5)
+	if err != nil || len(nbs) == 0 {
+		t.Fatalf("kant-naboen (prosedyren) mangler: %v", err)
+	}
+
+	// Utenfor enheten: ingenting av det, heller ikke via kanten.
+	outB, _ := s.ScopedVectorCandidates("t1", Scope{UnitID: "unit-b"}, "u2", vec, 10)
+	if len(outB) != 0 {
+		t.Fatalf("enhet B ser enhet A sitt dokument: %+v", outB)
+	}
+	nbsB, _ := s.ScopedNeighbors("t1", Scope{UnitID: "unit-b"}, "u2", []string{docID}, 5)
+	if len(nbsB) != 0 {
+		t.Fatalf("kantutvidelsen lekker over enhetsgrensen: %+v", nbsB)
+	}
+}

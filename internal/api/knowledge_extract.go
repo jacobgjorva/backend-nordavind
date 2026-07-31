@@ -12,7 +12,7 @@ import (
 )
 
 // extractModel er en billig modell for bakgrunns-uttrekk av bransjekunnskap.
-const extractModel = "mistral-small-3.2-24b-instruct-2506"
+const extractModel = "mistral-small-2603"
 
 const extractSystem = "Trekk ut BEDRIFTS-INTERN operasjonell innsikt brukeren har lært AI-en i " +
 	"samtalen: interne rutiner, egne fagtermer, hvem-gjør-hva, faste regler/terskler spesifikke for " +

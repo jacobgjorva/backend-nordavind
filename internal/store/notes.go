@@ -15,11 +15,12 @@ import (
 // dem likt — forskjellen er bare hvordan de kom inn.
 type KnowledgeNote struct {
 	ID         string    `json:"id"`
-	SourceType string    `json:"source_type"` // fact | document
+	SourceType string    `json:"source_type"` // fact | document | procedure
 	SourceID   string    `json:"source_id,omitempty"`
 	Title      string    `json:"title,omitempty"`   // kort etikett / dokumenttittel
 	Text       string    `json:"text"`              // selve lappen (proposisjon / bit)
 	Context    string    `json:"context,omitempty"` // kontekst-blurb for dokument-lapper
+	Scope      string    `json:"scope,omitempty"`   // '' tenant | unit:<id> | user:<id> (notescope.go)
 	Status     string    `json:"status"`            // pending | accepted | rejected
 	ChatID     string    `json:"chat_id,omitempty"`
 	UserID     string    `json:"user_id,omitempty"`
@@ -304,20 +305,20 @@ func insertNote(tx *Tx, tenantID string, note KnowledgeNote) error {
 		}
 		_, err := tx.Exec(
 			`INSERT INTO knowledge_notes
-				(id, tenant_id, source_type, source_id, title, text, context, status, chat_id, user_id, embedding, fts, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::vector, to_tsvector('norwegian', ? || ' ' || ?), ?)`,
+				(id, tenant_id, source_type, source_id, title, text, context, status, chat_id, user_id, scope, embedding, fts, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::vector, to_tsvector('norwegian', ? || ' ' || ?), ?)`,
 			note.ID, tenantID, note.SourceType, note.SourceID, note.Title, note.Text, note.Context,
-			note.Status, note.ChatID, note.UserID, emb, note.Text, note.Context, note.CreatedAt,
+			note.Status, note.ChatID, note.UserID, note.Scope, emb, note.Text, note.Context, note.CreatedAt,
 		)
 		return err
 	}
 	emb, _ := json.Marshal(note.Embedding)
 	if _, err := tx.Exec(
 		`INSERT INTO knowledge_notes
-			(id, tenant_id, source_type, source_id, title, text, context, status, chat_id, user_id, embedding, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			(id, tenant_id, source_type, source_id, title, text, context, status, chat_id, user_id, scope, embedding, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		note.ID, tenantID, note.SourceType, note.SourceID, note.Title, note.Text, note.Context,
-		note.Status, note.ChatID, note.UserID, string(emb), note.CreatedAt,
+		note.Status, note.ChatID, note.UserID, note.Scope, string(emb), note.CreatedAt,
 	); err != nil {
 		return err
 	}
@@ -335,6 +336,9 @@ type DocumentInput struct {
 	RawText  string
 	Title    string
 	Summary  string
+	// Scope arves av alle lappene dokumentet gir (KUNNSKAP-V2 del 3):
+	// default opplasterens enhet, kan heves til tenant ('') ved opplasting.
+	Scope string
 }
 
 // CreateDocumentNotes lagrer et dokument som lapper i den felles skuffen, i én
@@ -393,9 +397,14 @@ func (s *Store) CreateDocumentNotes(tenantID string, doc DocumentInput, notes []
 			return "", err
 		}
 		n.ID = id
-		n.SourceType = "document"
+		if n.SourceType == "" {
+			n.SourceType = "document"
+		}
 		n.SourceID = docID
-		n.Title = doc.Title
+		if n.Title == "" {
+			n.Title = doc.Title
+		}
+		n.Scope = doc.Scope
 		n.Status = "accepted"
 		n.CreatedAt = time.Now()
 		if err := insertNote(tx, tenantID, n); err != nil {
@@ -544,4 +553,28 @@ func (s *Store) RecordNoteHits(ids []string) {
 		args = append(args, id)
 	}
 	s.db.Exec(`UPDATE knowledge_notes SET hits = hits + 1, last_hit_at = ? WHERE id IN (`+ph+`)`, args...)
+}
+
+// AddProcedureNote lagrer en uttrukket prosedyre som hentbar lapp
+// (KUNNSKAP-V2 del 3): source_type=procedure, dokumentets scope, kobles til
+// dok-noden med kant av kalleren.
+func (s *Store) AddProcedureNote(tenantID, docID, name, body, scope string, embedding []float32) (string, error) {
+	id, err := newID()
+	if err != nil {
+		return "", err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	note := KnowledgeNote{
+		ID: id, SourceType: "procedure", SourceID: docID, Title: name,
+		Text: body, Scope: scope, Status: "accepted", CreatedAt: time.Now(),
+		Embedding: embedding,
+	}
+	if err := insertNote(tx, tenantID, note); err != nil {
+		return "", err
+	}
+	return id, tx.Commit()
 }

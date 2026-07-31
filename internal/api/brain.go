@@ -24,7 +24,7 @@ import (
 // modellvalget avgjør hva hjernen koster i drift. Den lille klarer jobben
 // fordi vokabularet er lukket og koden kaster alt som ikke holder mål —
 // modellen skal gjenkjenne, ikke resonnere.
-const brainModel = "mistral-small-3.2-24b-instruct-2506"
+const brainModel = "mistral-small-2603"
 
 // ExtractToBrain leser en tekst og lagrer det som holder mål. Returnerer
 // antall påstander og prosedyrer som ble lagret.

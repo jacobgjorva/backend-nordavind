@@ -57,3 +57,32 @@ driver med. Tas hvis flere caser i klassen dukker opp.
 
 Lekkasjetesten (to enheter, begge henteveier, privat-scope) er grønn og er
 fra nå en del av porten.
+
+## Kjøring 3 (del 3): modellprobe for prosedyre-uttrekk, 2026-07-31
+
+Falsifikasjonskriterier satt FØR kjøring: kandidaten består hvis (a) alle
+agn-dokumentets steg fanges i riktig rekkefølge uten diktede steg, og (b)
+et rent faktadokument (kontroll) gir null prosedyrer.
+
+```
+                         agn (8 steg)        kontroll (fakta)     tid
+mistral-small-2603       ✓ alle, ingen dikt  ✓ {"procedures":[]}  0,3-1,8s
+mistral-large-2512       ✓ alle, ingen dikt  ✗ DIKTET 3-4 steg    2-4s
+```
+
+Large diktet en bookingprosedyre av faktadokumentet i BEGGE
+instruks-variantene («ansatt kontakter resepsjonen for å melde interesse»
+står ingen steder). Small 4 består begge. VALG: mistral-small-2603 —
+målt bedre, 5x raskere, billigere. Instruksen ble strammet én gang
+underveis («hvert steg må stå i dokumentet», tom-liste-eksempel) og er
+versjonen som gjelder.
+
+BIFANGST: modell-ID-en mistral-small-3.2-24b-instruct-2506 er UTE av
+katalogen — v1s brainModel og extractModel pekte på den, så hjerne-uttrekk
+og minnekort-destillering har feilet stille i prod. Begge er flyttet til
+mistral-small-2603 (katalog-verifisert).
+
+Del 3 for øvrig: dokument-scope arves av alle lapper (default opplasterens
+enhet; «hele firmaet» er et bevisst valg), prosedyrer lagres som hentbare
+lapper med kant til dok-noden, og lekkasjetesten dekker nå også
+kantutvidelsen over enhetsgrenser.
