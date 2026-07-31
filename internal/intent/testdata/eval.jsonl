@@ -153,3 +153,6 @@
 {"text": "hva er den smarteste måten å strukturere kundedataene våre på?", "want": "advisory"}
 {"text": "vurder ideen min: abonnement på verktøyutleie for borettslag", "want": "advisory"}
 {"text": "burde vi flytte lageret nærmere kundene?", "want": "advisory"}
+{"text": "jeg heter Jacob", "want": "smalltalk"}
+{"text": "mitt navn er Henrik Berg", "want": "smalltalk"}
+{"text": "hei, jeg er ny her og jobber på lageret", "want": "smalltalk"}

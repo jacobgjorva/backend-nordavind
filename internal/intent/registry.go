@@ -402,13 +402,19 @@ var Registry = []Intent{
 	},
 	{
 		Key:         "smalltalk",
-		Description: "Hilsener, takk, småprat eller spørsmål om hva assistenten kan gjøre",
+		Description: "Hilsener, takk, presentasjoner av seg selv, småprat eller spørsmål om hva assistenten kan gjøre",
 		Examples: []string{
 			"takk for hjelpen!",
 			"hei, hva kan du gjøre?",
 			"god morgen",
 			"hvem er du?",
 			"det var alt for nå",
+			// Presentasjoner: uten disse hadde «jeg heter …» ingen anker i
+			// registeret og endte hos dommeren — som feilklassifiserte i prod
+			// (recommendation, med full verktøytur som følge).
+			"jeg heter Nora",
+			"mitt navn er Amund, jeg er økonomiansvarlig",
+			"jeg er den nye regnskapsføreren her",
 		},
 	},
 }
