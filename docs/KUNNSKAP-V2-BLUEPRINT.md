@@ -39,6 +39,27 @@ delt/privat-valg i kortet. Ingen egen governance-admin: org-strukturen FRA
 onboardingen definerer enhetene og rollene, så tilgangsstyringen finnes i
 det øyeblikket organisasjonen er registrert.
 
+## Designrevisjon 2 (Jacobs audit-bestilling, godkjent 2026-07-31)
+
+- CLAIMS-LAGET PARKERES: det lukkede predikat-vokabularet, traverseringen og
+  supersede-maskineriet ble bygget for å validere passiv chat-gjetting — som
+  er ute. v2-kildene er strukturerte i utgangspunktet (org = tabeller,
+  prosedyrer = noder, minnekort = notater), og kobling på tvers («Kari er
+  økonomiansvarlig» + «rabatter over 10 % godkjennes av økonomiansvarlig»)
+  gjøres av MODELLEN når relevans-porten henter begge bitene. Mønster-fasen
+  kan gjenopplive strukturen hvis målinger krever det — proveniensen består.
+- SCOPE-FILTERET BOR ETT STED: én spørringsbygger eier synlighet; en
+  to-enheters lekkasjetest kjører over ALLE henteveier. Aldri filter per
+  kallsted.
+- VERDI FRA FØRSTE DOKUMENT: alt virker med null org-data (tenant-scope er
+  default). Org-registrering beriker svar og aktiverer enhet/rolle-scope —
+  den er aldri en forutsetning.
+- PGVECTOR FRA DAG ÉN: prod kjører Postgres 16 + pgvector; hentingen bruker
+  vektorindeks, aldri Go-cosine over alle rader.
+- ÆRLIG GRENSE: kunnskaps-scope styrer kunnskapslaget. Databaseverktøyene
+  (data_question m.fl.) har egen tilgangsstyring — det sies eksplisitt i
+  dokumentasjonen, ikke antydes.
+
 ## Henting: relevans-port, aldri dump (uendret fra forrige design)
 
 Context(ctx, tenant, bruker, spørsmål, historikk, flyt) → Block — eneste søm
@@ -66,7 +87,8 @@ obligatorisk rød-terskel, og kjøres i deploy-flyten. Negative caser
     2. Pakken                  internal/knowledge: Context()-sømmen med
                                relevans-port og scope-filter
     3. Dokument-inngest v2     opplasting med scope-arv, proposisjonering,
-                               prosedyre/skill-uttrekk på liten modell (probet)
+                               prosedyre/skill-uttrekk på liten modell (probet);
+                               dok-erstatning superseder også prosedyre-nodene
     4. Onboarding + admin      org-registrering og graf-editor mot v2
     5. Utfasing av v1          passiv fangst, pending-maskineri, døde tabeller
                                og gamle henteveier slettes; minnekortet kobles
