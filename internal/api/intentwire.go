@@ -148,6 +148,17 @@ func (s *Server) shadowIntent(user store.User, message string) {
 	}()
 }
 
+// demoteExplicitOnly senker et tekst-utløst treff på en ExplicitOnly-flyt til
+// fri chat. Ren funksjon så demoteringen kan testfestes — lærdommen fra
+// metodeteksten som aldri nådde modellen er at wiring uten test er wiring
+// som ryker stille.
+func demoteExplicitOnly(key string, flow intent.Flow) (string, intent.Flow, bool) {
+	if !flow.ExplicitOnly {
+		return key, flow, false
+	}
+	return intent.FreeChatKey, intent.Flows[intent.FreeChatKey], true
+}
+
 // Interne payload-nøkler for flyt-kontrakten (settes av applyIntent, leses i
 // runAgentLoop, og strippes før payloaden går upstream).
 const (
@@ -272,6 +283,13 @@ func (s *Server) applyIntent(ctx context.Context, user store.User, full map[stri
 	if strings.Contains(msg, "@") && (flow.Deterministic || key == "web_fact" || key == "smalltalk") {
 		key, flow = intent.FreeChatKey, intent.Flows[intent.FreeChatKey]
 		s.log.Info("intent: nevning gjør spørsmålet internt", "fra", d.Key)
+	}
+	// ExplicitOnly-flyter (paneler og oppsett) utløses aldri av chatteksten —
+	// kun av klientens egne kommandoveier (slash, fildropp), som ikke går
+	// gjennom motoren. Chatteksten demoteres til fri chat.
+	if k2, f2, demoted := demoteExplicitOnly(key, flow); demoted {
+		s.log.Info("intent: eksplisitt-flyt demotert til fri chat", "fra", key)
+		key, flow = k2, f2
 	}
 	s.log.Info("intent", "key", key, "method", d.Method, "ms", d.Elapsed.Milliseconds())
 

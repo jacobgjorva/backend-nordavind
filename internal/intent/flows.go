@@ -32,6 +32,13 @@ type Flow struct {
 	// Sticky: flyten forblir aktiv for påfølgende meldinger til den avsluttes
 	// eksplisitt (som widget-redigering i dag).
 	Sticky bool
+
+	// ExplicitOnly: flyten kan KUN utløses av en eksplisitt handling i
+	// klienten (slash-kommando, fildropp) — aldri av chatteksten. Rutingen
+	// demoterer slike treff til fri chat (Jacobs beslutning 2026-07-31:
+	// «tokens» i en melding skal aldri åpne forbrukspanelet). Slash-veien
+	// påvirkes ikke — den lever i frontend og går aldri gjennom motoren.
+	ExplicitOnly bool
 }
 
 // Verktøynavn — én kilde til sannhet for flyt-tabellen. Skal matche navnene i
@@ -80,16 +87,19 @@ var Flows = map[string]Flow{
 	"connect_database": {
 		// Deterministisk oppskrift-steg: koden spawner credential-skjemaet
 		// direkte (se credentialBlock) — modellen ber aldri om passord.
+		ExplicitOnly:  true,
 		Deterministic: true,
 		Fallback:      FreeChatKey,
 	},
 	"connect_m365": {
 		// Deterministisk oppskrift-steg: koden velger riktig steg (koblet/
 		// innlogging/app-registrering) — se m365SetupBlock.
+		ExplicitOnly:  true,
 		Deterministic: true,
 		Fallback:      FreeChatKey,
 	},
 	"manage_connections": {
+		ExplicitOnly:  true,
 		Deterministic: true, // rendrer /tilkoblinger-panelet
 		Fallback:      FreeChatKey,
 	},
@@ -115,6 +125,7 @@ var Flows = map[string]Flow{
 		// med hvordan man åpner det (deckHint i intentwire.go). Selve
 		// byggingen skjer med compose/patch, som slås på av et åpent lerret —
 		// aldri av en vanlig melding.
+		ExplicitOnly:  true,
 		Deterministic: true,
 		Fallback:      FreeChatKey,
 	},
@@ -161,19 +172,15 @@ var Flows = map[string]Flow{
 		Sticky:   true, // oppfølgingsspørsmål («sikker?») skal beholde db-verktøyene
 	},
 
-	"usage_stats":      {Deterministic: true, Fallback: FreeChatKey}, // /forbruk-panelet
-	"manage_users":     {Deterministic: true, Fallback: FreeChatKey}, // /tilganger-panelet
-	"impersonate_user": {Deterministic: true, Fallback: FreeChatKey}, // pillen i composeren
-	"knowledge_admin":  {Deterministic: true, Fallback: FreeChatKey}, // /kunnskap-panelet
-	"employees_admin":  {Deterministic: true, Fallback: FreeChatKey}, // /ansatte-panelet
+	"usage_stats":      {Deterministic: true, ExplicitOnly: true, Fallback: FreeChatKey}, // /forbruk-panelet
+	"manage_users":     {Deterministic: true, ExplicitOnly: true, Fallback: FreeChatKey}, // /tilganger-panelet
+	"impersonate_user": {Deterministic: true, ExplicitOnly: true, Fallback: FreeChatKey}, // pillen i composeren
+	"knowledge_admin":  {Deterministic: true, ExplicitOnly: true, Fallback: FreeChatKey}, // /kunnskap-panelet
+	"employees_admin":  {Deterministic: true, ExplicitOnly: true, Fallback: FreeChatKey}, // /ansatte-panelet
 
 	"upload_document": {
 		// Klassifisering + lagring har allerede deterministisk løype i chatten.
-		Deterministic: true,
-		Fallback:      FreeChatKey,
-	},
-	"contract_review": {
-		// Kontraktanalysen er en egen deterministisk løype (detect → analyze).
+		ExplicitOnly:  true,
 		Deterministic: true,
 		Fallback:      FreeChatKey,
 	},

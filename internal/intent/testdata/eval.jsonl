@@ -26,8 +26,8 @@
 {"text": "godkjenn kunnskapsforslagene", "want": "knowledge_admin"}
 {"text": "lagre dette dokumentet som bedriftskunnskap", "want": "upload_document"}
 {"text": "husk innholdet i denne PDF-en", "want": "upload_document"}
-{"text": "gå gjennom denne leieavtalen for meg", "want": "contract_review"}
-{"text": "hva bør jeg passe på i denne kontrakten?", "want": "contract_review"}
+{"text": "gå gjennom denne leieavtalen for meg", "want": ""}
+{"text": "hva bør jeg passe på i denne kontrakten?", "want": ""}
 {"text": "trenger verdi av bitcoin hvert 15 min", "want": "create_routine"}
 {"text": "sjekk lagerstatus hver morgen kl 07", "want": "create_routine"}
 {"text": "kjør rutinen hver halvtime i stedet", "want": "edit_routine"}

@@ -207,17 +207,6 @@ var Registry = []Intent{
 		},
 	},
 	{
-		Key:         "contract_review",
-		Description: "Analysere en kontrakt eller juridisk dokument og markere kritiske klausuler",
-		Examples: []string{
-			"gå gjennom denne leieavtalen for meg",
-			"hva bør jeg passe på i denne kontrakten?",
-			"analyser denne avtalen før jeg signerer",
-			"finn fellene i denne NDA-en",
-			"er det noe farlig i dette dokumentet?",
-		},
-	},
-	{
 		Key:         "create_routine",
 		Description: "Sette opp en gjentakende agent-rutine: kjøre automatisk på fast intervall, overvåke noe løpende eller varsle når en terskel treffes",
 		Examples: []string{
