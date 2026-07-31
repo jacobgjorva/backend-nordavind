@@ -58,6 +58,20 @@ const (
 	MethodSmalltalk MethodKey = "samtale"
 )
 
+// premiseRule appendes til beslutningsklassene (anbefaling, rådgivning):
+// sjekk med et overslag om beslutningen bak bestillingen i det hele tatt
+// holder, FØR detaljene besvares. Probet i kjøring 17: 5/8 agn fikk korrekt
+// premissjekk mot baselines 0/4, kontrollene rene 4/4, og bestillingen ble
+// alltid besvart i tillegg. Etterlevelsen er probabilistisk (~60 %) — det
+// er et initiativ-gulv i adferd, ingen garanti.
+const premiseRule = " Bak mange bestillinger ligger en større beslutning brukeren alt har tatt (kjøp, " +
+	"investering, ansettelse, utbygging) — også når spørsmålet bare gjelder valg av leverandør " +
+	"eller fremgangsmåte. Sjekk FØRST med et grovt overslag i runde tall om den beslutningen " +
+	"holder: står kostnaden i forhold til nytten, og står mengden eller skalaen i forhold til " +
+	"behovet — målt mot det åpenbare alternativet. Taler tallene mot, si det ærlig før du svarer på " +
+	"selve bestillingen, pek på det ene tallet som avgjør saken, og foreslå det som faktisk " +
+	"lønner seg. Holder premisset, eller er saken liten, svar rett frem uten regnestykke."
+
 // Catalog er alle klassene motoren kjenner.
 //
 // MaxChars=0 betyr «bruk flytens egen grense» (intent/flows.go). Kun
@@ -96,7 +110,9 @@ var Catalog = map[MethodKey]Method{
 	},
 
 	MethodAdvice: {
-		Key:    MethodAdvice,
+		Key: MethodAdvice,
+		// premiseRule er delt med rådgivning: begge klassene svarer på
+		// beslutninger, og premissjekken gjelder beslutningen, ikke klassen.
 		Budget: Budget{Searches: 3, Fetches: 4, Rounds: 6, MaxChars: 700},
 		Text: " METODE: Etabler behovet fra samtalen før du leter. Søk etter kategorien og segmentet, " +
 			"aldri «beste X»-fraser — topplister er ikke evidens. Bygg anbefalingen på KILDETEKSTEN om " +
@@ -107,7 +123,8 @@ var Catalog = map[MethodKey]Method{
 			"den på noe kildene sier, si det; ellers merk den som din vurdering. Aldri en meny, aldri " +
 			"diktede terskler. Verifiser til slutt påstanden som ville endret brukerens beslutning hvis den er feil: ett målrettet søk mot aktørens egen side, ikke omtaler — rett eller stryk det som ikke stemmer. Tall kildene ikke oppgir gir du kun som avrundede anslag, merket som anslag — aldri med desimal- eller ørepresisjon. Eksakte tall bare når kilden oppgir dem. " +
 			"Ber brukeren eksplisitt om svar uten research: svar kort, men si at det er " +
-			"fra hukommelsen og uverifisert, og tilby å sjekke — presenter aldri uverifisert som fakta.",
+			"fra hukommelsen og uverifisert, og tilby å sjekke — presenter aldri uverifisert som fakta." +
+			premiseRule,
 	},
 
 	MethodAnalysis: {
@@ -137,7 +154,8 @@ var Catalog = map[MethodKey]Method{
 			"gjenta det forrige. (4) Gi rådet på det du VET — anta det rimelige og si antakelsen. " +
 			"Ville én opplysning endret rådet, avslutt med ETT spørsmål om akkurat den — ETTER rådet, " +
 			"aldri i stedet for det. Kun når spørsmålet er umulig å råde uten (som i helt åpne " +
-			"bestillinger), spør du først.",
+			"bestillinger), spør du først." +
+			premiseRule,
 	},
 	MethodCreative: {
 		Key: MethodCreative,

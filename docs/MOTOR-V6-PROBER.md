@@ -583,3 +583,57 @@ av intern tekst, og den er død.
 Prinsippet inn i fundamentet: PROMPTER SKAL IKKE INNEHOLDE SITERBART
 INNHOLD — instruksjoner, aldri eksempler. Gjelder nå kjernen så vel som
 katalogen.
+
+## Kjøring 17 — premissjekk før detaljsvar (anbefaling + rådgivning)
+
+Utløst av hardware-casen i prod: «hvilken server for Large 3 til 100
+ansatte» fikk et teknisk korrekt svar som aldri regnet på om KJØPET i det
+hele tatt lønner seg mot API-et. Hypotesen: modellen aksepterer beslutningen
+bak bestillingen som kompetent tatt; premissjekk-med-overslag er en egen
+adferd ingen metode ber om.
+
+Agn: seks utviklingscaser (pm1-pm6, fire agn der overslaget taler mot
+premisset + to kontroller med sunt premiss), deretter seks USETTE
+holdout-caser (h1-h6, samme fordeling). Falsifikasjon satt før hver kjøring.
+
+```
+                          agn truffet   kontroller rene
+Baseline (uten regel)        0/4             2/2
+B1 «gjelder spørsmålet
+    en stor beslutning»      1/4             2/2
+B2 «bak bestillingen
+    ligger beslutningen»     2/4             2/2
+B3 = B2 + mengde/skala       2/4             2/2
+Holdout (B3, usett)          3/4             2/2
+Samlet B3-ordlyd             5/8             4/4
+Katalogposisjon, alle 12     4/8             4/4
+```
+
+To delkriterier RØK underveis, og loggføres:
+
+- Utviklingssettets krav ≥3/4 ble aldri nådd der (2/4). Holdouten nådde
+  det (3/4).
+- Aksehypotesen «pris-premisser treffes, mengde-premisser aldri» (fra
+  B2/B3: pm2/pm3 0 av 6) ble MOTBEVIST av holdouten: mengde-agnet h2
+  traff («neppe 5 000 kort til 80 kunder — bestill 500-1 000»), pris-agnet
+  h1 (varebilen) bommet.
+
+Riktig lesning er derfor ikke «regelen virker på pris, ikke mengde», men:
+etterlevelsen er PROBABILISTISK, ~60 % på tvers av premisstyper. Skipet
+likevel, fordi adferden er strengt additiv: baseline tar 0 av agnene,
+kontrollene er rene i alle runder (regelen maser aldri når premisset
+holder), og i HVERT treff ble selve bestillingen fortsatt besvart etterpå.
+Samme profil som verifiser-påstanden: regeletterlevelse er probabilistisk,
+og garantier bor i gulvene, ikke i prompten.
+
+I hvert treff var regnestykket riktig regnet (ekstern drift 100-200k mot
+egen ansatt 700-900k; 5-7k per produktbilde mot frilans 500-1500;
+parkeringshus 3,6-6M mot 260k/år gateleie). Modelltaket ligger i OM
+overslaget startes, ikke i regningen.
+
+Integrasjonsdetalj som betyr noe: proben la regelen i BASEN
+(v6loop appender til kjerneprompten), katalogen legger den SIST i
+metodeteksten — posisjon har målt effekt (tenk-regelen), så katalogversjonen
+ble validert separat på alle 12 casene før deploy. Strukturtaket i
+methods_test.go ble hevet 1200 → 1800: proben kjørte metodetekst + regel
+samtidig, så samlet last er målt, og taket vokter fortsatt mot glidning.

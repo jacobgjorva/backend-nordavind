@@ -82,6 +82,8 @@ func main() {
 	advis := flag.Bool("advis", false, "legg på rådgivningsmetoden (probe)")
 	budget := flag.Bool("budget", false, "fortell modellen svarbudsjettet (probe)")
 	nometa := flag.Bool("nometa", false, "kjerne uten siterbart eksempel + intern-instruks (probe)")
+	// premissjekk-regelen ble probet her (kjøring 17) og bor nå i katalogen
+	// (methods.go premiseRule) — et eget flagg ville doblet den.
 	flag.Parse()
 	if *nometa {
 		baseSystemActive = strings.Replace(baseSystem,

@@ -39,7 +39,10 @@ func TestMethodTextsAreBounded(t *testing.T) {
 		if n < 100 {
 			t.Errorf("%s: teksten er %d tegn — for tynn til å styre noe", key, n)
 		}
-		if n > 1200 {
+		// Taket ble hevet fra 1200 da premissjekk-regelen målte inn
+		// (kjøring 17): proben kjørte metodetekst + regel samtidig, så
+		// samlet last på denne størrelsen er validert mot ekte modell.
+		if n > 1800 {
 			t.Errorf("%s: teksten er %d tegn — for tung, konkurrerer med kjernereglene", key, n)
 		}
 		if !strings.HasPrefix(m.Text, " METODE:") {
