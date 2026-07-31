@@ -3,7 +3,13 @@
 Skrevet 2026-07-30 etter Scaleway-utfasingen. Prod kjører FORRIGE binær
 (med leverandør-forgrening) og er trygg; branchen er ett skritt foran.
 
-## 1. Mistral rate-limiter hardt (viktigst)
+## 1. Mistral rate-limiter hardt — NEDGRADERT 2026-07-31
+
+Målt i prod over 24 timer med normal bruk: NULL 429. Kontoen er
+pay-as-you-go, og grensene rammer kun eval-harnessenes bursts (sekvensielle
+kall med 250ms pause). Dommerfeilene i loggen var gårsdagens 422-er (før
+reasoning-fiksen) og to timeouts som fail-safen håndterte. Gjenstår kun:
+pacing i harnessene ved behov. Punktet under står som historikk.
 
 Målt: 35 av 147 intent-evalkall får `429` selv MED backoff (400ms → 1200ms
 → 3s), og selv med 250ms pause mellom hvert kall. Uten backoff var det 93.
