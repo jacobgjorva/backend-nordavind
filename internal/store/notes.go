@@ -420,6 +420,12 @@ func (s *Store) CreateDocumentNotes(tenantID string, doc DocumentInput, notes []
 // SyncFactNote speiler en akseptert fakta-node inn i lappe-skuffen (retrieval-
 // indeksen). Idempotent: erstatter en eksisterende lapp med samme id.
 func (s *Store) SyncFactNote(tenantID, id, title, text string, embedding []float32) error {
+	return s.SyncFactNoteScoped(tenantID, id, title, text, "", embedding)
+}
+
+// SyncFactNoteScoped er SyncFactNote med synlighet (KUNNSKAP-V2 del 4):
+// minnekort og bekreftelser kan lagres for enheten eller privat.
+func (s *Store) SyncFactNoteScoped(tenantID, id, title, text, scope string, embedding []float32) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err

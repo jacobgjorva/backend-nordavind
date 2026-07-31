@@ -69,3 +69,22 @@ func (s *Server) handleDeleteUnit(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// handleOrgMe gir klienten brukerens org-posisjon — grunnlaget for
+// scope-valgene i opplasting og minnekort («Min enhet» vises kun når den
+// finnes).
+func (s *Server) handleOrgMe(w http.ResponseWriter, r *http.Request) {
+	user := r.Context().Value(userKey).(store.User)
+	sc, _ := s.store.ScopeFor(user.TenantID, user.ID)
+	unitName := ""
+	if sc.UnitID != "" {
+		if units, err := s.store.ListUnits(user.TenantID); err == nil {
+			for _, u := range units {
+				if u.ID == sc.UnitID {
+					unitName = u.Name
+				}
+			}
+		}
+	}
+	writeJSON(w, map[string]any{"unit_id": sc.UnitID, "unit_name": unitName, "role": sc.Role})
+}

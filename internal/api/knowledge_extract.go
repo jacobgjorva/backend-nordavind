@@ -85,6 +85,7 @@ func (s *Server) handleConfirmKnowledge(w http.ResponseWriter, r *http.Request) 
 		Title   string `json:"title"`
 		Summary string `json:"summary"`
 		ChatID  string `json:"chat_id"`
+		Scope   string `json:"scope"` // "" arv | "tenant" | "unit" | "private"
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "ugyldig request", http.StatusBadRequest)
@@ -101,7 +102,7 @@ func (s *Server) handleConfirmKnowledge(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "kunne ikke indeksere", http.StatusBadGateway)
 		return
 	}
-	if err := s.ingestFact(user.TenantID, user.ID, req.ChatID, req.Type, req.Title, req.Summary, vec); err != nil {
+	if err := s.ingestFact(user.TenantID, user.ID, req.ChatID, req.Type, req.Title, req.Summary, s.resolveDocScope(user.TenantID, user.ID, req.Scope), vec); err != nil {
 		http.Error(w, "kunne ikke lagre", http.StatusInternalServerError)
 		return
 	}
@@ -120,6 +121,7 @@ func (s *Server) handleRememberMessage(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Text   string `json:"text"`
 		ChatID string `json:"chat_id"`
+		Scope  string `json:"scope"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Text) == "" {
 		http.Error(w, "ugyldig request", http.StatusBadRequest)
@@ -140,7 +142,7 @@ func (s *Server) handleRememberMessage(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		if err := s.ingestFact(user.TenantID, user.ID, req.ChatID, p.Type, p.Title, p.Summary, vec); err != nil {
+		if err := s.ingestFact(user.TenantID, user.ID, req.ChatID, p.Type, p.Title, p.Summary, s.resolveDocScope(user.TenantID, user.ID, req.Scope), vec); err != nil {
 			continue
 		}
 		saved++
@@ -160,7 +162,7 @@ const autoDupThreshold = 0.75
 // ingestFact innlemmer et bekreftet faktum: dublettvakten erstatter automatisk
 // en nær-identisk gammel lapp, noden lagres som accepted og speiles til
 // retrieval-skuffen.
-func (s *Server) ingestFact(tenantID, userID, chatID, typ, title, summary string, vec []float32) error {
+func (s *Server) ingestFact(tenantID, userID, chatID, typ, title, summary, scope string, vec []float32) error {
 	if old, sim, err := s.store.MostSimilarAcceptedFact(tenantID, vec, ""); err == nil && sim >= autoDupThreshold {
 		s.log.Info("dublettvakt: erstatter", "gammel", old.Title, "ny", title, "sim", sim)
 		s.store.DeleteNode(old.ID, tenantID)
@@ -172,7 +174,7 @@ func (s *Server) ingestFact(tenantID, userID, chatID, typ, title, summary string
 	if err != nil {
 		return err
 	}
-	return s.store.SyncFactNote(tenantID, node.ID, title, summary, vec)
+	return s.store.SyncFactNoteScoped(tenantID, node.ID, title, summary, scope, vec)
 }
 
 // extractMarkers er tegn på at brukeren forklarer noe bedriftsinternt (kilden
@@ -340,7 +342,7 @@ func (s *Server) runDocExtraction(tenantID, userID, docID, title, summary, text 
 			}
 			// Governance v2: opplastingen VAR bekreftelsen — rett til accepted,
 			// med dublettvakten i forkant.
-			if err := s.ingestFact(tenantID, userID, "", n.Type, n.Title, n.Summary, vec); err != nil {
+			if err := s.ingestFact(tenantID, userID, "", n.Type, n.Title, n.Summary, "", vec); err != nil {
 				continue
 			}
 			if id, err := s.store.NodeByTitle(tenantID, n.Title); err == nil {
