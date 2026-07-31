@@ -75,6 +75,23 @@ det er avgjørbart). Dobbeltuttrekket per tur fjernes.
 - -min blir obligatorisk (rød eval stopper endring), og evalen kjøres i
   deploy-flyten.
 
+### Scope og korreksjon (Jacobs krav 2026-07-31)
+
+- SYNLIGHET: hver kunnskapsbit får et scope satt ved skriving og håndhevet
+  ved henting — tenant (alle), enhet (datterselskap/avdeling), rolle, eller
+  privat (kun brukeren). I dag finnes ingen slik dimensjon: regnskapssjefens
+  fakta serveres selgeren, og søsterselskap ser hverandre. Driftsresultat og
+  strategi for selskap A skal være USYNLIG for selskap B — håndhevet i
+  spørringen, aldri i prompten.
+- PERSONLIG BRUK: fakta der subjektet er brukeren selv og ikke virksomheten
+  («datteren min heter…», «jeg skal til tannlegen») droppes eller
+  privat-scopes automatisk — aldri delt kunnskap.
+- KORREKSJON: «nei, det stemmer ikke» i chat blir en førsteklasses vei som
+  supersederer claimen med proveniens (hvem korrigerte, når). Supersede
+  finnes alt for en-verdi-predikater; nytt er konfliktVAKTEN: motstridende
+  claims fra ULIKE kilder flagges i graf-editoren, og hentingen foretrekker
+  ferskeste med sterkest proveniens til konflikten er avklart.
+
 ### Mønster (fase 2, eget design + godkjenning)
 
 Når fundamentet er grønt: periodisk jobb som ser over claims/bruk og
@@ -88,7 +105,8 @@ FORESLÅR mønstre til bekreftelse. Bygges aldri på umålt henting.
                                        dagens henting flyttet UENDRET inn
     3. Relevans-porten                 claims/prosedyrer scores mot spørsmålet;
                                        «Jeg heter Jacob» → 0 linjer måles
-    4. Skrivevakter                    én ingest, tre vakter, dobbeluttrekk vekk;
+    4. Skrivevakter + scope            én ingest, tre vakter + scope-felt og
+                                       konfliktvakt; dobbeluttrekk vekk;
                                        prod-claims ryddes (14 skrot-rader)
     5. Innfestings-fikser              hentegating, uoppnåelig gren, pg-fallback,
                                        liten modell på dok-uttrekk
