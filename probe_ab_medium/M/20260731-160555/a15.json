@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "a15",
+    "class": "samtale",
+    "text": "takk for sist! noen tanker om hva vi bør ta tak i denne uka?"
+  },
+  "method": "samtale",
+  "answer": "Hva er det viktigste målet dere skal nå denne uka?",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 721,
+  "completion_tokens": 16,
+  "total_ms": 583,
+  "handoff": false,
+  "evidence": null
+}

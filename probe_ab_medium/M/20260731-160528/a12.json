@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "a12",
+    "class": "raadgivning",
+    "text": "kunden som står for 40 prosent av omsetningen vår presser oss hardt på pris - hvordan håndterer vi det?"
+  },
+  "method": "raadgivning",
+  "answer": "Tanken: Brukeren trenger en strategi for å håndtere en stor kundes pristrykk, men må forstå om det er lønnsomt å gå med på kravene eller om de bør si nei og risikere å miste kunden.\n\nHvor mye margin har dere på denne kunden i dag?",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 1098,
+  "completion_tokens": 74,
+  "total_ms": 2121,
+  "handoff": false,
+  "evidence": null
+}

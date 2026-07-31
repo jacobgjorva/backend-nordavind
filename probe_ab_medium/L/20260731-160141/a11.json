@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "a11",
+    "class": "raadgivning",
+    "text": "vi vurderer å si opp kontorlokalet og gå helt remote - hva bør vi tenke på?"
+  },
+  "method": "raadgivning",
+  "answer": "Å si opp kontorlokalet og gå helt remote er en stor endring som påvirker både økonomi, kultur, arbeidsmiljø og praktisk drift. Det viktigste å tenke på først, er om dere har et reelt behov og modenhet for å jobbe fullt distribuert, eller om dere risikerer å miste noe kritisk ved å fjerne det fysiske kontoret.\n\nDe fleste som lykkes med full remote, har allerede jobbet mye på distanse og har gode rutiner for kommunikasjon, dokumentasjon og oppfølging. Hvis teamet ditt ofte jobber hjemmefra eller på reise allerede, er dere på god vei. Hvis ikke, kan overgangen føles brå og krevende. Det er også avgjørende at ledelsen er tydelig på forventninger, og at dere har verktøy og systemer som støtter opp om asynkront arbeid og digital samhandling.\n\nØkonomisk sparer dere leiekostnader, men dere må regne med økte utgifter til digitale verktøy, hjemmekontorutstyr, og kanskje samlinger for å opprettholde kultur og tilhørighet. Mange undervurderer hvor mye som skjer i uformelle møter på kontoret, og hvor viktig det er for trivsel og kreativitet å møtes fysisk innimellom.\n\nHar dere en klar plan for hvordan dere skal ivareta det sosiale, sikre god opplæring og oppfølging av nye medarbeidere, og håndtere eventuell motstand i teamet? Hvis ja, kan det være en god beslutning. Hvis ikke, kan det være lurt å prøve ut en hybridmodell først, eller gradvis trappe ned på kontorbruk før dere sier opp lokalet helt.\n\nHvor mange ansatte har dere, og hvor mye av arbeidstiden tilbringer de i dag på kontoret?",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 1080,
+  "completion_tokens": 446,
+  "total_ms": 11758,
+  "handoff": false,
+  "evidence": null
+}

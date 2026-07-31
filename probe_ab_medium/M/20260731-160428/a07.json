@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "a07",
+    "class": "anbefaling",
+    "text": "anbefal en regnskapsfører i Trondheim for en liten byggstartup"
+  },
+  "method": "anbefaling",
+  "answer": "Trenger å vite om du foretrekker en lokal regnskapsfører med byggbransjekunnskap, eller om du er åpen for digitale løsninger med spisskompetanse på startups.",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 1200,
+  "completion_tokens": 47,
+  "total_ms": 2696,
+  "handoff": false,
+  "evidence": null
+}

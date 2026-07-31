@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "a10",
+    "class": "raadgivning",
+    "text": "bør vi ta inn en investor nå eller vente til vi har flere kunder? vi har 800k i ARR og 14 måneders runway"
+  },
+  "method": "raadgivning",
+  "answer": "Tanken er: Dere har allerede solid traksjon (800k ARR) og god tid (14 måneder). Spørsmålet er om investoren gir dere mer enn bare penger – som nettverk, kredibilitet eller ekspertise som akselererer veksten. Men først: sjekk om 800k ARR og 14 måneders runway er nok til å heve en runde som lønner seg, eller om dere bør vente til dere har høyere vekst eller mer bevis.\n\nHva er din månedlige vekstrate i ARR de siste 3 månedene?",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 1101,
+  "completion_tokens": 140,
+  "total_ms": 3410,
+  "handoff": false,
+  "evidence": null
+}

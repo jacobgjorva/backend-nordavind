@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "a14",
+    "class": "raadgivning",
+    "text": "styret vil at vi dobler markedsbudsjettet neste år - er det lurt når vi ikke vet hvilke kanaler som virker?"
+  },
+  "method": "raadgivning",
+  "answer": "Dobling av budsjett uten klarhet om hvilke kanaler som gir avkastning er risikabelt. Først bør dere teste og måle effekt av dagens kanaler i minst 3-6 måneder, så flytte budsjettet til det som virker best. Har dere allerede data på hvilke kanaler som gir leads eller salg i dag?",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 1098,
+  "completion_tokens": 85,
+  "total_ms": 2143,
+  "handoff": false,
+  "evidence": null
+}

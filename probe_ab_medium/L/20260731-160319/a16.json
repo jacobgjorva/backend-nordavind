@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "a16",
+    "class": "samtale",
+    "text": "hei igjen"
+  },
+  "method": "samtale",
+  "answer": "Hei! Hva kan jeg hjelpe deg med i dag?",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 690,
+  "completion_tokens": 16,
+  "total_ms": 1471,
+  "handoff": false,
+  "evidence": null
+}

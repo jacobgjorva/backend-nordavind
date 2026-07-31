@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "a13",
+    "class": "raadgivning",
+    "text": "vi vil ansette to utviklere i India for å spare penger - hvordan kommer vi i gang?"
+  },
+  "method": "raadgivning",
+  "answer": "Å ansette to utviklere i India kan være en god måte å få tilgang til dyktig arbeidskraft til en lavere kostnad, men det krever litt forberedelse for å gjøre det riktig. Det viktigste er å velge riktig ansettelsesmodell og sørge for at du har kontroll på både juridiske, praktiske og kulturelle forhold.\n\nFørst må du avgjøre om du vil ansette direkte i eget indisk selskap, bruke en lokal leverandør (Employer of Record, EOR), eller outsource til et indisk utviklingsfirma. For to personer er det ofte enklest og tryggest å bruke en EOR-løsning, som tar seg av alt fra kontrakter og lønn til skatt og compliance. Da slipper du å etablere eget selskap i India, noe som sparer tid og penger.\n\nDu må også tenke på rekruttering: vil du bruke lokale rekrutteringsbyråer, LinkedIn, eller teknologisteder som Cutshort eller Naukri? I India er det vanlig med tekniske intervjuer og prøveoppgaver, og du bør involvere noen med teknisk kompetanse i prosessen.\n\nTil slutt må du ha en plan for onboarding, kommunikasjon og oppfølging. India har en annen tidssone og arbeidskultur enn Norge, så det er lurt å avklare forventninger til arbeidstid, tilgjengelighet og kommunikasjonsverktøy på forhånd.\n\nJeg kan sjekke opp de mest populære EOR-leverandørene i India, typiske lønnskostnader for utviklere, og hvilke rekrutteringskanaler som fungerer best. Skal jeg gjøre det nå?",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 1077,
+  "completion_tokens": 404,
+  "total_ms": 10218,
+  "handoff": false,
+  "evidence": null
+}

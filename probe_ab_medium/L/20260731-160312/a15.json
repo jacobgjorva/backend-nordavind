@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "a15",
+    "class": "samtale",
+    "text": "takk for sist! noen tanker om hva vi bør ta tak i denne uka?"
+  },
+  "method": "samtale",
+  "answer": "Det beste å ta tak i denne uka er det som enten haster litt, eller som gir størst gevinst for minst innsats. Sjekk om det ligger noen løse tråder fra forrige uke som kan knyttes opp med et par timers arbeid, for eksempel en uavklart beslutning, en kunde som venter på svar, eller en liten justering i en plan som kan gjøre hverdagen lettere framover. Hvis alt ligger bra til, kan dere bruke uka til å rydde litt i verktøy, rutiner eller dokumentasjon – det lønner seg alltid. Hva er det som ligger litt tyngst på deg eller teamet akkurat nå?",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 709,
+  "completion_tokens": 162,
+  "total_ms": 5220,
+  "handoff": false,
+  "evidence": null
+}

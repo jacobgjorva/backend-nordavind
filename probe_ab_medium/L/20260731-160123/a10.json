@@ -1,0 +1,21 @@
+{
+  "case": {
+    "id": "a10",
+    "class": "raadgivning",
+    "text": "bør vi ta inn en investor nå eller vente til vi har flere kunder? vi har 800k i ARR og 14 måneders runway"
+  },
+  "method": "raadgivning",
+  "answer": "Du står overfor en klassisk timing-avveining: investor nå gir deg mer penger og tid, men kan fortynne eierskapet og sette press på vekstmålene før dere har bevist skalerbarheten skikkelig. Med 800k i ARR og 14 måneders runway er dere i en tidlig, men ikke helt tidlig fase — dere har vist at markedet vil ha produktet, men runwayen sier at dere ikke har ubegrenset tid til å nå neste milepæl.\n\n**Det viktigste for deg nå er hva dere skal bruke investorpengene til, og hvor fort dere kan bevise at hver krone gir mer enn en krone tilbake i vekst.** Hvis dere kan bruke kapitalen til å akselerere inntektsveksten betydelig (for eksempel ved å skalere salg og markedsføring, eller lansere en funksjon kundene allerede ber om), og runwayen på 14 måneder ikke gir dere nok rom til å nå neste inntektsmål uten ekstra kapital, er det et sterkt argument for å ta inn investor nå. Hvis dere derimot ikke har en klar plan for hvordan pengene skal gi raskere vekst, eller hvis dere tror dere kan doble ARR på egen hånd i løpet av de neste 6–12 månedene, kan det lønne seg å vente til dere har et enda sterkere tall å vise frem.\n\n**Rådet mitt er å ta inn investor nå, men ikke mer enn det som gir dere 18–24 måneders runway, og kun hvis dere har en konkret plan for hvordan kapitalen skal gi minst 2–3x vekst i ARR innen 12–18 måneder.** Begrunnelsen er at 800k i ARR er en god milepæl som viser traction, men runwayen på 14 måneder er knapp hvis dere skal skalere. Investorer vil se at dere har kontroll på unit economics og en klar vei til neste inntektsnivå. Hvis dere venter til dere har flere kunder, kan dere få bedre vilkår, men risikerer å gå tom for penger før dere når dit.\n\n**For å gjøre dette riktig, bør dere vite hva slags veksttakt dere kan forvente med og uten ny kapital.** Hva er deres historiske månedlige vekstrate, og hva tror dere den kan bli med mer penger i salg og markedsføring?",
+  "steps": null,
+  "thoughts": null,
+  "thought_count": 0,
+  "rounds": 1,
+  "searches": 0,
+  "fetches": 0,
+  "sources": 0,
+  "prompt_tokens": 1089,
+  "completion_tokens": 556,
+  "total_ms": 16432,
+  "handoff": false,
+  "evidence": null
+}
