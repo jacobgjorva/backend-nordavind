@@ -315,9 +315,23 @@ CREATE TABLE IF NOT EXISTS employees (
     role        text NOT NULL DEFAULT '',
     description text NOT NULL DEFAULT '',
     email       text NOT NULL DEFAULT '',
+    unit_id     text NOT NULL DEFAULT '',
+    user_id     text NOT NULL DEFAULT '',
     created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_employees_tenant ON employees (tenant_id, name);
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS unit_id text NOT NULL DEFAULT '';
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS user_id text NOT NULL DEFAULT '';
+
+-- Org-enheter (KUNNSKAP-V2 del 1): ryggraden for kunnskaps-scope.
+CREATE TABLE IF NOT EXISTS org_units (
+    id         text PRIMARY KEY,
+    tenant_id  text NOT NULL,
+    name       text NOT NULL,
+    parent_id  text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_org_units_tenant ON org_units (tenant_id, name);
 
 CREATE TABLE IF NOT EXISTS folders (
     id         text PRIMARY KEY,

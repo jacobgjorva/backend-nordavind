@@ -10,6 +10,8 @@ type Employee struct {
 	Role        string    `json:"role"`        // stilling/tittel
 	Description string    `json:"description"` // funksjon/ansvar — hva personen kan hjelpe med
 	Email       string    `json:"email"`
+	UnitID      string    `json:"unit_id"` // org-enheten (kunnskaps-scope); tom = ingen enhet
+	UserID      string    `json:"user_id"` // kobling til plattformbrukeren, settes i onboarding
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -32,7 +34,7 @@ func (s *Store) migrateEmployees() error {
 // ListEmployees returnerer tenantens ansatte, alfabetisk.
 func (s *Store) ListEmployees(tenantID string) ([]Employee, error) {
 	rows, err := s.db.Query(
-		`SELECT id, name, role, description, email, created_at
+		`SELECT id, name, role, description, email, unit_id, user_id, created_at
 		 FROM employees WHERE tenant_id = ? ORDER BY lower(name)`,
 		tenantID,
 	)
@@ -43,7 +45,7 @@ func (s *Store) ListEmployees(tenantID string) ([]Employee, error) {
 	var out []Employee
 	for rows.Next() {
 		var e Employee
-		if err := rows.Scan(&e.ID, &e.Name, &e.Role, &e.Description, &e.Email, &e.CreatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.Name, &e.Role, &e.Description, &e.Email, &e.UnitID, &e.UserID, &e.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, e)
@@ -60,9 +62,9 @@ func (s *Store) CreateEmployee(tenantID string, e Employee) (Employee, error) {
 	e.ID = id
 	e.CreatedAt = time.Now()
 	_, err = s.db.Exec(
-		`INSERT INTO employees (id, tenant_id, name, role, description, email)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		e.ID, tenantID, e.Name, e.Role, e.Description, e.Email,
+		`INSERT INTO employees (id, tenant_id, name, role, description, email, unit_id, user_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		e.ID, tenantID, e.Name, e.Role, e.Description, e.Email, e.UnitID, e.UserID,
 	)
 	return e, err
 }
@@ -70,9 +72,9 @@ func (s *Store) CreateEmployee(tenantID string, e Employee) (Employee, error) {
 // UpdateEmployee endrer en ansatt.
 func (s *Store) UpdateEmployee(id, tenantID string, e Employee) error {
 	res, err := s.db.Exec(
-		`UPDATE employees SET name = ?, role = ?, description = ?, email = ?
+		`UPDATE employees SET name = ?, role = ?, description = ?, email = ?, unit_id = ?, user_id = ?
 		 WHERE id = ? AND tenant_id = ?`,
-		e.Name, e.Role, e.Description, e.Email, id, tenantID,
+		e.Name, e.Role, e.Description, e.Email, e.UnitID, e.UserID, id, tenantID,
 	)
 	if err != nil {
 		return err

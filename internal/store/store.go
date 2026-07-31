@@ -104,6 +104,9 @@ func Open(path string) (*Store, error) {
 	if err := s.migrateEmployees(); err != nil {
 		return nil, err
 	}
+	if err := s.migrateOrg(); err != nil {
+		return nil, err
+	}
 	return s, s.migrateIntentDecisions()
 }
 
