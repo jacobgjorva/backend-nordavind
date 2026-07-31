@@ -16,6 +16,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -52,6 +53,7 @@ func main() {
 	verbose := flag.Bool("verbose", false, "vis hver spørring")
 	min := flag.Float64("min", 0, "rød (exit 1) under denne treffraten, 0 = kun rapport")
 	dbURL := flag.String("db", "", "kjør mot denne databasen (postgres://…) i stedet for temp-SQLite")
+	calibrate := flag.Bool("calibrate", false, "mål cosine-fordelingen relevant vs urelatert for embedding-modellen og avslutt")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -93,6 +95,64 @@ func main() {
 			readJSONL[fixture]("internal/api/testdata/knowledge-noise.jsonl")...)
 	}
 	cases := readJSONL[evalCase]("internal/api/testdata/knowledge-eval.jsonl")
+
+	// Kalibrering (del 0 i KUNNSKAP-V2-BLUEPRINT): mål cosine-fordelingen
+	// for RELEVANTE par (spørring ↔ fasit-teksten markørene peker på) mot
+	// URELATERTE par (spørring ↔ støytekster). Tersklene i hentekoden skal
+	// settes fra disse tallene — aldri gjettes. Kun embedding-kall.
+	if *calibrate {
+		noise := readJSONL[fixture]("internal/api/testdata/knowledge-noise.jsonl")
+		texts := func(f fixture) string {
+			if f.Text != "" {
+				return f.Text
+			}
+			return strings.Join(f.Chunks, " ")
+		}
+		var pos, neg []float64
+		for _, c := range cases {
+			qv, err := embedder.Embed(ctx, []string{c.Query})
+			if err != nil || len(qv) != 1 {
+				fmt.Fprintln(os.Stderr, "embed:", err)
+				os.Exit(2)
+			}
+			if !c.Empty {
+				for _, f := range fixtures {
+					t := texts(f)
+					match := true
+					for _, w := range c.Want {
+						if !strings.Contains(strings.ToLower(t), strings.ToLower(w)) {
+							match = false
+						}
+					}
+					if match && t != "" {
+						tv, err := embedder.Embed(ctx, []string{t})
+						if err == nil && len(tv) == 1 {
+							pos = append(pos, cosineF(qv[0], tv[0]))
+						}
+					}
+				}
+			}
+			for i := 0; i < len(noise); i += 23 { // ~9 støypar per spørring
+				tv, err := embedder.Embed(ctx, []string{texts(noise[i])})
+				if err == nil && len(tv) == 1 {
+					neg = append(neg, cosineF(qv[0], tv[0]))
+				}
+			}
+		}
+		pct := func(v []float64, p int) float64 {
+			sort.Float64s(v)
+			if len(v) == 0 {
+				return 0
+			}
+			return v[len(v)*p/100]
+		}
+		fmt.Printf("RELEVANT   n=%d  p5=%.3f p25=%.3f p50=%.3f p75=%.3f p95=%.3f\n",
+			len(pos), pct(pos, 5), pct(pos, 25), pct(pos, 50), pct(pos, 75), pct(pos, 95))
+		fmt.Printf("URELATERT  n=%d  p5=%.3f p25=%.3f p50=%.3f p75=%.3f p95=%.3f\n",
+			len(neg), pct(neg, 5), pct(neg, 25), pct(neg, 50), pct(neg, 75), pct(neg, 95))
+		fmt.Printf("gap p95(urelatert) → p5(relevant): %.3f → %.3f\n", pct(neg, 95), pct(pos, 5))
+		return
+	}
 
 	// Seed: embed og lagre nøyaktig slik prod-veiene gjør (fakta via
 	// SyncFactNote, dokumenter via CreateDocumentNotes, uttrukne noder som
@@ -225,3 +285,20 @@ func readJSONL[T any](path string) []T {
 	}
 	return out
 }
+
+// cosineF er kalibreringens egen cosine — harnesset skal ikke importere
+// hentekodens interne.
+func cosineF(a, b []float32) float64 {
+	var dot, na, nb float64
+	for i := range a {
+		dot += float64(a[i]) * float64(b[i])
+		na += float64(a[i]) * float64(a[i])
+		nb += float64(b[i]) * float64(b[i])
+	}
+	if na == 0 || nb == 0 {
+		return 0
+	}
+	return dot / (sqrt(na) * sqrt(nb))
+}
+
+func sqrt(x float64) float64 { return math.Sqrt(x) }
