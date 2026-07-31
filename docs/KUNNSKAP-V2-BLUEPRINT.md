@@ -46,6 +46,23 @@ ferdig tekst i systemmeldingen. Alt innenfor pakken kan endres fritt.
 4. Henting skjer KUN når flytens Knowledge-felt sier ja — i dag betales
    embedding på hver melding og kastes.
 
+### Tre innløp, én graf (Jacobs presisering 2026-07-31)
+
+Kunnskap kommer inn tre veier med ulik terskel, men lander i SAMME hjerne
+med samme vokabular og proveniens:
+
+1. PASSIV (chat): småfakta som dukker opp naturlig — terskler, faste
+   avtaler, preferanser. Minnekort + turslutt-læring, med vaktene under.
+   Aldri org-struktur eller prosedyrer herfra.
+2. EKSPLISITT (dokumenter): prosedyrer, skills og rutiner LASTES OPP
+   bevisst; uttrekket strukturerer dem til prosedyre-noder med dokumentet
+   som proveniens. Dette er hovedveien for «hvordan gjør jeg X»-kunnskapen.
+3. STRUKTURERT (onboarding/admin): organisasjonen — ansatte, roller,
+   enheter, ansvar — legges inn direkte i onboardingen (skjema/graf-editor
+   eller import), aldri gjettet fra samtaler. Org-strukturen er samtidig
+   fundamentet scope-styringen henger på: enhet og rolle må FINNES før
+   kunnskap kan scopes til dem.
+
 ### Skriving: én vei, vakter ved døren
 
 Alle fem innganger (turslutt-læring, minnekort, bekreft, dok-uttrekk,
@@ -108,6 +125,8 @@ FORESLÅR mønstre til bekreftelse. Bygges aldri på umålt henting.
     4. Skrivevakter + scope            én ingest, tre vakter + scope-felt og
                                        konfliktvakt; dobbeluttrekk vekk;
                                        prod-claims ryddes (14 skrot-rader)
+    4b. Onboarding-inngangen           strukturert org-registrering (ansatte,
+                                       roller, enheter) — designes med frontend
     5. Innfestings-fikser              hentegating, uoppnåelig gren, pg-fallback,
                                        liten modell på dok-uttrekk
     6. Mønster-fasen                   eget design, egen godkjenning
