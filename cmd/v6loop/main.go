@@ -170,6 +170,9 @@ type record struct {
 	// svar ikke etterprøves mot kildene, og da måler vi bare at det ser
 	// bra ut — nøyaktig feilen v5 gjorde.
 	Evidence []toolTrace `json:"evidence"`
+	// PerCall: (prompt, completion, payload-bytes) per modellkall — grunnlaget
+	// for duplikat-målingen i token-analysen.
+	PerCall []([3]int) `json:"per_call,omitempty"`
 }
 
 type toolTrace struct {
@@ -201,8 +204,9 @@ func run(client *http.Client, sc *search.Client, cfg config.Config, log *slog.Lo
 	out := &collector{}
 	tools := &liveTools{sc: sc}
 	turn := &motor.Turn{Question: c.Text, Method: method}
+	lm := &liveModel{client: client, cfg: cfg}
 	e := &motor.Engine{
-		Model:   &liveModel{client: client, cfg: cfg},
+		Model:   lm,
 		Tools:   tools,
 		Out:     out,
 		Deliver: out,
@@ -218,7 +222,7 @@ func run(client *http.Client, sc *search.Client, cfg config.Config, log *slog.Lo
 		Rounds: turn.Rounds, Searches: turn.Searches, Fetches: turn.Fetches,
 		Sources: len(turn.Sources), PromptTok: turn.Usage.PromptTokens,
 		ComplTok: turn.Usage.CompletionTokens, TotalMS: time.Since(start).Milliseconds(),
-		Handoff: handoff, Evidence: tools.trace,
+		Handoff: handoff, Evidence: tools.trace, PerCall: lm.perCall,
 	}
 }
 
@@ -245,6 +249,9 @@ func (c *collector) Deliver(_ context.Context, _ *motor.Turn, draft string) {
 type liveModel struct {
 	client *http.Client
 	cfg    config.Config
+	// perCall logger (prompt, completion, payload-bytes) for hvert modellkall
+	// i turen — brukes av duplikat-målingen (token-kostnadsanalysen).
+	perCall []([3]int)
 }
 
 func (m *liveModel) Call(ctx context.Context, req motor.ModelRequest) (motor.ModelResponse, error) {
@@ -298,6 +305,7 @@ func (m *liveModel) Call(ctx context.Context, req motor.ModelRequest) (motor.Mod
 		Text:  contentText(msg.Content),
 		Usage: motor.Usage{PromptTokens: out.Usage.PromptTokens, CompletionTokens: out.Usage.CompletionTokens},
 	}
+	m.perCall = append(m.perCall, [3]int{out.Usage.PromptTokens, out.Usage.CompletionTokens, len(body)})
 	for _, tc := range msg.ToolCalls {
 		res.Calls = append(res.Calls, motor.ToolCall{ID: tc.ID, Name: tc.Function.Name, Args: tc.Function.Arguments})
 	}
