@@ -44,6 +44,11 @@ const (
 // knowledgeFor henter kunnskapskonteksten for siste brukermelding i en
 // forespørsel, hvis brukeren er innlogget og tenanten har noder.
 func (s *Server) knowledgeFor(ctx context.Context, full map[string]any) string {
+	// KNOWLEDGE=v2: kunnskapsgraf v2 (relevans-port + scope). v1-veien under
+	// består urørt til del 5 i KUNNSKAP-V2-BLUEPRINT.
+	if s.cfg.KnowledgeMode == "v2" {
+		return s.knowledgeV2For(ctx, full)
+	}
 	user, ok := ctx.Value(userKey).(store.User)
 	if !ok || user.TenantID == "" {
 		return ""

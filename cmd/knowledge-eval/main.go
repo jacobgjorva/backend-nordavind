@@ -54,6 +54,7 @@ func main() {
 	min := flag.Float64("min", 0, "rød (exit 1) under denne treffraten, 0 = kun rapport")
 	dbURL := flag.String("db", "", "kjør mot denne databasen (postgres://…) i stedet for temp-SQLite")
 	calibrate := flag.Bool("calibrate", false, "mål cosine-fordelingen relevant vs urelatert for embedding-modellen og avslutt")
+	v2 := flag.Bool("v2", false, "mål kunnskapsgraf v2 (relevans-porten) i stedet for v1-hentingen")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -221,6 +222,9 @@ func main() {
 	for _, c := range cases {
 		t0 := time.Now()
 		got := srv.EvalKnowledge(ctx, tenant, c.Query)
+		if *v2 {
+			got = srv.EvalKnowledgeV2(ctx, tenant, c.Query)
+		}
 		dur := time.Since(t0)
 		times = append(times, dur)
 		chars += len(got)

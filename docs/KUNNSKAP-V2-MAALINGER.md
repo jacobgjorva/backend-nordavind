@@ -27,3 +27,33 @@ ALLE bom er near-miss-negative: «takk for hjelpen med lagertallene» får
 2 703 tegn intern kunnskap injisert, «hva koster et kjøleaggregat» 2 663.
 Det gamle settet sa 100 % — de nye casene viser at dagens henting ikke kan
 tie. Nettopp adferden relevans-porten skal fikse, nå målbar.
+
+## Kjøring 2 (del 2): relevans-porten + scope + kantutvidelse, 2026-07-31
+
+Samme 34-casers fasit, v2-veien (KNOWLEDGE=v2):
+
+```
+                      v1 (baseline)   v2
+treff                 26/34 (76 %)    33/34 (97 %)
+snitt injisert        1 034 tegn      255 tegn
+p50                   206 ms          277 ms
+```
+
+Portens konstanter (gate.go): gulv 0.765 (mellom urelatert-p95 og
+relevant-p5), margin 0.045 mot feltets median (formen skiller «har noe» fra
+«har ingenting»), FTS-bonus 0.015 for uavhengig støtte. Gulvet ble justert
+én gang (0.750 → 0.765) da porttesten viste at gråsonen slapp gjennom —
+dokumentert, målt, ferdig.
+
+Kantutvidelsen aktiveres KUN når porten alt har funnet noe, begge
+retninger (fakta→dokument var garantert null i v1), og løftet
+kjølevare-casen (4412-koden via kant-naboen).
+
+KJENT GRENSE, bevisst ikke lappet: «kan du oversette til engelsk: vi mottar
+varene på rampen» injiserer 363 tegn — teksten LIGNER varemottaksdokumentet
+semantisk, og at oppgaven er oversettelse er en oppgavetype-nyanse, ikke et
+relevansspørsmål. En ordliste-vakt ville vært nøyaktig lappingen vi ikke
+driver med. Tas hvis flere caser i klassen dukker opp.
+
+Lekkasjetesten (to enheter, begge henteveier, privat-scope) er grønn og er
+fra nå en del av porten.

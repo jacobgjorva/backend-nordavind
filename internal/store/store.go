@@ -107,6 +107,9 @@ func Open(path string) (*Store, error) {
 	if err := s.migrateOrg(); err != nil {
 		return nil, err
 	}
+	if err := s.migrateNoteScope(); err != nil {
+		return nil, err
+	}
 	return s, s.migrateIntentDecisions()
 }
 

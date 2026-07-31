@@ -28,6 +28,7 @@ type Config struct {
 	AuthRequired    bool     // krev innlogging på chat/extract (default på; sett AUTH_REQUIRED=false kun i dev)
 	AnswerStyle     string   // husets svarstil i chat: "off" (default) | "on"
 	BrainMode       string   // hjernen (påstandsgrafen): "off" (default) | "on"
+	KnowledgeMode   string   // kunnskapslaget: "" (v1, default) | "v2" (KUNNSKAP-V2)
 	IntentMode      string   // intent-motoren: "off" (default) | "shadow" (rut + logg, endrer ingenting)
 	Engine          string   // assistentmotoren: "" (default, dagens løype) | "v6" (metodemotoren)
 	SearxURL        string   // SEARXNG_URL: self-hostet søkeinstans; tom = DuckDuckGo-fallback (lokal dev)
@@ -67,6 +68,7 @@ func Load() (Config, error) {
 		AuthRequired:    getenv("AUTH_REQUIRED", "true") != "false",
 		AnswerStyle:     getenv("ANSWER_STYLE", "on"),
 		BrainMode:       getenv("BRAIN", "off"),
+		KnowledgeMode:   getenv("KNOWLEDGE", ""),
 		IntentMode:      getenv("INTENT_ENGINE", "off"),
 		Engine:          getenv("ENGINE", ""),
 		SearxURL:        getenv("SEARXNG_URL", ""),
