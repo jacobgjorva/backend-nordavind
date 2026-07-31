@@ -6,7 +6,7 @@
 --     mission_activity BEHOLDES - brukes av spinup).
 --   * FTS5-tabellen erstattes av en tsvector-kolonne på knowledge_notes
 --     (norsk config) med GIN-indeks; synken skjer eksplisitt i kode som før.
---   * embedding TEXT(JSON) -> vector(4096); tomme embeddings blir NULL.
+--   * embedding TEXT(JSON) -> vector(1024); tomme embeddings blir NULL.
 --     Ingen vektorindeks ennå - eksakt søk er raskt nok (se planen).
 
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -209,7 +209,7 @@ CREATE TABLE IF NOT EXISTS knowledge_nodes (
     status     text NOT NULL DEFAULT 'pending',
     chat_id    text NOT NULL DEFAULT '',
     user_id    text NOT NULL DEFAULT '',
-    embedding  vector(4096),
+    embedding  vector(1024),
     created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_knodes_tenant ON knowledge_nodes (tenant_id, status);
@@ -257,7 +257,7 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     tenant_id  text NOT NULL,
     ordinal    bigint NOT NULL DEFAULT 0,
     content    text NOT NULL,
-    embedding  vector(4096),
+    embedding  vector(1024),
     created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_dchunks_node ON document_chunks (node_id);
@@ -284,7 +284,7 @@ CREATE TABLE IF NOT EXISTS knowledge_notes (
     status      text NOT NULL DEFAULT 'pending',
     chat_id     text NOT NULL DEFAULT '',
     user_id     text NOT NULL DEFAULT '',
-    embedding   vector(4096),
+    embedding   vector(1024),
     fts         tsvector,
     hits        bigint NOT NULL DEFAULT 0,
     last_hit_at timestamptz,
