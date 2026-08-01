@@ -59,6 +59,13 @@ type ScopedNote struct {
 	Sim       float64
 }
 
+// noteCols er kolonnelista BEGGE motorene leser, i samme rekkefølge som
+// scanScoped/ScopedVectorCandidates forventer. Delt med vilje: da denne sto
+// duplisert drev Postgres-varianten fra SQLite-varianten, prod feilet på
+// hver tur («expected 6 destination arguments, not 7») mens evalen — som
+// kjører SQLite — var grønn. Én liste, ingen drift.
+const noteCols = "id, title, text, context, source_type, source_id"
+
 // ScopedVectorCandidates henter de k nærmeste lappene brukeren HAR LOV å
 // se. Postgres: pgvector-indeks. SQLite (dev/eval): scope-filtrert last +
 // cosine i Go — samme semantikk, målt av samme eval.
@@ -69,7 +76,7 @@ func (s *Store) ScopedVectorCandidates(tenantID string, sc Scope, userID string,
 		args := append([]any{string(q), tenantID}, scopeArgs...)
 		args = append(args, string(q), k)
 		rows, err := s.db.Query(
-			`SELECT id, title, text, context, source_type,
+			`SELECT `+noteCols+`,
 			        1 - (embedding <=> ?::vector) AS sim
 			 FROM knowledge_notes
 			 WHERE tenant_id = ? AND status = 'accepted' AND embedding IS NOT NULL
@@ -91,7 +98,7 @@ func (s *Store) ScopedVectorCandidates(tenantID string, sc Scope, userID string,
 	}
 	args := append([]any{tenantID}, scopeArgs...)
 	rows, err := s.db.Query(
-		`SELECT id, title, text, context, source_type, source_id, embedding
+		`SELECT `+noteCols+`, embedding
 		 FROM knowledge_notes
 		 WHERE tenant_id = ? AND status = 'accepted' AND embedding IS NOT NULL
 		   AND `+clause, args...)
@@ -133,7 +140,7 @@ func (s *Store) ScopedKeywordCandidates(tenantID string, sc Scope, userID string
 		args := append([]any{strings.Join(tokens, " | "), tenantID}, scopeArgs...)
 		args = append(args, limit)
 		rows, err := s.db.Query(
-			`SELECT id, title, text, context, source_type, source_id, 0
+			`SELECT `+noteCols+`, 0
 			 FROM knowledge_notes
 			 WHERE fts @@ to_tsquery('norwegian', ?)
 			   AND tenant_id = ? AND status = 'accepted' AND `+clause+`
@@ -241,7 +248,7 @@ func (s *Store) ScopedNeighbors(tenantID string, sc Scope, userID string, seeds 
 	args = append(args, scopeArgs...)
 	args = append(args, limit)
 	rows, err := s.db.Query(
-		`SELECT id, title, text, context, source_type, source_id, 0
+		`SELECT `+noteCols+`, 0
 		 FROM knowledge_notes
 		 WHERE tenant_id = ? AND status = 'accepted'
 		   AND (id IN (`+ph+`) OR source_id IN (`+ph+`))
