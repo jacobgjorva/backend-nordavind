@@ -82,14 +82,28 @@ func (s *Server) handleListEmployees(w http.ResponseWriter, r *http.Request) {
 	if emps == nil {
 		emps = []store.Employee{}
 	}
-	writeJSON(w, map[string]any{"employees": emps})
+	type empOut struct {
+		store.Employee
+		UnitIDs []string `json:"unit_ids"`
+	}
+	membership, _ := s.store.EmployeeUnits(user.TenantID)
+	out := make([]empOut, len(emps))
+	for i, em := range emps {
+		ids := membership[em.ID]
+		if ids == nil {
+			ids = []string{}
+		}
+		out[i] = empOut{Employee: em, UnitIDs: ids}
+	}
+	writeJSON(w, map[string]any{"employees": out})
 }
 
 type employeeInput struct {
-	Name        string `json:"name"`
-	Role        string `json:"role"`
-	Description string `json:"description"`
-	Email       string `json:"email"`
+	Name        string   `json:"name"`
+	Role        string   `json:"role"`
+	Description string   `json:"description"`
+	Email       string   `json:"email"`
+	UnitIDs     []string `json:"unit_ids"` // gruppemedlemskap (kunnskaps-scope)
 }
 
 func (in employeeInput) toEmployee() store.Employee {
@@ -122,6 +136,9 @@ func (s *Server) handleCreateEmployee(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "kunne ikke lagre")
 		return
 	}
+	if err := s.store.SetEmployeeUnits(user.TenantID, saved.ID, in.UnitIDs); err != nil {
+		s.log.Warn("kunne ikke lagre gruppemedlemskap", "err", err)
+	}
 	writeJSON(w, saved)
 }
 
@@ -140,6 +157,11 @@ func (s *Server) handleUpdateEmployee(w http.ResponseWriter, r *http.Request) {
 	if e.Name == "" {
 		writeErr(w, http.StatusBadRequest, "navn må være satt")
 		return
+	}
+	if in.UnitIDs != nil {
+		if err := s.store.SetEmployeeUnits(user.TenantID, r.PathValue("id"), in.UnitIDs); err != nil {
+			s.log.Warn("kunne ikke lagre gruppemedlemskap", "err", err)
+		}
 	}
 	err := s.store.UpdateEmployee(r.PathValue("id"), user.TenantID, e)
 	if errors.Is(err, store.ErrNotFound) {

@@ -34,9 +34,9 @@ func scopeClause(prefix string, sc Scope, userID string) (string, []any) {
 	col := prefix + "scope"
 	clauses := []string{col + " = ''"}
 	args := []any{}
-	if sc.UnitID != "" {
+	for _, uid := range sc.UnitIDs {
 		clauses = append(clauses, col+" = ?")
-		args = append(args, UnitScope(sc.UnitID))
+		args = append(args, UnitScope(uid))
 	}
 	if userID != "" {
 		clauses = append(clauses, col+" = ?")

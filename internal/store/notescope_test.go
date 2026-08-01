@@ -64,7 +64,7 @@ func TestScopedRetrievalNeverLeaksAcrossUnits(t *testing.T) {
 	}
 
 	// Bruker i enhet A: felles + A. ALDRI B, aldri andres private.
-	gotA := visible(Scope{UnitID: "unit-a"}, "user-kari")
+	gotA := visible(Scope{UnitIDs: []string{"unit-a"}}, "user-kari")
 	for id, want := range map[string]bool{"felles": true, "a-strategi": true, "b-resultat": false, "privat-ola": false} {
 		if gotA[id] != want {
 			t.Errorf("enhet A ser %q=%v, skulle vært %v", id, gotA[id], want)
@@ -72,7 +72,7 @@ func TestScopedRetrievalNeverLeaksAcrossUnits(t *testing.T) {
 	}
 
 	// Bruker i enhet B: felles + B.
-	gotB := visible(Scope{UnitID: "unit-b"}, "user-per")
+	gotB := visible(Scope{UnitIDs: []string{"unit-b"}}, "user-per")
 	if gotB["a-strategi"] || !gotB["b-resultat"] {
 		t.Errorf("enhet B: %+v", gotB)
 	}
@@ -84,7 +84,7 @@ func TestScopedRetrievalNeverLeaksAcrossUnits(t *testing.T) {
 	}
 
 	// Ola ser sitt private — Kari gjør det ikke (sjekket over).
-	gotOla := visible(Scope{UnitID: "unit-a"}, "user-ola")
+	gotOla := visible(Scope{UnitIDs: []string{"unit-a"}}, "user-ola")
 	if !gotOla["privat-ola"] {
 		t.Errorf("eieren ser ikke sitt private notat: %+v", gotOla)
 	}
@@ -114,22 +114,45 @@ func TestDocumentScopeInheritanceAndProcedureNeighbors(t *testing.T) {
 	}
 
 	// Innenfor enheten: dok-bit synlig, og prosedyren nås som kant-nabo.
-	inA, err := s.ScopedVectorCandidates("t1", Scope{UnitID: "unit-a"}, "u1", vec, 10)
+	inA, err := s.ScopedVectorCandidates("t1", Scope{UnitIDs: []string{"unit-a"}}, "u1", vec, 10)
 	if err != nil || len(inA) != 2 {
 		t.Fatalf("enhet A skulle sett dok-bit + prosedyre: %d, err=%v", len(inA), err)
 	}
-	nbs, err := s.ScopedNeighbors("t1", Scope{UnitID: "unit-a"}, "u1", []string{docID}, 5)
+	nbs, err := s.ScopedNeighbors("t1", Scope{UnitIDs: []string{"unit-a"}}, "u1", []string{docID}, 5)
 	if err != nil || len(nbs) == 0 {
 		t.Fatalf("kant-naboen (prosedyren) mangler: %v", err)
 	}
 
 	// Utenfor enheten: ingenting av det, heller ikke via kanten.
-	outB, _ := s.ScopedVectorCandidates("t1", Scope{UnitID: "unit-b"}, "u2", vec, 10)
+	outB, _ := s.ScopedVectorCandidates("t1", Scope{UnitIDs: []string{"unit-b"}}, "u2", vec, 10)
 	if len(outB) != 0 {
 		t.Fatalf("enhet B ser enhet A sitt dokument: %+v", outB)
 	}
-	nbsB, _ := s.ScopedNeighbors("t1", Scope{UnitID: "unit-b"}, "u2", []string{docID}, 5)
+	nbsB, _ := s.ScopedNeighbors("t1", Scope{UnitIDs: []string{"unit-b"}}, "u2", []string{docID}, 5)
 	if len(nbsB) != 0 {
 		t.Fatalf("kantutvidelsen lekker over enhetsgrensen: %+v", nbsB)
+	}
+}
+
+// Flergruppe-medlemskap (2026-08-01): en bruker i BÅDE A og B ser begge,
+// pluss felles og sitt private — og fortsatt aldri andres private.
+func TestMultiUnitMembershipSeesAllOwnGroups(t *testing.T) {
+	s := scopeStore(t)
+	seedNote(t, s, "felles", "felles rutine", "")
+	seedNote(t, s, "a-strategi", "selskap A strategi", UnitScope("unit-a"))
+	seedNote(t, s, "b-resultat", "selskap B resultat", UnitScope("unit-b"))
+	seedNote(t, s, "privat-ola", "olas notat", UserScope("user-ola"))
+	q := make([]float32, 8)
+	q[0] = 1
+	hits, err := s.ScopedVectorCandidates("t1", Scope{UnitIDs: []string{"unit-a", "unit-b"}}, "user-kari", q, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, n := range hits {
+		got[n.ID] = true
+	}
+	if !got["felles"] || !got["a-strategi"] || !got["b-resultat"] || got["privat-ola"] {
+		t.Fatalf("flergruppe-synlighet feil: %+v", got)
 	}
 }

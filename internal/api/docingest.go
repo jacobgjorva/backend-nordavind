@@ -20,22 +20,30 @@ const docExtractModel = "mistral-small-2603"
 // v1-veien (runDocExtraction → grafnoder) består urørt til del 5.
 
 // resolveDocScope oversetter opplasterens valg til lagrings-scope.
-// Default er opplasterens ENHET (har hen en) — «hele firmaet» er et bevisst
-// valg, aldri en stille bivirkning. «private» finnes for utkast o.l.
+// «unit:<id>» peker på ÉN av brukerens grupper og VALIDERES mot
+// medlemskapet — å be om en fremmed gruppe gir tenant, aldri lekkasje.
+// «private» finnes for utkast o.l. Tomt valg = arv: brukerens gruppe hvis
+// hen har nøyaktig én, ellers hele firmaet (aldri en gjettet gruppe).
 func (s *Server) resolveDocScope(tenantID, userID, requested string) string {
-	switch requested {
-	case "tenant":
+	switch {
+	case requested == "tenant":
 		return store.ScopeTenant
-	case "private":
+	case requested == "private":
 		return store.UserScope(userID)
-	case "unit":
-		if sc, _ := s.store.ScopeFor(tenantID, userID); sc.UnitID != "" {
-			return store.UnitScope(sc.UnitID)
+	case strings.HasPrefix(requested, "unit:"):
+		uid := strings.TrimPrefix(requested, "unit:")
+		if sc, _ := s.store.ScopeFor(tenantID, userID); sc.Has(uid) {
+			return store.UnitScope(uid)
 		}
 		return store.ScopeTenant
-	default: // tomt = arv: enheten hvis den finnes, ellers tenant
-		if sc, _ := s.store.ScopeFor(tenantID, userID); sc.UnitID != "" {
-			return store.UnitScope(sc.UnitID)
+	case requested == "unit":
+		if sc, _ := s.store.ScopeFor(tenantID, userID); len(sc.UnitIDs) == 1 {
+			return store.UnitScope(sc.UnitIDs[0])
+		}
+		return store.ScopeTenant
+	default:
+		if sc, _ := s.store.ScopeFor(tenantID, userID); len(sc.UnitIDs) == 1 {
+			return store.UnitScope(sc.UnitIDs[0])
 		}
 		return store.ScopeTenant
 	}

@@ -27,6 +27,9 @@ func TestUnitsRoundTripAndDetachOnDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := s.SetEmployeeUnits("t1", e.ID, []string{u.ID}); err != nil {
+		t.Fatal(err)
+	}
 	units, _ := s.ListUnits("t1")
 	if len(units) != 1 || units[0].Name != "Selskap A" {
 		t.Fatalf("uventet enhetsliste: %+v", units)
@@ -38,7 +41,10 @@ func TestUnitsRoundTripAndDetachOnDelete(t *testing.T) {
 	if len(emps) != 1 || emps[0].UnitID != "" {
 		t.Fatalf("ansatt skulle vært løsnet fra slettet enhet: %+v", emps)
 	}
-	_ = e
+	mu, _ := s.EmployeeUnits("t1")
+	if len(mu[e.ID]) != 0 {
+		t.Fatalf("medlemskapet skulle vært slettet med enheten: %+v", mu)
+	}
 }
 
 // ScopeFor er primitiven spørringsbyggeren (del 2) skal stole på:
@@ -61,19 +67,26 @@ func TestScopeForResolvesExplicitThenEmailThenEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s.CreateEmployee("t1", Employee{Name: "Eksplisitt", Role: "selger", UnitID: u.ID, UserID: uExplicit.ID})
-	s.CreateEmployee("t1", Employee{Name: "Epost", Role: "regnskap", UnitID: u.ID, Email: "B@X.NO"})
+	e1, _ := s.CreateEmployee("t1", Employee{Name: "Eksplisitt", Role: "selger", UserID: uExplicit.ID})
+	e2, _ := s.CreateEmployee("t1", Employee{Name: "Epost", Role: "regnskap", Email: "B@X.NO"})
+	u2, _ := s.CreateUnit("t1", OrgUnit{Name: "Selskap C"})
+	if err := s.SetEmployeeUnits("t1", e1.ID, []string{u.ID, u2.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetEmployeeUnits("t1", e2.ID, []string{u.ID}); err != nil {
+		t.Fatal(err)
+	}
 
 	sc, err := s.ScopeFor("t1", uExplicit.ID)
-	if err != nil || sc.UnitID != u.ID || sc.Role != "selger" {
-		t.Fatalf("eksplisitt kobling: %+v, err=%v", sc, err)
+	if err != nil || len(sc.UnitIDs) != 2 || !sc.Has(u.ID) || !sc.Has(u2.ID) || sc.Role != "selger" {
+		t.Fatalf("eksplisitt kobling m/flergrupper: %+v, err=%v", sc, err)
 	}
 	sc, err = s.ScopeFor("t1", uEmail.ID)
-	if err != nil || sc.UnitID != u.ID || sc.Role != "regnskap" {
+	if err != nil || len(sc.UnitIDs) != 1 || !sc.Has(u.ID) || sc.Role != "regnskap" {
 		t.Fatalf("epost-fallback (case-ufølsom): %+v, err=%v", sc, err)
 	}
 	sc, err = s.ScopeFor("t1", uNone.ID)
-	if err != nil || sc.UnitID != "" || sc.Role != "" {
+	if err != nil || len(sc.UnitIDs) != 0 || sc.Role != "" {
 		t.Fatalf("uten ansattrad skal scope være tom: %+v, err=%v", sc, err)
 	}
 }

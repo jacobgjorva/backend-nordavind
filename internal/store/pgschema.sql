@@ -332,6 +332,14 @@ CREATE TABLE IF NOT EXISTS org_units (
     created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_org_units_tenant ON org_units (tenant_id, name);
+
+CREATE TABLE IF NOT EXISTS employee_units (
+    employee_id text NOT NULL,
+    unit_id     text NOT NULL,
+    tenant_id   text NOT NULL,
+    PRIMARY KEY (employee_id, unit_id)
+);
+CREATE INDEX IF NOT EXISTS idx_emp_units_tenant ON employee_units (tenant_id, unit_id);
 ALTER TABLE knowledge_notes ADD COLUMN IF NOT EXISTS scope text NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_notes_scope ON knowledge_notes (tenant_id, status, scope);
 

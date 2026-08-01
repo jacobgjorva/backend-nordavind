@@ -21,10 +21,22 @@ type OrgUnit struct {
 }
 
 // Scope er en brukers synlighetsposisjon, utledet av ansatt-koblingen.
-// Tom UnitID = brukeren tilhører ingen enhet og ser kun tenant-vid kunnskap.
+// Tomt UnitIDs = brukeren tilhører ingen gruppe og ser kun tenant-vid
+// kunnskap. En bruker kan tilhøre FLERE grupper (Jacobs krav 2026-08-01);
+// tenant-vid kunnskap ser alle uansett — gruppene LEGGER TIL synlighet.
 type Scope struct {
-	UnitID string
-	Role   string
+	UnitIDs []string
+	Role    string
+}
+
+// Has sier om scopet inneholder enheten.
+func (sc Scope) Has(unitID string) bool {
+	for _, id := range sc.UnitIDs {
+		if id == unitID {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Store) migrateOrg() error {
@@ -48,7 +60,67 @@ func (s *Store) migrateOrg() error {
 	} {
 		s.db.Exec(stmt)
 	}
-	return nil
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS employee_units (
+			employee_id TEXT NOT NULL,
+			unit_id     TEXT NOT NULL,
+			tenant_id   TEXT NOT NULL,
+			PRIMARY KEY (employee_id, unit_id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_emp_units_tenant ON employee_units (tenant_id, unit_id);
+	`); err != nil {
+		return err
+	}
+	// Engangsmigrering: gamle én-enhets-koblinger blir medlemskap.
+	_, err := s.db.Exec(`
+		INSERT INTO employee_units (employee_id, unit_id, tenant_id)
+		SELECT id, unit_id, tenant_id FROM employees WHERE unit_id != ''
+		ON CONFLICT DO NOTHING`)
+	return err
+}
+
+// SetEmployeeUnits erstatter en ansatts gruppemedlemskap.
+func (s *Store) SetEmployeeUnits(tenantID, employeeID string, unitIDs []string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(
+		`DELETE FROM employee_units WHERE employee_id = ? AND tenant_id = ?`,
+		employeeID, tenantID); err != nil {
+		return err
+	}
+	for _, uid := range unitIDs {
+		if uid == "" {
+			continue
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO employee_units (employee_id, unit_id, tenant_id) VALUES (?, ?, ?)
+			 ON CONFLICT DO NOTHING`, employeeID, uid, tenantID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// EmployeeUnits henter medlemskapene per ansatt for tenanten.
+func (s *Store) EmployeeUnits(tenantID string) (map[string][]string, error) {
+	rows, err := s.db.Query(
+		`SELECT employee_id, unit_id FROM employee_units WHERE tenant_id = ?`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string][]string{}
+	for rows.Next() {
+		var eid, uid string
+		if err := rows.Scan(&eid, &uid); err != nil {
+			return nil, err
+		}
+		out[eid] = append(out[eid], uid)
+	}
+	return out, rows.Err()
 }
 
 // ListUnits returnerer tenantens enheter, alfabetisk.
@@ -109,29 +181,47 @@ func (s *Store) DeleteUnit(id, tenantID string) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
+	if _, err = s.db.Exec(
+		`UPDATE employees SET unit_id = '' WHERE unit_id = ? AND tenant_id = ?`, id, tenantID); err != nil {
+		return err
+	}
 	_, err = s.db.Exec(
-		`UPDATE employees SET unit_id = '' WHERE unit_id = ? AND tenant_id = ?`, id, tenantID)
+		`DELETE FROM employee_units WHERE unit_id = ? AND tenant_id = ?`, id, tenantID)
 	return err
 }
 
 // ScopeFor utleder brukerens synlighetsposisjon: først eksplisitt kobling
 // (employees.user_id), så e-postmatch mot brukerkontoen. Ingen ansattrad =
-// tom scope (kun tenant-vid kunnskap) — trygg default.
+// tom scope (kun tenant-vid kunnskap) — trygg default. Feil gir alltid
+// MINDRE synlighet, aldri mer.
 func (s *Store) ScopeFor(tenantID, userID string) (Scope, error) {
+	var empID string
 	var sc Scope
 	err := s.db.QueryRow(
-		`SELECT unit_id, role FROM employees WHERE tenant_id = ? AND user_id = ?`,
-		tenantID, userID).Scan(&sc.UnitID, &sc.Role)
-	if err == nil {
+		`SELECT id, role FROM employees WHERE tenant_id = ? AND user_id = ?`,
+		tenantID, userID).Scan(&empID, &sc.Role)
+	if err != nil {
+		err = s.db.QueryRow(
+			`SELECT e.id, e.role FROM employees e
+			 JOIN users u ON lower(u.email) = lower(e.email) AND u.tenant_id = e.tenant_id
+			 WHERE e.tenant_id = ? AND u.id = ? AND e.email != ''`,
+			tenantID, userID).Scan(&empID, &sc.Role)
+		if err != nil {
+			return Scope{}, nil
+		}
+	}
+	rows, err := s.db.Query(
+		`SELECT unit_id FROM employee_units WHERE tenant_id = ? AND employee_id = ?`,
+		tenantID, empID)
+	if err != nil {
 		return sc, nil
 	}
-	err = s.db.QueryRow(
-		`SELECT e.unit_id, e.role FROM employees e
-		 JOIN users u ON lower(u.email) = lower(e.email) AND u.tenant_id = e.tenant_id
-		 WHERE e.tenant_id = ? AND u.id = ? AND e.email != ''`,
-		tenantID, userID).Scan(&sc.UnitID, &sc.Role)
-	if err != nil {
-		return Scope{}, nil
+	defer rows.Close()
+	for rows.Next() {
+		var uid string
+		if err := rows.Scan(&uid); err == nil {
+			sc.UnitIDs = append(sc.UnitIDs, uid)
+		}
 	}
 	return sc, nil
 }

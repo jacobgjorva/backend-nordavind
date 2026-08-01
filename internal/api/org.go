@@ -76,15 +76,19 @@ func (s *Server) handleDeleteUnit(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleOrgMe(w http.ResponseWriter, r *http.Request) {
 	user := r.Context().Value(userKey).(store.User)
 	sc, _ := s.store.ScopeFor(user.TenantID, user.ID)
-	unitName := ""
-	if sc.UnitID != "" {
+	type myUnit struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	var mine []myUnit
+	if len(sc.UnitIDs) > 0 {
 		if units, err := s.store.ListUnits(user.TenantID); err == nil {
 			for _, u := range units {
-				if u.ID == sc.UnitID {
-					unitName = u.Name
+				if sc.Has(u.ID) {
+					mine = append(mine, myUnit{ID: u.ID, Name: u.Name})
 				}
 			}
 		}
 	}
-	writeJSON(w, map[string]any{"unit_id": sc.UnitID, "unit_name": unitName, "role": sc.Role})
+	writeJSON(w, map[string]any{"units": mine, "role": sc.Role})
 }
