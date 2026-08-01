@@ -55,6 +55,17 @@ type Block struct {
 	Text  string
 	Lines int
 	Used  []string // kandidat-id-er som ble med (RecordNoteHits m.m.)
+	Diag  Diag     // hvorfor det ble som det ble — alltid logget
+}
+
+// Diag er portens regnskap. Uten dette er «tom blokk» uskillelig fra
+// «feilet stille», og det var nøyaktig blindsonen som gjorde at v2 leverte
+// null i prod uten et eneste spor i loggen (2026-08-02).
+type Diag struct {
+	VecN, KwN, NbN int
+	Top, Median    float64
+	Reason         string // kort ord om utfallet
+	Err            string
 }
 
 // Budsjettet: v2 er selektiv — relevans over volum. v1 sendte inntil 4 000
@@ -75,17 +86,42 @@ func Context(ctx context.Context, emb Embedder, src Source, req Request) (Block,
 	}
 	vec, err := emb.Embed(ctx, q)
 	if err != nil || len(vec) == 0 {
+		d := Diag{Reason: "embed-feil", Err: errText(err)}
 		// Fail-open til nøkkelord: embedding nede skal gi dårligere utvalg,
 		// aldri tom kontekst PÅ GRUNN AV INFRASTRUKTUR (asymmetrien i v1).
 		kws, kerr := src.Keyword(ctx, tokens(q), candDepth)
-		if kerr != nil || len(kws) == 0 {
-			return Block{}, nil
+		d.KwN = len(kws)
+		if kerr != nil {
+			d.Err = errText(kerr)
 		}
-		return render(gateKeywordOnly(kws, q)), nil
+		if kerr != nil || len(kws) == 0 {
+			return Block{Diag: d}, nil
+		}
+		b := render(gateKeywordOnly(kws, q))
+		b.Diag = d
+		return b, nil
 	}
-	vecCands, _ := src.Vector(ctx, vec, candDepth)
-	kwCands, _ := src.Keyword(ctx, tokens(q), candDepth)
+	var d Diag
+	vecCands, verr := src.Vector(ctx, vec, candDepth)
+	kwCands, kerr := src.Keyword(ctx, tokens(q), candDepth)
+	d.VecN, d.KwN = len(vecCands), len(kwCands)
+	if verr != nil || kerr != nil {
+		d.Err = errText(verr) + errText(kerr)
+	}
+	if len(vecCands) > 0 {
+		d.Top = vecCands[0].Sim
+		sims := make([]float64, 0, len(vecCands))
+		for _, c := range vecCands {
+			sims = append(sims, c.Sim)
+		}
+		d.Median = median(sims)
+	}
 	picked := gate(vecCands, kwCands)
+	if len(picked) == 0 {
+		d.Reason = "porten avviste alt"
+	} else {
+		d.Reason = "treff"
+	}
 	// Kantutvidelse KUN når porten fant noe: naboene til et relevant treff
 	// er relevante i kraft av koblingen (fryseromskoden hører til
 	// varemottaket), men et tomt utvalg skal aldri fylles av naboer.
@@ -100,15 +136,27 @@ func Context(ctx context.Context, emb Embedder, src Source, req Request) (Block,
 			}
 		}
 		if nbs, err := src.Neighbors(ctx, seeds, neighborCap); err == nil {
+			d.NbN = len(nbs)
 			for _, n := range nbs {
 				if !have[n.ID] {
 					have[n.ID] = true
 					picked = append(picked, n)
 				}
 			}
+		} else {
+			d.Err += errText(err)
 		}
 	}
-	return render(picked), nil
+	b := render(picked)
+	b.Diag = d
+	return b, nil
+}
+
+func errText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error() + " "
 }
 
 // tokens er innholdsordene i spørringen (FTS-benet).

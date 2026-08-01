@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"strings"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/knowledge"
 	"github.com/jacobgjorva/backend-nordavind/internal/store"
@@ -69,10 +70,22 @@ func (s *Server) knowledgeV2For(ctx context.Context, full map[string]any) string
 	block, err := knowledge.Context(ctx, v2Embedder{s: s}, src, knowledge.Request{
 		Question: stripAttachments(lastUserText(full)),
 	})
+	d := block.Diag
+	// ALLTID logget: en tom blokk er et resultat, ikke en ikke-hendelse.
+	s.log.Info("kunnskap v2", "linjer", block.Lines, "tegn", len(block.Text),
+		"vec", d.VecN, "kw", d.KwN, "nabo", d.NbN,
+		"topp", d.Top, "median", d.Median, "utfall", d.Reason,
+		"grupper", len(sc.UnitIDs), "feil", strings.TrimSpace(d.Err+errStr(err)))
 	if err != nil || block.Text == "" {
 		return ""
 	}
 	go s.store.RecordNoteHits(block.Used)
-	s.log.Info("kunnskap v2", "linjer", block.Lines, "tegn", len(block.Text))
 	return block.Text
+}
+
+func errStr(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
