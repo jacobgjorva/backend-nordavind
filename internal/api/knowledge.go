@@ -53,7 +53,7 @@ func (s *Server) knowledgeFor(ctx context.Context, full map[string]any) string {
 	if !ok || user.TenantID == "" {
 		return ""
 	}
-	query := lastUserText(full)
+	query := stripAttachments(lastUserText(full))
 	notes := s.knowledgeContext(ctx, user.TenantID, query)
 	if s.cfg.BrainMode != "on" {
 		return notes
@@ -62,7 +62,7 @@ func (s *Server) knowledgeFor(ctx context.Context, full map[string]any) string {
 	// beviset. Finner hjernen ingenting, står lappene alene som før.
 	// Hjernen ser på de siste meldingene, ikke bare den siste: «Hvem har
 	// ansvar for kunden?» nevner ingen entitet — navnet sto i forrige tur.
-	claims := s.brainContext(ctx, user.TenantID, user.ID, recentUserText(full, 3))
+	claims := s.brainContext(ctx, user.TenantID, user.ID, stripAttachments(recentUserText(full, 3)))
 	switch {
 	case claims == "":
 		return notes
@@ -688,3 +688,27 @@ func (s *Server) expandNeighbors(tenantID string, fused []string, byID map[strin
 	}
 	return out
 }
+
+// stripAttachments reduserer hver vedleggsblokk («[Vedlegg: navn]\n<tekst>»)
+// til kun filnavn-linjen. Ruting, kunnskapsoppslag og entitets-seeding skal
+// styres av brukerens BESTILLING, aldri av vedleggskroppen — målt i prod:
+// et UI-notat som vedlegg fikk «gi meg en kort oppsummering» rutet til
+// create_widget, og vedleggsteksten sprengte embedding-kallet (HTTP 400).
+func stripAttachments(text string) string {
+	i := strings.Index(text, "[Vedlegg: ")
+	if i < 0 {
+		return text
+	}
+	head := text[:i]
+	rest := text[i:]
+	var names []string
+	for _, m := range attachHeaderRe.FindAllStringSubmatch(rest, -1) {
+		names = append(names, m[1])
+	}
+	if len(names) == 0 {
+		return text
+	}
+	return strings.TrimSpace(head) + "\n[Vedlegg: " + strings.Join(names, ", ") + "]"
+}
+
+var attachHeaderRe = regexp.MustCompile(`\[Vedlegg: ([^\]\n]+)\]`)

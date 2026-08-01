@@ -219,7 +219,8 @@ func (s *Server) flowModel(level string) string {
 // hos kalleren så ruting og kunnskapsoppslag kan kjøre parallelt uten race).
 func (s *Server) applyIntent(ctx context.Context, user store.User, full map[string]any) (block string, apply func()) {
 	eng := s.intent.get()
-	msg := lastUserText(full)
+	// Vedleggskroppen skal aldri styre rutingen — kun bestillingen.
+	msg := stripAttachments(lastUserText(full))
 	if msg == "" {
 		return "", nil
 	}

@@ -67,7 +67,7 @@ func (s *Server) knowledgeV2For(ctx context.Context, full map[string]any) string
 	sc, _ := s.store.ScopeFor(user.TenantID, user.ID)
 	src := v2Source{s: s, tenant: user.TenantID, scope: sc, userID: user.ID}
 	block, err := knowledge.Context(ctx, v2Embedder{s: s}, src, knowledge.Request{
-		Question: lastUserText(full),
+		Question: stripAttachments(lastUserText(full)),
 	})
 	if err != nil || block.Text == "" {
 		return ""
