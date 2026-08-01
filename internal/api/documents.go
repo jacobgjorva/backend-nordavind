@@ -203,6 +203,7 @@ func (s *Server) handleClassifyDocument(w http.ResponseWriter, r *http.Request) 
 	}
 	raw, err := s.llmComplete(r.Context(), "dokument", classifySystem, "Filnavn: "+req.Filename+"\n\n"+head, 3)
 	// Ved feil: foreslå heller lagring enn å miste kunnskap.
+	s.log.Info("dokument-klassifisering", "fil", req.Filename, "svar", strings.TrimSpace(strings.ToLower(raw)), "err", err)
 	save := err != nil || strings.Contains(strings.ToLower(raw), "ja")
 	writeJSON(w, map[string]any{"save": save})
 }

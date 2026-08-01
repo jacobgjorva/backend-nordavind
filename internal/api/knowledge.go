@@ -132,6 +132,12 @@ const embedCacheMax = 1000
 // embedCached returnerer en cachet embedding for teksten, ellers henter og
 // cacher den (bundet størrelse).
 func (s *Server) embedCached(ctx context.Context, text string) ([]float32, error) {
+	// Vedleggstekst kan følge med brukermeldingen — mistral-embed avviser
+	// for lang input (målt: HTTP 400 på 61k tegn). Spørrings-embeddingen
+	// trenger bare meldingens begynnelse; kapp hardt.
+	if r := []rune(text); len(r) > 6000 {
+		text = string(r[:6000])
+	}
 	key := strings.ToLower(strings.TrimSpace(text))
 	if v, ok := embedCache.Load(key); ok {
 		return v.([]float32), nil
