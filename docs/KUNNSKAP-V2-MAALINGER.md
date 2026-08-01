@@ -86,3 +86,26 @@ Del 3 for øvrig: dokument-scope arves av alle lapper (default opplasterens
 enhet; «hele firmaet» er et bevisst valg), prosedyrer lagres som hentbare
 lapper med kant til dok-noden, og lekkasjetesten dekker nå også
 kantutvidelsen over enhetsgrenser.
+
+## Kjøring 4 (prod-bug): SQLite grønn, Postgres død, 2026-08-02
+
+v2 ble slått på i prod og leverte NULL kunnskap på hver eneste tur — uten
+et eneste spor i loggen, fordi den bare logget når blokken var ikke-tom.
+Modellen svarte fritt fra hukommelsen og diktet både innhold og prosjekt.
+
+Rotårsak: `ScopedVectorCandidates` hadde kolonnelista duplisert i
+Postgres- og SQLite-grenen. `source_id` ble lagt til i SQLite-grenen og i
+Scan, men ikke i Postgres-SELECT-en → «expected 6 destination arguments in
+Scan, not 7» på hver tur. Feilen ble SVELGET (`vecCands, _ := ...`).
+
+Tre fundamentfikser, ikke lapper:
+1. Kolonnelista er nå én delt konstant (`noteCols`) — grenene KAN ikke drive.
+2. Porten logger alltid sitt regnskap (kandidater, topp, median, utfall,
+   feil). En tom blokk er et resultat, ikke en ikke-hendelse.
+3. Eval-porten kjøres nå OGSÅ mot ekte Postgres (`-db`, scratch-database på
+   serveren). Målt etter fiksen: 33/34 (97 %), snitt 270 tegn, p50 168 ms —
+   identisk med SQLite. Uten dette steget var evalen blind for hele
+   prod-motoren.
+
+LÆRDOM (samme klasse som «metodeteksten nådde aldri modellen»): grønn eval
+på feil motor er ingen eval. Dual-engine-kode må måles på begge motorer.
