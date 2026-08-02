@@ -23,6 +23,8 @@ type KnowledgeNode struct {
 	Hits      int        `json:"hits"`                  // retrieval-treff (fra lappen)
 	LastHitAt *time.Time `json:"last_hit_at,omitempty"` // sist hentet
 	Embedding []float32  `json:"-"`
+	// Scope: synligheten (notescope.go) — grafens fargekoding.
+	Scope string `json:"scope"`
 }
 
 // KnowledgeEdge er en typet relasjon mellom to noder.
@@ -216,7 +218,7 @@ func (s *Store) GraphData(tenantID string) ([]KnowledgeNode, []KnowledgeEdge, er
 	// aldri hentes (selvkuraterende kvalitet, governance v2).
 	nodeRows, err := s.db.Query(
 		`SELECT n.id, n.type, n.title, n.summary, n.created_at,
-		        COALESCE(kn.hits, 0), kn.last_hit_at
+		        COALESCE(kn.hits, 0), kn.last_hit_at, COALESCE(kn.scope, '')
 		 FROM knowledge_nodes n LEFT JOIN knowledge_notes kn ON kn.id = n.id
 		 WHERE n.tenant_id = ? AND n.status = 'accepted' AND n.type != 'dokument'`,
 		tenantID,
@@ -229,7 +231,7 @@ func (s *Store) GraphData(tenantID string) ([]KnowledgeNode, []KnowledgeEdge, er
 	live := map[string]bool{}
 	for nodeRows.Next() {
 		var n KnowledgeNode
-		if err := nodeRows.Scan(&n.ID, &n.Type, &n.Title, &n.Summary, &n.CreatedAt, &n.Hits, &n.LastHitAt); err != nil {
+		if err := nodeRows.Scan(&n.ID, &n.Type, &n.Title, &n.Summary, &n.CreatedAt, &n.Hits, &n.LastHitAt, &n.Scope); err != nil {
 			return nil, nil, err
 		}
 		nodes = append(nodes, n)

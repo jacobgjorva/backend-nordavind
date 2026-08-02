@@ -177,6 +177,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/mail/attachments/{id}", s.requireAuth(s.handleMailAttachment))
 	mux.HandleFunc("GET /v1/org/units", s.requireAuth(s.handleListUnits))
 	mux.HandleFunc("GET /v1/org/me", s.requireAuth(s.handleOrgMe))
+	mux.HandleFunc("GET /v1/org/sharing", s.requireAdmin(s.handleListScopeRequests))
+	mux.HandleFunc("POST /v1/org/sharing/{id}", s.requireAdmin(s.handleResolveScopeRequest))
 	mux.HandleFunc("POST /v1/org/units", s.requireAdmin(s.handleCreateUnit))
 	mux.HandleFunc("PUT /v1/org/units/{id}", s.requireAdmin(s.handleUpdateUnit))
 	mux.HandleFunc("DELETE /v1/org/units/{id}", s.requireAdmin(s.handleDeleteUnit))

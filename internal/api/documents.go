@@ -164,7 +164,15 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 	}
 
 	docScope := ""
+	orgRequested := false
 	if s.cfg.KnowledgeMode == "v2" {
+		// Hele-organisasjonen-deling fra ikke-admin krever admins ett-klikks
+		// godkjenning (Jacobs governance-design): dokumentet lagres SCOPET
+		// til innsenderen, og admin hever det — aldri automatisk org-vidt.
+		if req.Scope == "tenant" && user.Role != "admin" {
+			orgRequested = true
+			req.Scope = "unit"
+		}
 		docScope = s.resolveDocScope(user.TenantID, user.ID, req.Scope)
 	}
 	docID, err := s.store.CreateDocumentNotes(user.TenantID, store.DocumentInput{
@@ -176,7 +184,12 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "kunne ikke lagre dokumentet")
 		return
 	}
-	s.log.Info("dokument lagret", "tittel", title, "type", string(kind), "lapper", len(notes))
+	if orgRequested {
+		if err := s.store.AddScopeRequest(user.TenantID, docID, title, user.Email); err != nil {
+			s.log.Warn("kunne ikke legge org-delingsforespørsel", "err", err)
+		}
+	}
+	s.log.Info("dokument lagret", "tittel", title, "type", string(kind), "lapper", len(notes), "orgkø", orgRequested)
 	// G4: destiller dokumentet i bakgrunnen. v2: prosedyrer som hentbare
 	// lapper med scope-arv, liten modell. v1-veien består til del 5.
 	if s.cfg.KnowledgeMode == "v2" {

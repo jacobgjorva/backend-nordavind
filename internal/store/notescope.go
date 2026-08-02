@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"strings"
+	"time"
 )
 
 // Kunnskaps-scope (KUNNSKAP-V2 del 2). Én kolonne, én klausul, ett sted:
@@ -299,4 +300,75 @@ func (s *Store) ScopedNames(tenantID string, sc Scope, userID string, limit int)
 		return named, nil
 	}
 	return append(named, files...), nil
+}
+
+// Org-delingskøen (2026-08-02): når en IKKE-admin velger «hele
+// organisasjonen» for et dokument, lagres det med enhets-scope og havner
+// her — admin hever til tenant med ett klikk. SMAL kø med én jobb; den
+// gamle godkjenn-alt-køen er slettet og skal aldri gjenoppstå.
+type ScopeRequest struct {
+	DocID     string    `json:"doc_id"`
+	Title     string    `json:"title"`
+	Requested string    `json:"requested_by"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (s *Store) migrateScopeRequests() error {
+	_, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS scope_requests (
+			doc_id     TEXT PRIMARY KEY,
+			tenant_id  TEXT NOT NULL,
+			title      TEXT NOT NULL DEFAULT '',
+			requested  TEXT NOT NULL DEFAULT '',
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`)
+	return err
+}
+
+func (s *Store) AddScopeRequest(tenantID, docID, title, requestedBy string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO scope_requests (doc_id, tenant_id, title, requested) VALUES (?, ?, ?, ?)
+		 ON CONFLICT (doc_id) DO NOTHING`, docID, tenantID, title, requestedBy)
+	return err
+}
+
+func (s *Store) ListScopeRequests(tenantID string) ([]ScopeRequest, error) {
+	rows, err := s.db.Query(
+		`SELECT doc_id, title, requested, created_at FROM scope_requests
+		 WHERE tenant_id = ? ORDER BY created_at`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ScopeRequest
+	for rows.Next() {
+		var r ScopeRequest
+		if err := rows.Scan(&r.DocID, &r.Title, &r.Requested, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// ResolveScopeRequest: godkjent → alle dokumentets lapper heves til
+// tenant-scope; avslått → køen tømmes og scopet består. Begge veier
+// fjerner forespørselen.
+func (s *Store) ResolveScopeRequest(tenantID, docID string, approve bool) error {
+	if approve {
+		if _, err := s.db.Exec(
+			`UPDATE knowledge_notes SET scope = '' WHERE tenant_id = ? AND source_id = ?`,
+			tenantID, docID); err != nil {
+			return err
+		}
+	}
+	res, err := s.db.Exec(
+		`DELETE FROM scope_requests WHERE tenant_id = ? AND doc_id = ?`, tenantID, docID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

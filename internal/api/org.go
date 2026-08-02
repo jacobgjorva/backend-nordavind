@@ -92,3 +92,39 @@ func (s *Server) handleOrgMe(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]any{"units": mine, "role": sc.Role})
 }
+
+// Org-delingskøen: admin ser og avgjør forespørsler om organisasjonsvid
+// deling. Smal kø med én jobb — hever kun scope, aldri innhold.
+func (s *Server) handleListScopeRequests(w http.ResponseWriter, r *http.Request) {
+	user := r.Context().Value(userKey).(store.User)
+	reqs, err := s.store.ListScopeRequests(user.TenantID)
+	if err != nil {
+		http.Error(w, "kunne ikke hente forespørsler", http.StatusInternalServerError)
+		return
+	}
+	if reqs == nil {
+		reqs = []store.ScopeRequest{}
+	}
+	writeJSON(w, map[string]any{"requests": reqs})
+}
+
+func (s *Server) handleResolveScopeRequest(w http.ResponseWriter, r *http.Request) {
+	user := r.Context().Value(userKey).(store.User)
+	var in struct {
+		Approve bool `json:"approve"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		http.Error(w, "ugyldig request", http.StatusBadRequest)
+		return
+	}
+	err := s.store.ResolveScopeRequest(user.TenantID, r.PathValue("id"), in.Approve)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "ukjent forespørsel", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "kunne ikke avgjøre forespørselen", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

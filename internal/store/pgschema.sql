@@ -343,6 +343,14 @@ CREATE INDEX IF NOT EXISTS idx_emp_units_tenant ON employee_units (tenant_id, un
 ALTER TABLE knowledge_notes ADD COLUMN IF NOT EXISTS scope text NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_notes_scope ON knowledge_notes (tenant_id, status, scope);
 
+CREATE TABLE IF NOT EXISTS scope_requests (
+    doc_id     text PRIMARY KEY,
+    tenant_id  text NOT NULL,
+    title      text NOT NULL DEFAULT '',
+    requested  text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS folders (
     id         text PRIMARY KEY,
     tenant_id  text NOT NULL,
