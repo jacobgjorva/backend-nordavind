@@ -246,11 +246,26 @@ func (s *Server) applyIntent(ctx context.Context, user store.User, full map[stri
 	if weak && len([]rune(strings.TrimSpace(msg))) <= 60 {
 		if prev := prevUserText(full); prev != "" {
 			pd := s.intent.resolveCached(ctx, eng, prev, user.Role == "admin")
-			if pk, pf := intent.FlowFor(pd); pf.Sticky && pd.Key != "" {
+			// STICKY V2 (2026-08-02): en kort oppfølging betyr noe SAMMEN med
+			// forrige spørsmål — «nei artisten sombr» etter «hvor høy er
+			// sombr?» er et oppslag, ikke fri chat. Blind arv sendte den til
+			// samtaleflyten, og oppslagsmetodens garantier forsvant (målt i
+			// prod: klassebytte-hullet, åpent punkt 7). Samlet tekst rutes
+			// først; et TYDELIG treff der vinner over arv.
+			combined := false
+			if cd := s.intent.resolveCached(ctx, eng, prev+" "+msg, user.Role == "admin"); cd.Method == intent.MethodDirect && cd.Key != "" && cd.Key != "smalltalk" {
+				if cf, ok := intent.Flows[cd.Key]; ok && !cf.Deterministic && !cf.ExplicitOnly {
+					d = intent.Decision{Key: cd.Key, Method: intent.MethodSticky,
+						Candidates: cd.Candidates, Elapsed: d.Elapsed + cd.Elapsed}
+					s.log.Info("intent: oppfølging rutet på samlet tekst", "key", cd.Key)
+					combined = true
+				}
+			}
+			if pk, pf := intent.FlowFor(pd); !combined && pf.Sticky && pd.Key != "" {
 				d = intent.Decision{Key: pk, Method: intent.MethodSticky,
 					Candidates: d.Candidates, Elapsed: d.Elapsed + pd.Elapsed}
-			} else if d.Key == intent.UnclearKey || d.Method == intent.MethodNone ||
-				d.Key == "smalltalk" {
+			} else if !combined && (d.Key == intent.UnclearKey || d.Method == intent.MethodNone ||
+				d.Key == "smalltalk") {
 				// Midt i en vanlig samtale: en RETNINGSLØS kort oppfølging
 				// (uklart/none/smalltalk) skal FORTSETTE samtalen (fri chat,
 				// alle verktøy) — aldri kapres av panel eller

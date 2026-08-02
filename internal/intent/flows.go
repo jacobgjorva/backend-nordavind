@@ -269,7 +269,12 @@ var Flows = map[string]Flow{
 	},
 
 	"web_fact": {
-		Tools:    []string{ToolWebSearch, ToolFetchURL},
+		Tools: []string{ToolWebSearch, ToolFetchURL},
+		// Sticky (2026-08-02): «nei artisten sombr» etter «hvor høy er
+		// sombr?» er samme oppslag med korrigert tolkning — blind arv til
+		// fri chat mistet oppslagsmetodens garantier (målt i prod). Korte
+		// oppfølginger beholder oppslaget; nye temaer ruter friskt som før.
+		Sticky:   true,
 		Model:    "mid",
 		MaxChars: 300,
 		Fallback: FreeChatKey,

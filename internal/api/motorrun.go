@@ -1,6 +1,8 @@
 package api
 
 import (
+	"strings"
+
 	"context"
 
 	"github.com/jacobgjorva/backend-nordavind/internal/motor"
@@ -47,6 +49,25 @@ func (s *Server) runMotorV6(ctx context.Context, full map[string]any, emit func(
 		injectSystem(full, extra)
 	}
 
+	// KODE-EID FØRSTESØK på oppslag (2026-08-02): modellen omskriver
+	// søkeord den ikke kjenner — «sombr» ble søkt som «SOM Building Oslo»
+	// og «gjennomsnittlig høyde på en sombrero», med metodetekst som sa
+	// ordrett søk. Formulering kan ikke eies av prompt; koden søker
+	// brukerens egne ord FØR modellen får ordet, og resultatet ligger i
+	// konteksten uansett hva modellen finner på etterpå. Kun oppslag: der
+	// ER spørsmålet søkestrengen. Modellens egne søk kommer i tillegg,
+	// innenfor samme budsjett som før.
+	var prefetchRefs []sourceRef
+	if turn.Method == motor.MethodLookup {
+		if q := strings.TrimSpace(stripAttachments(turn.Question)); q != "" {
+			if res, refs := s.runWebSearch(ctx, q); res != "" && res != "Søket ga ingen resultater." {
+				injectSystem(full, "Søkeresultater for brukerens egne ord «"+q+"» (hentet automatisk):\n"+res)
+				prefetchRefs = refs
+				s.log.Info("motor v6: førstesøk", "query", q, "kilder", len(refs))
+			}
+		}
+	}
+
 	state := &motorTurnState{}
 	floors := &motorFloors{
 		s: s, emit: emit, narr: narr, state: state,
@@ -78,6 +99,15 @@ func (s *Server) runMotorV6(ctx context.Context, full map[string]any, emit func(
 		Out:     out,
 		Deliver: delivery,
 		Log:     s.log,
+	}
+
+	// Førstesøkets kilder inn i kilde-pillen — de ER turens grunnlag.
+	if len(prefetchRefs) > 0 {
+		src := make([]motor.Source, 0, len(prefetchRefs))
+		for _, r := range prefetchRefs {
+			src = append(src, motor.Source{Title: r.Title, URL: r.URL})
+		}
+		out.Sources(src)
 	}
 
 	s.log.Info("motor v6: tur", "flyt", flowKey, "metode", string(turn.Method))
