@@ -54,6 +54,7 @@ var classMethod = map[string]motor.MethodKey{
 	"oppslag":     motor.MethodLookup,
 	"samtale":     motor.MethodSmalltalk,
 	"analyse":     motor.MethodAnalysis,
+	"grunn":       motor.MethodGround,
 }
 
 // omitRule settes av -omit: utelatelsesregelen som probes.

@@ -137,3 +137,22 @@ begrensning, lappes ikke med mer prompt.
 Samme kjøring: render-buggen (biter > 1 600 tegn ble DROPPET, ga «treff»
 med 0 linjer) fikset i kode — store biter trunkeres på ordgrense, og
 diagnosen sier «budsjett-tomt» i stedet for å lyve. Eval: 33/34 (97 %).
+
+## Kjøring 6: grunnmetoden — ingen tur uten metode, 2026-08-02
+
+Rotårsaken bak BEGGE prod-feilklassene (interne fabrikasjoner og
+sombr-diktingen): free_chat og uklart kjørte naken løkke, og der gjelder
+ingen av motorens kontrakter — modellen omskrev til og med søkeordene
+(«sombr» → «SOM Building Oslo»). Harness-bevis: samme spørsmål MED metode
+søkte ordrett og svarte riktig (201 cm).
+
+Kontraktsendring i katalogen (ren data): grunnmetoden — bygg på turens
+kilder/kunnskap/samtale, søk med brukerens egne ord, interne forhold krever
+belegg, innrøm hull. free_chat og uklart mapper dit; MethodNone er nå kun
+for utfører-flyter med egen kodedisiplin. Prompt-lappene fra tidligere i
+dag (kjerneregel) var feil verktøy — stabling — og grunnmetoden er stedet
+adferden faktisk bor.
+
+Verifisert på de ekte feilcasene: «hva er svar_scan.py» → ærlig «ukjent»,
+sombr-oppfølging → ordrett søk, 201 cm, kontroll-chat → leverer som før.
+Kost: ~130 tokens/tur; målt tidligere at metodeturer HALVERER søkene.

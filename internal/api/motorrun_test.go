@@ -117,10 +117,11 @@ func TestNoThinkRuleWithoutTools(t *testing.T) {
 	}
 }
 
-// Uten metode skal ingenting injiseres på en verktøyløs tur — da er v6
-// byte-identisk med dagens oppførsel.
+// Uten metode skal ingenting injiseres på en verktøyløs tur. free_chat har
+// siden 2026-08-02 grunnmetoden (all målt fabrikasjon bodde i den nakne
+// løkka), så kontrakten testes nå med en ekte metodeløs flyt.
 func TestNoInjectionWithoutMethodOrTools(t *testing.T) {
-	full := map[string]any{flowKeyField: "free_chat"}
+	full := map[string]any{flowKeyField: "m365_files"}
 	if extra := motor.BuildSystem("", motorMethod(full), motorHasTools(full)); extra != "" {
 		t.Errorf("uten metode og verktøy skal ingenting injiseres, fikk %q", extra)
 	}

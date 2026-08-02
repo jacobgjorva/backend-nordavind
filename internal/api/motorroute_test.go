@@ -16,8 +16,9 @@ func TestMethodComesFromRoutedFlow(t *testing.T) {
 		"web_fact":          motor.MethodLookup,
 		"data_question":     motor.MethodAnalysis,
 		"smalltalk":         motor.MethodSmalltalk,
-		"free_chat":         motor.MethodNone,
-		"m365_files":        motor.MethodNone,
+				"m365_files":        motor.MethodNone,
+		"free_chat":         motor.MethodGround,
+		"uklart":            motor.MethodGround,
 		"":                  motor.MethodNone,
 	}
 	for flow, want := range cases {

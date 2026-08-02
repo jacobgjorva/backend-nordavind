@@ -56,6 +56,7 @@ const (
 	MethodAdvisory  MethodKey = "raadgivning"
 	MethodCreative  MethodKey = "skapende"
 	MethodSmalltalk MethodKey = "samtale"
+	MethodGround    MethodKey = "grunn"
 )
 
 // premiseRule appendes til beslutningsklassene (anbefaling, rådgivning):
@@ -166,6 +167,22 @@ var Catalog = map[MethodKey]Method{
 			"prosess. Her er varianter lov.",
 	},
 
+	MethodGround: {
+		Key: MethodGround,
+		// Grunnmetoden (2026-08-02): free_chat og uklart kjørte NAKEN løkke,
+		// og alle prod-fabrikasjonene bodde nettopp der — modellen omskrev
+		// søkeord («sombr» → «SOM Building»), diktet interne prosjekter og
+		// svarte fra hukommelsen. Målt i harnesset: samme spørsmål MED
+		// metode søkte ordrett og svarte riktig. Ingen tur uten metode.
+		Budget: Budget{Searches: 4, Fetches: 3, Rounds: 6},
+		Text: " METODE: Svaret bygges på det turen faktisk har — kilder fra verktøyene, injisert " +
+			"intern kunnskap og samtalen — aldri på egen hukommelse alene. Søk med brukerens EGNE " +
+			"ord: omskriv aldri navn eller begreper du ikke kjenner, søk dem ordrett. Om brukerens " +
+			"egen virksomhet vet du KUN det intern kunnskap eller verktøydata i turen sier — står " +
+			"det ikke der, si ærlig at du ikke har det, og dikt aldri navn, prosjekter eller " +
+			"detaljer. Dekker ingen kilder spørsmålet, si det kort og pek på nærmeste vei videre.",
+	},
+
 	MethodSmalltalk: {
 		Key:    MethodSmalltalk,
 		Budget: Budget{Searches: 0, Fetches: 0, Rounds: 1},
@@ -176,9 +193,10 @@ var Catalog = map[MethodKey]Method{
 
 // flowMethod knytter en rutet flyt til sin metodeklasse.
 //
-// Flyter som IKKE står her får MethodNone — naken løkke, dagens adferd.
-// Det er den trygge standarden: en flyt uten bevist metode skal aldri
-// arve en fremmed fremgangsmåte bare fordi den lignet.
+// KONTRAKTSENDRING 2026-08-02: free_chat og uklart var naken løkke, og all
+// målt fabrikasjon i prod bodde der. Nå får de grunnmetoden. Flyter som
+// fortsatt ikke står her får MethodNone — men det skal være unntaket
+// (utfører-flyter med egen kodedisiplin), aldri samtaleflytene.
 var flowMethod = map[string]MethodKey{
 	"advisory":          MethodAdvisory,
 	"research_relation": MethodRelation,
@@ -186,6 +204,8 @@ var flowMethod = map[string]MethodKey{
 	"web_fact":          MethodLookup,
 	"data_question":     MethodAnalysis,
 	"smalltalk":         MethodSmalltalk,
+	"free_chat":         MethodGround,
+	"uklart":            MethodGround,
 }
 
 // For gir metoden for en flyt. Ukjent flyt, tom flyt eller flyt uten

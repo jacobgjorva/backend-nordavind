@@ -69,7 +69,7 @@ func TestCatalogKeysMatchRows(t *testing.T) {
 func TestEveryMethodHasCoherentBudget(t *testing.T) {
 	needsTools := map[MethodKey]bool{
 		MethodLookup: true, MethodRelation: true, MethodAdvice: true, MethodAnalysis: true,
-		MethodAdvisory: true,
+		MethodAdvisory: true, MethodGround: true,
 	}
 	for key, m := range Catalog {
 		b := m.Budget
@@ -104,10 +104,17 @@ func TestFlowMappingResolvesToOneKnownMethod(t *testing.T) {
 			t.Errorf("flyt %q: For ga %q, tabellen sier %q", flow, got, key)
 		}
 	}
-	// Fail-open: alt ukjent er naken løkke, aldri en gjetning.
-	for _, unknown := range []string{"", "free_chat", "uklart", "m365_files", "finnes_ikke"} {
+	// Fail-open gjelder UKJENTE flyter. free_chat/uklart er bevisst flyttet
+	// til grunnmetoden (2026-08-02): all målt prod-fabrikasjon bodde i den
+	// nakne løkka, så «ingen tur uten metode» er nå kontrakten for samtale.
+	for _, unknown := range []string{"", "m365_files", "finnes_ikke"} {
 		if For(unknown) != MethodNone {
 			t.Errorf("flyt %q skal falle til naken løkke, fikk %q", unknown, For(unknown))
+		}
+	}
+	for _, ground := range []string{"free_chat", "uklart"} {
+		if For(ground) != MethodGround {
+			t.Errorf("flyt %q skal ha grunnmetoden, fikk %q", ground, For(ground))
 		}
 	}
 }
