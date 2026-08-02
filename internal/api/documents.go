@@ -127,42 +127,6 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Inngest-formen følger DOKUMENTTYPEN (doctype.go). Kildekode
-	// proposisjonaliseres ALDRI: filens egen dokumentasjon bevares hel, og
-	// koden lagres ordrett. Prosa går den vanlige veien, med naiv oppdeling
-	// som fallback så lagring aldri stopper på en AI-feil.
-	kind := kindOf(req.Filename)
-	var parts []string
-	if kind == kindCode {
-		parts = codeNotes(req.Filename, text)
-	} else {
-		var err error
-		parts, err = s.propositionalize(r.Context(), text)
-		if err != nil {
-			s.log.Warn("propositionalisering feilet, bruker naiv oppdeling", "err", err)
-			parts = chunkText(text)
-		}
-	}
-	if len(parts) == 0 {
-		writeErr(w, http.StatusBadRequest, "fant ikke tekst å lagre")
-		return
-	}
-
-	title, summary := s.documentTitleSummary(r.Context(), req.Title, req.Filename, text)
-
-	// Hver lapp = én proposisjon, forankret med dokumentets sammendrag som
-	// kontekst (contextual retrieval). Embeddingen dekker context + tekst så
-	// lappen matcher selv når spørsmålet gjelder dokumentet som helhet.
-	notes := make([]store.KnowledgeNote, 0, len(parts))
-	for _, p := range parts {
-		vec, err := s.embed(r.Context(), summary+" "+p)
-		if err != nil {
-			writeErr(w, http.StatusBadGateway, "kunne ikke indeksere dokumentet")
-			return
-		}
-		notes = append(notes, store.KnowledgeNote{Text: p, Context: summary, Embedding: vec})
-	}
-
 	docScope := ""
 	orgRequested := false
 	if s.cfg.KnowledgeMode == "v2" {
@@ -175,10 +139,7 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 		}
 		docScope = s.resolveDocScope(user.TenantID, user.ID, req.Scope)
 	}
-	docID, err := s.store.CreateDocumentNotes(user.TenantID, store.DocumentInput{
-		Filename: req.Filename, RawText: text, Title: title, Summary: summary,
-		Scope: docScope,
-	}, notes)
+	docID, title, err := s.ingestDocument(r.Context(), user, req.Filename, text, docScope, store.DocumentInput{Title: req.Title})
 	if err != nil {
 		s.log.Error("kunne ikke lagre dokument", "err", err)
 		writeErr(w, http.StatusInternalServerError, "kunne ikke lagre dokumentet")
@@ -189,15 +150,8 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 			s.log.Warn("kunne ikke legge org-delingsforespørsel", "err", err)
 		}
 	}
-	s.log.Info("dokument lagret", "tittel", title, "type", string(kind), "lapper", len(notes), "orgkø", orgRequested)
-	// G4: destiller dokumentet i bakgrunnen. v2: prosedyrer som hentbare
-	// lapper med scope-arv, liten modell. v1-veien består til del 5.
-	if s.cfg.KnowledgeMode == "v2" {
-		go s.runDocIngestV2(user.TenantID, user.ID, docID, title, docScope, text)
-	} else {
-		go s.runDocExtraction(user.TenantID, user.ID, docID, title, summary, text)
-	}
-	writeJSON(w, map[string]any{"id": docID, "title": title, "summary": summary, "chunks": len(notes)})
+	s.log.Info("dokument lagret", "tittel", title, "orgkø", orgRequested)
+	writeJSON(w, map[string]any{"id": docID, "title": title})
 }
 
 const classifySystem = "Du vurderer om et opplastet dokument er VERDIFULL, GJENBRUKBAR bedriftskunnskap " +
@@ -300,4 +254,49 @@ func filenameTitle(filename string) string {
 		return base
 	}
 	return "Dokument"
+}
+
+// ingestDocument er den ENE dokumentveien inn i treet: typestyrt oppdeling
+// (kode beholder dokumentasjonen hel), tittel+sammendrag, embedding per
+// bit, lagring med scope/eier, og prosedyre-uttrekk i bakgrunnen. Brukes
+// av både manuell opplasting og M365-synken — én vei, samme vakter.
+func (s *Server) ingestDocument(ctx context.Context, user store.User, filename, text, scope string, extra store.DocumentInput) (string, string, error) {
+	kind := kindOf(filename)
+	var parts []string
+	if kind == kindCode {
+		parts = codeNotes(filename, text)
+	} else {
+		var err error
+		parts, err = s.propositionalize(ctx, text)
+		if err != nil {
+			s.log.Warn("propositionalisering feilet, bruker naiv oppdeling", "err", err)
+			parts = chunkText(text)
+		}
+	}
+	if len(parts) == 0 {
+		return "", "", errors.New("fant ikke tekst å lagre")
+	}
+	title, summary := s.documentTitleSummary(ctx, extra.Title, filename, text)
+	notes := make([]store.KnowledgeNote, 0, len(parts))
+	for _, p := range parts {
+		vec, err := s.embed(ctx, summary+" "+p)
+		if err != nil {
+			return "", "", err
+		}
+		notes = append(notes, store.KnowledgeNote{Text: p, Context: summary, Embedding: vec})
+	}
+	docID, err := s.store.CreateDocumentNotes(user.TenantID, store.DocumentInput{
+		Filename: filename, RawText: text, Title: title, Summary: summary,
+		Scope: scope, Owner: extra.Owner, OriginID: extra.OriginID, OriginMod: extra.OriginMod,
+	}, notes)
+	if err != nil {
+		return "", "", err
+	}
+	s.log.Info("dokument inngestet", "tittel", title, "type", string(kind), "lapper", len(notes), "scope", scope)
+	if s.cfg.KnowledgeMode == "v2" {
+		go s.runDocIngestV2(user.TenantID, user.ID, docID, title, scope, text)
+	} else {
+		go s.runDocExtraction(user.TenantID, user.ID, docID, title, summary, text)
+	}
+	return docID, title, nil
 }

@@ -18,6 +18,15 @@ type DocumentChunk struct {
 }
 
 func (s *Store) migrateDocuments() error {
+	// Idempotente kolonnetillegg for M365-synken (eier + opphav).
+	for _, stmt := range []string{
+		`ALTER TABLE documents ADD COLUMN title TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE documents ADD COLUMN owner TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE documents ADD COLUMN origin_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE documents ADD COLUMN origin_mod TEXT NOT NULL DEFAULT ''`,
+	} {
+		s.db.Exec(stmt)
+	}
 	_, err := s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS document_chunks (
 			id         TEXT PRIMARY KEY,
@@ -35,6 +44,10 @@ func (s *Store) migrateDocuments() error {
 			tenant_id  TEXT NOT NULL,
 			filename   TEXT NOT NULL DEFAULT '',
 			raw_text   TEXT NOT NULL DEFAULT '',
+			title      TEXT NOT NULL DEFAULT '',
+			owner      TEXT NOT NULL DEFAULT '',
+			origin_id  TEXT NOT NULL DEFAULT '',
+			origin_mod TEXT NOT NULL DEFAULT '',
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);
 	`)

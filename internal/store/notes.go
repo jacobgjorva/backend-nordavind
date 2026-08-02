@@ -339,6 +339,12 @@ type DocumentInput struct {
 	// Scope arves av alle lappene dokumentet gir (KUNNSKAP-V2 del 3):
 	// default opplasterens enhet, kan heves til tenant ('') ved opplasting.
 	Scope string
+	// M365-synk (2026-08-02): Owner skiller brukeres private trær — to
+	// brukere kan ha samme filnavn uten å erstatte hverandre. OriginID/
+	// OriginMod gjør synken idempotent (uendret fil hoppes over).
+	Owner     string
+	OriginID  string
+	OriginMod string
 }
 
 // CreateDocumentNotes lagrer et dokument som lapper i den felles skuffen, i én
@@ -356,11 +362,12 @@ func (s *Store) CreateDocumentNotes(tenantID string, doc DocumentInput, notes []
 	}
 	defer tx.Rollback()
 
-	// Ferskhet: samme filnavn lastet opp på nytt erstatter det gamle helt.
+	// Ferskhet: samme filnavn fra SAMME eier erstatter det gamle helt.
+	// Eier '' er manuelle opplastinger — delt navnerom som før.
 	if doc.Filename != "" {
 		rows, err := tx.Query(
-			`SELECT node_id FROM documents WHERE tenant_id = ? AND filename = ?`,
-			tenantID, doc.Filename,
+			`SELECT node_id FROM documents WHERE tenant_id = ? AND filename = ? AND COALESCE(owner, '') = ?`,
+			tenantID, doc.Filename, doc.Owner,
 		)
 		if err != nil {
 			return "", err
@@ -386,8 +393,9 @@ func (s *Store) CreateDocumentNotes(tenantID string, doc DocumentInput, notes []
 	}
 
 	if _, err := tx.Exec(
-		`INSERT INTO documents (node_id, tenant_id, filename, raw_text, title) VALUES (?, ?, ?, ?, ?)`,
-		docID, tenantID, doc.Filename, doc.RawText, doc.Title,
+		`INSERT INTO documents (node_id, tenant_id, filename, raw_text, title, owner, origin_id, origin_mod)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		docID, tenantID, doc.Filename, doc.RawText, doc.Title, doc.Owner, doc.OriginID, doc.OriginMod,
 	); err != nil {
 		return "", err
 	}
@@ -583,4 +591,14 @@ func (s *Store) AddProcedureNote(tenantID, docID, name, body, scope string, embe
 		return "", err
 	}
 	return id, tx.Commit()
+}
+
+// HasSyncedDoc: er akkurat denne M365-versjonen allerede synket? Gjør
+// synk-jobben idempotent — uendrede filer koster null.
+func (s *Store) HasSyncedDoc(tenantID, owner, originID, originMod string) bool {
+	var one int
+	err := s.db.QueryRow(
+		`SELECT 1 FROM documents WHERE tenant_id = ? AND owner = ? AND origin_id = ? AND origin_mod = ?`,
+		tenantID, owner, originID, originMod).Scan(&one)
+	return err == nil
 }

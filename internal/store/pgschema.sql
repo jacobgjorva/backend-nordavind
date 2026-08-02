@@ -269,8 +269,14 @@ CREATE TABLE IF NOT EXISTS documents (
     filename   text NOT NULL DEFAULT '',
     raw_text   text NOT NULL DEFAULT '',
     title      text NOT NULL DEFAULT '',
+    owner      text NOT NULL DEFAULT '',
+    origin_id  text NOT NULL DEFAULT '',
+    origin_mod text NOT NULL DEFAULT '',
     created_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS owner text NOT NULL DEFAULT '';
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS origin_id text NOT NULL DEFAULT '';
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS origin_mod text NOT NULL DEFAULT '';
 
 -- fts erstatter FTS5-tabellen: settes eksplisitt ved insert/oppdatering.
 CREATE TABLE IF NOT EXISTS knowledge_notes (

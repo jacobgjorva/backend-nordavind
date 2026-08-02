@@ -124,6 +124,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/export/live", s.requireAuth(s.handleCreateLiveExport))
 	mux.HandleFunc("POST /v1/export/onedrive", s.requireAuth(s.handleExportOneDrive))
 	mux.HandleFunc("GET /v1/m365/status", s.requireAuth(s.handleM365Status))
+	mux.HandleFunc("POST /v1/m365/syncdocs", s.requireAuth(s.handleM365SyncDocs))
 	mux.HandleFunc("GET /v1/m365/connect", s.requireAuth(s.handleM365Connect))
 	mux.HandleFunc("DELETE /v1/m365", s.requireAuth(s.handleM365Disconnect))
 	mux.HandleFunc("POST /v1/m365/app", s.requireAdmin(s.handleSaveM365App))
