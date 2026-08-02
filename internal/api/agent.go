@@ -270,6 +270,11 @@ func hasImageMessage(full map[string]any) bool {
 // m.fl.). Reasoning og modell-chunks streames til klienten underveis via
 // relayRound; når modellen begynner på selve svaret, pipes resten rått gjennom.
 func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full map[string]any) {
+	// Bilder OCR-es FØR alt annet: tabellstruktur leses som tekst, ikke
+	// gjettes fra piksler (målt: chat-vision stokket tabellrader). Cachet
+	// på innholds-hash, så historikk-gjensendinger er gratis.
+	s.enrichImagesWithOCR(ctx, full)
+
 	// Fokus: brukerens melding styrer hvilke tabeller som vises med kolonner
 	// når basen er stor.
 	dbCtx := s.dbToolContextFor(ctx, lastUserText(full))
@@ -1532,6 +1537,8 @@ func normalizeImageParts(full map[string]any) {
 					pm["image_url"] = u
 				}
 			}
+			// Intern OCR-markør skal aldri til Mistral.
+			delete(pm, "nordavind_ocr")
 		}
 	}
 }

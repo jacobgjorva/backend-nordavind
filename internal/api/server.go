@@ -87,8 +87,14 @@ func NewServer(cfg config.Config, log *slog.Logger, st *store.Store) *Server {
 // intent-motoren sto igjen på feil vert med et felt Mistral ikke godtar,
 // feilet på hver eneste tur, og all ruting falt stille til fri chat.
 func (s *Server) newUpstreamRequest(ctx context.Context, body io.Reader) (*http.Request, error) {
+	return s.newUpstreamPath(ctx, "/chat/completions", body)
+}
+
+// newUpstreamPath: autentisert POST mot et vilkårlig Mistral-endepunkt
+// (OCR bor på /ocr).
+func (s *Server) newUpstreamPath(ctx context.Context, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		strings.TrimSuffix(s.cfg.UpstreamBaseURL, "/")+"/chat/completions", body)
+		strings.TrimSuffix(s.cfg.UpstreamBaseURL, "/")+path, body)
 	if err != nil {
 		return nil, err
 	}

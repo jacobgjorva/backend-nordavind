@@ -124,3 +124,18 @@ func TestNormalizeImagePartsFlattensObjectForm(t *testing.T) {
 		t.Fatalf("strengformen skulle vært urørt, fikk %q", u)
 	}
 }
+
+// OCR-markøren er intern og skal ALDRI nå Mistral (ukjente felter i
+// content-deler kan gi 400) — normaliseringen stripper den.
+func TestNormalizeStripsOCRMarker(t *testing.T) {
+	full := map[string]any{"messages": []any{
+		map[string]any{"role": "user", "content": []any{
+			map[string]any{"type": "image_url", "image_url": "data:x", "nordavind_ocr": true},
+		}},
+	}}
+	normalizeImageParts(full)
+	pm := full["messages"].([]any)[0].(map[string]any)["content"].([]any)[0].(map[string]any)
+	if _, ok := pm["nordavind_ocr"]; ok {
+		t.Fatal("intern markør lekker mot upstream")
+	}
+}
