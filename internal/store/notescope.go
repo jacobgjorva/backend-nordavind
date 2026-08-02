@@ -260,3 +260,43 @@ func (s *Store) ScopedNeighbors(tenantID string, sc Scope, userID string, seeds 
 	defer rows.Close()
 	return scanScoped(rows)
 }
+
+// ScopedNames er navnene brukeren har lov å se — dokumentfilnavn og
+// lappe-/prosedyretitler. Grunnlaget for nærmeste-treff-hintet («mener du
+// scan_svar.py?») når et internt-utseende navn ikke finnes i treet.
+func (s *Store) ScopedNames(tenantID string, sc Scope, userID string, limit int) ([]ScopedNote, error) {
+	clause, scopeArgs := scopeClause("", sc, userID)
+	args := append([]any{tenantID}, scopeArgs...)
+	args = append(args, limit)
+	rows, err := s.db.Query(
+		`SELECT id, title, substr(text, 1, 200), context, source_type, source_id, 0
+		 FROM knowledge_notes
+		 WHERE tenant_id = ? AND status = 'accepted' AND title != '' AND `+clause+`
+		 LIMIT ?`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	named, err := scanScoped(rows)
+	if err != nil {
+		return nil, err
+	}
+	nclause, nArgs := scopeClause("n.", sc, userID)
+	fargs := append([]any{tenantID}, nArgs...)
+	fargs = append(fargs, limit)
+	frows, err := s.db.Query(
+		`SELECT DISTINCT d.node_id, d.filename, substr(d.title, 1, 200), '', 'document', d.node_id, 0
+		 FROM documents d
+		 JOIN knowledge_notes n ON n.source_id = d.node_id
+		 WHERE d.tenant_id = ? AND n.status = 'accepted' AND `+nclause+`
+		 LIMIT ?`, fargs...)
+	if err != nil {
+		return named, nil
+	}
+	defer frows.Close()
+	files, err := scanScoped(frows)
+	if err != nil {
+		return named, nil
+	}
+	return append(named, files...), nil
+}

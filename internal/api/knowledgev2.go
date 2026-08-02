@@ -48,6 +48,14 @@ func (src v2Source) Neighbors(ctx context.Context, seeds []string, k int) ([]kno
 	return toCandidates(notes), nil
 }
 
+func (src v2Source) Names(ctx context.Context, k int) ([]knowledge.Candidate, error) {
+	notes, err := src.s.store.ScopedNames(src.tenant, src.scope, src.userID, k)
+	if err != nil {
+		return nil, err
+	}
+	return toCandidates(notes), nil
+}
+
 func toCandidates(notes []store.ScopedNote) []knowledge.Candidate {
 	out := make([]knowledge.Candidate, len(notes))
 	for i, n := range notes {

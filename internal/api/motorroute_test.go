@@ -16,7 +16,7 @@ func TestMethodComesFromRoutedFlow(t *testing.T) {
 		"web_fact":          motor.MethodLookup,
 		"data_question":     motor.MethodAnalysis,
 		"smalltalk":         motor.MethodSmalltalk,
-				"m365_files":        motor.MethodNone,
+		"m365_files":        motor.MethodNone,
 		"free_chat":         motor.MethodGround,
 		"uklart":            motor.MethodGround,
 		"":                  motor.MethodNone,

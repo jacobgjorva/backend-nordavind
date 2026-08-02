@@ -42,6 +42,9 @@ type Source interface {
 	// (uttrukket node ↔ dokumentet den kom fra). Frøene er kandidat-id-er
 	// og dokument-id-er; kilden håndhever scope som ellers.
 	Neighbors(ctx context.Context, seeds []string, k int) ([]Candidate, error)
+	// Names er navnene i brukerens scope (filnavn, titler) — grunnlaget for
+	// nærmeste-treff-hintet når et nevnt navn ikke finnes i treet.
+	Names(ctx context.Context, k int) ([]Candidate, error)
 }
 
 // Request er turens spørsmål i kunnskapens øyne.
@@ -150,6 +153,27 @@ func Context(ctx context.Context, emb Embedder, src Source, req Request) (Block,
 	b := render(picked)
 	if len(picked) > 0 && b.Lines == 0 {
 		d.Reason = "treff, men budsjett-tomt"
+	}
+	// Nærmeste-treff: nevner spørsmålet et navne-aktig ord som ligner på
+	// noe i treet uten å BE om det treet fant, får modellen det nærmeste
+	// navnet servert — «mener du scan_svar.py?» i stedet for gjetting.
+	if names, err := src.Names(ctx, 400); err == nil {
+		if hit, token, ok := nameHint(names, q); ok {
+			line := "Brukeren skrev «" + token + "» — nærmeste interne navn er «" + hit.Title + "»"
+			if t := strings.TrimSpace(hit.Text); t != "" {
+				line += " (" + t + ")"
+			}
+			line += ". Er det trolig dette som menes, foreslå det eksplisitt i stedet for å gjette."
+			if b.Text == "" {
+				b.Text = "Relevant intern kunnskap (bedriftens egen). Det denne kunnskapen IKKE dekker, " +
+					"vet du ikke om bedriften — si det ærlig:\n- " + line + "\n"
+				b.Lines = 1
+			} else {
+				b.Text += "- " + line + "\n"
+				b.Lines++
+			}
+			d.Reason += "+navnehint"
+		}
 	}
 	b.Diag = d
 	return b, nil

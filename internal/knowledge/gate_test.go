@@ -77,3 +77,24 @@ func TestRenderTruncatesOversizedTopCandidate(t *testing.T) {
 		t.Fatalf("budsjettet sprengt: %d tegn", len(b.Text))
 	}
 }
+
+// Nærmeste-treff: prod-caset «svar_scan.py» skal peke på «scan_svar.py» —
+// og urelaterte spørsmål skal ALDRI få et navnehint (hint uten grunnlag er
+// gjetting med ny drakt).
+func TestNameHintFindsTransposedFilename(t *testing.T) {
+	names := []Candidate{
+		{ID: "1", Title: "scan_svar.py", Text: "skiller autosvar fra reelle svar"},
+		{ID: "2", Title: "varemottak.docx"},
+		{ID: "3", Title: "Kredittrutinen"},
+	}
+	hit, token, ok := nameHint(names, "Hva er svar_scan.py?")
+	if !ok || hit.Title != "scan_svar.py" || token != "svar_scan.py" {
+		t.Fatalf("forventet scan_svar.py-hint, fikk %q ok=%v", hit.Title, ok)
+	}
+	if _, _, ok := nameHint(names, "hva er rutinen for fakturagodkjenning hos oss?"); ok {
+		t.Fatal("urelatert spørsmål skal ikke få navnehint")
+	}
+	if _, _, ok := nameHint(names, "fortell om scan_svar.py"); ok {
+		t.Fatal("eksakt navn skal ikke hintes — hentingen eier det")
+	}
+}
