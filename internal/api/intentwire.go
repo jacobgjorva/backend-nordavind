@@ -148,6 +148,31 @@ func (s *Server) shadowIntent(user store.User, message string) {
 	}()
 }
 
+// lastUserHasImage: bærer siste brukermelding et bilde? Da er turens
+// innhold LEVERT (og OCR-et), og «tabellen her» peker på bildet — ikke
+// databasen. Målt 2026-08-02: perfekt OCR lå i turen, men data_question-
+// ruting sendte modellen til databasen i stedet.
+func lastUserHasImage(full map[string]any) bool {
+	msgs, _ := full["messages"].([]any)
+	for i := len(msgs) - 1; i >= 0; i-- {
+		mm, ok := msgs[i].(map[string]any)
+		if !ok || mm["role"] != "user" {
+			continue
+		}
+		parts, ok := mm["content"].([]any)
+		if !ok {
+			return false
+		}
+		for _, p := range parts {
+			if pm, ok := p.(map[string]any); ok && pm["type"] == "image_url" {
+				return true
+			}
+		}
+		return false
+	}
+	return false
+}
+
 // demoteExplicitOnly senker et tekst-utløst treff på en ExplicitOnly-flyt til
 // fri chat. Ren funksjon så demoteringen kan testfestes — lærdommen fra
 // metodeteksten som aldri nådde modellen er at wiring uten test er wiring
@@ -306,6 +331,11 @@ func (s *Server) applyIntent(ctx context.Context, user store.User, full map[stri
 	if k2, f2, demoted := demoteExplicitOnly(key, flow); demoted {
 		s.log.Info("intent: eksplisitt-flyt demotert til fri chat", "fra", key)
 		key, flow = k2, f2
+	}
+	// Bilde i turen: innholdet er levert — db-rutingen skal aldri kapre det.
+	if key == "data_question" && lastUserHasImage(full) {
+		key, flow = intent.FreeChatKey, intent.Flows[intent.FreeChatKey]
+		s.log.Info("intent: bilde-tur demotert fra data_question til fri chat")
 	}
 	s.log.Info("intent", "key", key, "method", d.Method, "ms", d.Elapsed.Milliseconds())
 

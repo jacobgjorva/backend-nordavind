@@ -41,3 +41,23 @@ func TestStripAttachmentsKeepsAskDropsBody(t *testing.T) {
 		t.Fatalf("flervedlegg feil: %q", two)
 	}
 }
+
+// Bilde-tur skal aldri kapres av db-rutingen: innholdet ER turen (målt:
+// perfekt OCR lå i konteksten, analyse-metoden tilbød databasen i stedet).
+func TestImageTurnsNeverRouteToDataQuestion(t *testing.T) {
+	withImg := map[string]any{"messages": []any{
+		map[string]any{"role": "user", "content": []any{
+			map[string]any{"type": "text", "text": "kan du gi meg tabellen her?"},
+			map[string]any{"type": "image_url", "image_url": "data:x"},
+		}},
+	}}
+	if !lastUserHasImage(withImg) {
+		t.Fatal("bildet ble ikke gjenkjent")
+	}
+	textOnly := map[string]any{"messages": []any{
+		map[string]any{"role": "user", "content": "hvor mye omsatte vi for i juni?"},
+	}}
+	if lastUserHasImage(textOnly) {
+		t.Fatal("tekst-tur feilmerket som bilde-tur")
+	}
+}

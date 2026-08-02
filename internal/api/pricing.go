@@ -21,10 +21,10 @@ type pricing struct {
 // all kostnad stått på 0.
 // Kilde: mistral.ai/pricing, hentet 2026-07-30.
 var fallbackPerTk = map[string][2]float64{
-	"mistral-large-2512": {2e-6, 6e-6},
-	"pixtral-large-2411": {2e-6, 6e-6},
+	"mistral-large-2512":  {2e-6, 6e-6},
+	"pixtral-large-2411":  {2e-6, 6e-6},
 	"mistral-medium-2604": {1.5e-6, 7.5e-6},
-	"mistral-embed":      {0.1e-6, 0},
+	"mistral-embed":       {0.1e-6, 0},
 }
 
 func newPricing() *pricing {
