@@ -1503,6 +1503,37 @@ type sourceRef struct {
 func stripFlowFields(full map[string]any) {
 	delete(full, flowKeyField)
 	delete(full, flowMaxField)
+	normalizeImageParts(full)
+}
+
+// normalizeImageParts: Mistral krever image_url som REN STRENG; klienten
+// har historisk sendt OpenAI-formen {url: …}, og da svarte La Plateforme
+// 400 på hver bildetur (målt 2026-08-02 — vision var stille død av både
+// feil modellnavn og feil form). Normaliseringen skjer her, rett før
+// upstream, så ENHVER klientform virker.
+func normalizeImageParts(full map[string]any) {
+	msgs, _ := full["messages"].([]any)
+	for _, m := range msgs {
+		mm, ok := m.(map[string]any)
+		if !ok {
+			continue
+		}
+		parts, ok := mm["content"].([]any)
+		if !ok {
+			continue
+		}
+		for _, p := range parts {
+			pm, ok := p.(map[string]any)
+			if !ok || pm["type"] != "image_url" {
+				continue
+			}
+			if obj, ok := pm["image_url"].(map[string]any); ok {
+				if u, ok := obj["url"].(string); ok {
+					pm["image_url"] = u
+				}
+			}
+		}
+	}
 }
 
 // legacyReadTools: verktøy hvis resultat legacy-løkka behandler som lest

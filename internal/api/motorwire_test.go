@@ -103,3 +103,24 @@ func TestEvidenceToolsAreSubsetOfLegacyReadTools(t *testing.T) {
 		}
 	}
 }
+
+// Mistral krever image_url som streng — objektformen {url: …} ga 400 på
+// hver bildetur (målt 2026-08-02). Normaliseringen skal tåle begge former.
+func TestNormalizeImagePartsFlattensObjectForm(t *testing.T) {
+	full := map[string]any{"messages": []any{
+		map[string]any{"role": "user", "content": []any{
+			map[string]any{"type": "text", "text": "hva er dette?"},
+			map[string]any{"type": "image_url", "image_url": map[string]any{"url": "data:image/png;base64,AAA"}},
+		}},
+	}}
+	normalizeImageParts(full)
+	parts := full["messages"].([]any)[0].(map[string]any)["content"].([]any)
+	if u, ok := parts[1].(map[string]any)["image_url"].(string); !ok || u != "data:image/png;base64,AAA" {
+		t.Fatalf("objektformen skulle vært flatet til streng, fikk %#v", parts[1])
+	}
+	// Strengformen er allerede riktig og skal være urørt.
+	normalizeImageParts(full)
+	if u := parts[1].(map[string]any)["image_url"].(string); u != "data:image/png;base64,AAA" {
+		t.Fatalf("strengformen skulle vært urørt, fikk %q", u)
+	}
+}

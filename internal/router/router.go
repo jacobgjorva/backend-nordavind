@@ -19,11 +19,11 @@ const (
 	HeavyModel = MidModel
 	TopModel   = MidModel
 	LightModel = MidModel
-	// VisionModel tolker bilder. UVERIFISERT NAVN: «pixtral-large-2411» ga
-	// «Invalid model» mot La Plateforme, og videre testing ble stengt av
-	// 401 (nøkkelen ser ut til å være scopet). Må bekreftes mot Mistrals
-	// modell-liste før bildeopplasting kan brukes.
-	VisionModel = "pixtral-12b-2409"
+	// VisionModel tolker bilder. MÅLT 2026-08-02: pixtral er ute av
+	// Mistral-katalogen; mistral-large-2512 GODTAR bilder men ser dem ikke
+	// (0/3 på fargetest — svarte «hvit» på alt), mistral-medium-2604 traff
+	// 3/3. Medium 3.5 er katalogverifisert multimodal og eier bildeturene.
+	VisionModel = "mistral-medium-2604"
 )
 
 // Aliaser: vindskalaen navngir nivåene utad, men peker på samme modell.
