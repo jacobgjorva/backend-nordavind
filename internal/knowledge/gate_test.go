@@ -1,6 +1,9 @@
 package knowledge
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // Fordelingene under er syntetiske kopier av kalibreringen (kjøring 1):
 // urelatert klynger 0.66-0.757, relevant ligger 0.77+. Testene fester
@@ -59,5 +62,18 @@ func TestGateKeepsAllRealHitsSorted(t *testing.T) {
 	got := gate(vec, nil)
 	if len(got) != 2 || got[0].Sim < got[1].Sim {
 		t.Fatalf("forventet to treff sortert synkende, fikk %+v", got)
+	}
+}
+
+// Prod-buggen 2026-08-02: én stor bit (2 300 tegn) røk på budsjettet og
+// turen fikk «treff» med null linjer. Store biter trunkeres, droppes aldri.
+func TestRenderTruncatesOversizedTopCandidate(t *testing.T) {
+	big := Candidate{ID: "a", Text: strings.Repeat("kunnskap ", 300)} // ~2700 tegn
+	b := render([]Candidate{big})
+	if b.Lines != 1 || b.Text == "" {
+		t.Fatalf("stor bit skulle vært trunkert inn, fikk %d linjer", b.Lines)
+	}
+	if len(b.Text) > charBudget+100 {
+		t.Fatalf("budsjettet sprengt: %d tegn", len(b.Text))
 	}
 }

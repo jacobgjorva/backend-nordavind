@@ -148,6 +148,9 @@ func Context(ctx context.Context, emb Embedder, src Source, req Request) (Block,
 		}
 	}
 	b := render(picked)
+	if len(picked) > 0 && b.Lines == 0 {
+		d.Reason = "treff, men budsjett-tomt"
+	}
 	b.Diag = d
 	return b, nil
 }
@@ -185,7 +188,14 @@ func render(picked []Candidate) Block {
 		return Block{}
 	}
 	var b strings.Builder
-	b.WriteString("Relevant intern kunnskap (bedriftens egen, del kun med brukere i samme virksomhet):\n")
+	// Ærlighetsregelen bor i BLOKKEN: den finnes nøyaktig når kunnskap er
+	// injisert. Probet 2026-08-02 (kjøring 5): uten regelen diktet modellen
+	// prosjektnavn, personer og rutiner i 3 av 4 agn; med regelen svarte
+	// den ærlig «ikke dokumentert» — og dekkede spørsmål like direkte.
+	b.WriteString("Relevant intern kunnskap (bedriftens egen, del kun med brukere i samme " +
+		"virksomhet). Bygg svaret på dette der det er relevant. Det denne kunnskapen IKKE " +
+		"dekker, vet du ikke om bedriften — si det ærlig i stedet for å anta, og dikt aldri " +
+		"navn, prosjekter eller detaljer:\n")
 	used := make([]string, 0, len(picked))
 	lines := 0
 	for _, c := range picked {
@@ -193,8 +203,21 @@ func render(picked []Candidate) Block {
 		if c.Extra != "" {
 			line += " (fra: " + c.Extra + ")"
 		}
-		if b.Len()+len(line) > charBudget || lines >= maxLines {
+		if lines >= maxLines {
 			break
+		}
+		// En ENKELT bit større enn restbudsjettet trunkeres — den droppes
+		// aldri. Målt i prod: toppkandidaten (en kodebit på 2 300 tegn)
+		// røk på budsjettet, og turen fikk «treff» med null linjer.
+		if rest := charBudget - b.Len(); len(line) > rest {
+			if rest < 200 {
+				break
+			}
+			line = line[:rest]
+			if i := strings.LastIndex(line, " "); i > rest/2 {
+				line = line[:i]
+			}
+			line += " …"
 		}
 		b.WriteString(line + "\n")
 		used = append(used, c.ID)

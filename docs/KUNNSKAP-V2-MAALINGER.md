@@ -109,3 +109,31 @@ Tre fundamentfikser, ikke lapper:
 
 LÆRDOM (samme klasse som «metodeteksten nådde aldri modellen»): grønn eval
 på feil motor er ingen eval. Dual-engine-kode må måles på begge motorer.
+
+## Kjøring 5: ærlighetsregelen i kunnskapsblokken, 2026-08-02
+
+Prod-funn: hentingen var fikset og kunnskapen NÅDDE modellen (1 485 tegn
+injisert), men modellen diktet videre rundt den — naken løkke har ingen
+regel om å bruke det injiserte eller innrømme hull (kjent som åpent punkt 6
+i MOTOR-V6-ÅPENT.md før v2). A/B-probe med kriterier satt før kjøring
+(dikt død i ≥3/4 agn, dekket kontrollspørsmål fortsatt direkte):
+
+```
+                         A (uten regel)              B (med regel)
+prosjekt-agn             DIKTET «Kommune-Auto»,      «ikke dokumentert i
+                         «Lars Berg» m/e-post        tilgjengelig kunnskap»
+person-agn               DIKTET «[Navn]», KST        «ikke dokumentert»
+delvis dekket            brodering                   presis + avgrenset
+helt udekket             DIKTET fakturarutine        DIKTET fortsatt (1/4)
+dekket kontroll          korrekt                     korrekt, like direkte
+```
+
+SKIPET: regelen bor i selve kunnskapsblokken — den eksisterer nøyaktig når
+kunnskap er injisert, ren data, ingen motorendring. KJENT GRENSE: helt
+udekkede spørsmål med blokk til stede dikter fortsatt — men i prod
+injiseres blokken kun ved relevans, så formen er sjelden; står som ærlig
+begrensning, lappes ikke med mer prompt.
+
+Samme kjøring: render-buggen (biter > 1 600 tegn ble DROPPET, ga «treff»
+med 0 linjer) fikset i kode — store biter trunkeres på ordgrense, og
+diagnosen sier «budsjett-tomt» i stedet for å lyve. Eval: 33/34 (97 %).
