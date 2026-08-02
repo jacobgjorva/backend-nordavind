@@ -35,44 +35,6 @@ type extractedNode struct {
 	} `json:"relations"`
 }
 
-// handleExtractKnowledge kjører uttrekk etter en utveksling og returnerer
-// FORSLAGENE til klienten (governance v2): kunnskap lagres først når KILDEN
-// bekrefter med ett klikk i chatten — aldri en admin-kø.
-func (s *Server) handleExtractKnowledge(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.user(w, r)
-	if !ok {
-		return
-	}
-	var req struct {
-		ChatID   string `json:"chat_id"`
-		Question string `json:"question"`
-		Answer   string `json:"answer"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "ugyldig request", http.StatusBadRequest)
-		return
-	}
-	// Hjernen har sin EGEN terskel: den gamle gaten leter etter
-	// forklarings-markører («vi bruker», «rutinen er»), men en påstand som
-	// «Ola er ansvarlig for Vestland Fisk» har ingen av dem — og er nettopp
-	// det hjernen skal lære. Derfor kjører den før gaten, på lengde alene.
-	if s.cfg.BrainMode == "on" && len([]rune(strings.TrimSpace(req.Question))) >= 25 {
-		go func(tenant, uid, chat, q, a string) {
-			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-			defer cancel()
-			ctx = context.WithValue(ctx, userKey, store.User{ID: uid, TenantID: tenant})
-			s.ExtractToBrain(ctx, tenant, uid, q+"\n\n(AI svarte: "+a+")", "chat", chat)
-		}(user.TenantID, user.ID, req.ChatID, req.Question, req.Answer)
-	}
-	if !worthExtracting(req.Question) {
-		// Ikke bruk et LLM-kall på småprat/spørsmål uten bedriftsintern forklaring.
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	proposals := s.extractProposals(r.Context(), user.TenantID, req.Question, req.Answer)
-	writeJSON(w, map[string]any{"proposals": proposals})
-}
-
 // handleConfirmKnowledge lagrer et bekreftet forslag: accepted node + lapp i
 // retrieval-skuffen, med automatisk dublettvakt (nyeste erstatter).
 func (s *Server) handleConfirmKnowledge(w http.ResponseWriter, r *http.Request) {

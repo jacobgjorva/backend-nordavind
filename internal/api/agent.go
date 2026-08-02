@@ -664,25 +664,17 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	tableShown := false
 	var lastCols []string
 	var lastRows [][]string
-	// Hjernen lærer av utvekslingen når turen er over. Backend gjør dette
-	// selv: klienten skal ikke måtte huske å be om det, og hjernen skal
-	// vokse av vanlig bruk — ikke bare når noen trykker på et ikon.
-	userMsg := lastUserText(full)
-	lastAnswer := ""
-	learnFrom := chatID
+	// Passiv turslutt-læring er FJERNET (kunnskap v2, del 5): brukeren eier
+	// hva som huskes — minnekortet og dokumentopplasting er de eneste veiene.
 	defer func() {
 		s.recordUsage(ctx, full, promptTokens, completionTokens, searches, time.Since(start))
-		s.learnFromExchange(ctx, learnFrom, userMsg, lastAnswer)
 	}()
 
 	// Motor v6 (internal/motor) eier vanlig chat når ENGINE=v6. Tar den
 	// ikke turen — flagget er av, flyten har egen leveransekontrakt, eller
 	// et verktøy krevde overlevering — er ingenting sendt til brukeren, og
 	// løkka under kjører som før.
-	if answer, took := s.runMotorV6(ctx, full, emit, dbCtx, narr, &promptTokens, &completionTokens); took {
-		// Hjernen skal lære av motor-turer også: uten dette stopper
-		// kunnskapstreet å vokse i akkurat de samtalene som betyr mest.
-		lastAnswer = answer
+	if _, took := s.runMotorV6(ctx, full, emit, dbCtx, narr, &promptTokens, &completionTokens); took {
 		return
 	}
 
@@ -722,9 +714,6 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			gate = newSentenceGate(groundingBasis(full, toolResults))
 		}
 		calls, usage, content := s.relayRound(resp, emit, streamThis, gate)
-		if content != "" {
-			lastAnswer = content
-		}
 		// Tvunget verktøyvalg gjelder kun én runde.
 		delete(full, "tool_choice")
 		resp.Body.Close()

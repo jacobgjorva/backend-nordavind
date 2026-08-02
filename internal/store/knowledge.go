@@ -153,67 +153,6 @@ func (s *Store) EdgesTouching(tenantID string, ids []string) ([]KnowledgeEdge, e
 	return out, rows.Err()
 }
 
-// AcceptedNodes henter tenantens aksepterte noder med embeddings (for henting).
-func (s *Store) AcceptedNodes(tenantID string) ([]KnowledgeNode, error) {
-	rows, err := s.db.Query(
-		`SELECT id, type, title, summary, embedding FROM knowledge_nodes
-		 WHERE tenant_id = ? AND status = 'accepted'`,
-		tenantID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []KnowledgeNode
-	for rows.Next() {
-		var n KnowledgeNode
-		var emb string
-		if err := rows.Scan(&n.ID, &n.Type, &n.Title, &n.Summary, &emb); err != nil {
-			return nil, err
-		}
-		json.Unmarshal([]byte(emb), &n.Embedding)
-		out = append(out, n)
-	}
-	return out, rows.Err()
-}
-
-// NeighborSummaries henter én-linjes summary for nabonoder (1-hopp) til de
-// oppgitte node-IDene, kun aksepterte.
-func (s *Store) NeighborSummaries(tenantID string, ids []string) ([]KnowledgeNode, error) {
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	q := `SELECT DISTINCT n.id, n.type, n.title, n.summary
-	      FROM knowledge_nodes n
-	      JOIN knowledge_edges e ON (e.to_id = n.id OR e.from_id = n.id)
-	      WHERE n.tenant_id = ? AND n.status = 'accepted' AND (`
-	args := []any{tenantID}
-	for i, id := range ids {
-		if i > 0 {
-			q += " OR "
-		}
-		q += "e.from_id = ? OR e.to_id = ?"
-		args = append(args, id, id)
-	}
-	q += ")"
-
-	rows, err := s.db.Query(q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []KnowledgeNode
-	for rows.Next() {
-		var n KnowledgeNode
-		if err := rows.Scan(&n.ID, &n.Type, &n.Title, &n.Summary); err != nil {
-			return nil, err
-		}
-		out = append(out, n)
-	}
-	return out, rows.Err()
-}
-
 // NodeTitles henter alle node-titler for en tenant (til dedup i uttrekk).
 func (s *Store) NodeTitles(tenantID string) ([]string, error) {
 	rows, err := s.db.Query(
@@ -233,47 +172,6 @@ func (s *Store) NodeTitles(tenantID string) ([]string, error) {
 		out = append(out, t)
 	}
 	return out, rows.Err()
-}
-
-// PendingNodes henter noder som venter på admin-godkjenning, eldste først.
-func (s *Store) PendingNodes(tenantID string) ([]KnowledgeNode, error) {
-	rows, err := s.db.Query(
-		`SELECT n.id, n.type, n.title, n.summary, n.created_at, COALESCE(u.email, '')
-		 FROM knowledge_nodes n LEFT JOIN users u ON u.id = n.user_id
-		 WHERE n.tenant_id = ? AND n.status = 'pending' ORDER BY n.created_at`,
-		tenantID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []KnowledgeNode
-	for rows.Next() {
-		var n KnowledgeNode
-		if err := rows.Scan(&n.ID, &n.Type, &n.Title, &n.Summary, &n.CreatedAt, &n.UserEmail); err != nil {
-			return nil, err
-		}
-		out = append(out, n)
-	}
-	return out, rows.Err()
-}
-
-// AcceptNode godkjenner en node med (evt. redigert) tittel/summary og ny embedding.
-func (s *Store) AcceptNode(id, tenantID, title, summary string, embedding []float32) error {
-	emb, _ := json.Marshal(embedding)
-	res, err := s.db.Exec(
-		`UPDATE knowledge_nodes SET title = ?, summary = ?, embedding = ?, status = 'accepted'
-		 WHERE id = ? AND tenant_id = ? AND status = 'pending'`,
-		title, summary, string(emb), id, tenantID,
-	)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
-	}
-	// Speil den aksepterte fakta-noden inn i retrieval-skuffen.
-	return s.SyncFactNote(tenantID, id, title, summary, embedding)
 }
 
 // UpdateNode redigerer en akseptert node manuelt og reberegner embedding.
@@ -308,24 +206,6 @@ func (s *Store) DeleteNode(id, tenantID string) error {
 	// Doknoder har biter + provenance under seg — rydd dem med.
 	s.DeleteDocumentData(id)
 	// Fjern den speilede lappen fra retrieval-skuffen.
-	s.RemoveNote(id)
-	return nil
-}
-
-// RejectNode markerer en node som avvist (huskes så den ikke foreslås igjen).
-func (s *Store) RejectNode(id, tenantID string) error {
-	res, err := s.db.Exec(
-		`UPDATE knowledge_nodes SET status = 'rejected'
-		 WHERE id = ? AND tenant_id = ? AND status = 'pending'`,
-		id, tenantID,
-	)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
-	}
-	// Avvist fakta skal ikke være søkbart.
 	s.RemoveNote(id)
 	return nil
 }

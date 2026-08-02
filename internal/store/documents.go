@@ -1,7 +1,6 @@
 package store
 
 import (
-	"encoding/json"
 	"time"
 )
 
@@ -108,90 +107,6 @@ func (s *Store) DeleteDocument(tenantID, id string) error {
 		return err
 	}
 	return tx.Commit()
-}
-
-// CreateDocument lagrer et opplastet dokument som én accepted doknode, en rad
-// med provenance (filnavn + råtekst som fallback), og de propositionaliserte
-// bitene under noden — alt i én transaksjon. Returnerer noden (med ID).
-func (s *Store) CreateDocument(tenantID, filename, rawText string, node KnowledgeNode, chunks []DocumentChunk) (KnowledgeNode, error) {
-	nodeID, err := newID()
-	if err != nil {
-		return node, err
-	}
-	node.ID = nodeID
-	node.CreatedAt = time.Now()
-	if node.Type == "" {
-		node.Type = "dokument"
-	}
-	if node.Status == "" {
-		node.Status = "accepted"
-	}
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return node, err
-	}
-	defer tx.Rollback()
-
-	emb, _ := json.Marshal(node.Embedding)
-	if _, err := tx.Exec(
-		`INSERT INTO knowledge_nodes (id, tenant_id, type, title, summary, status, chat_id, user_id, embedding)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		node.ID, tenantID, node.Type, node.Title, node.Summary, node.Status, node.ChatID, node.UserID, string(emb),
-	); err != nil {
-		return node, err
-	}
-
-	if _, err := tx.Exec(
-		`INSERT INTO documents (node_id, tenant_id, filename, raw_text) VALUES (?, ?, ?, ?)`,
-		node.ID, tenantID, filename, rawText,
-	); err != nil {
-		return node, err
-	}
-
-	for i, c := range chunks {
-		chunkID, err := newID()
-		if err != nil {
-			return node, err
-		}
-		cemb, _ := json.Marshal(c.Embedding)
-		if _, err := tx.Exec(
-			`INSERT INTO document_chunks (id, node_id, tenant_id, ordinal, content, embedding)
-			 VALUES (?, ?, ?, ?, ?, ?)`,
-			chunkID, node.ID, tenantID, i, c.Content, string(cemb),
-		); err != nil {
-			return node, err
-		}
-	}
-	return node, tx.Commit()
-}
-
-// AcceptedChunks henter alle dokument-biter for en tenant med embeddings og
-// dokumentets tittel, til ranking i knowledgeContext.
-func (s *Store) AcceptedChunks(tenantID string) ([]DocumentChunk, error) {
-	rows, err := s.db.Query(
-		`SELECT c.id, c.node_id, c.ordinal, c.content, c.embedding, n.title
-		 FROM document_chunks c
-		 JOIN knowledge_nodes n ON n.id = c.node_id
-		 WHERE c.tenant_id = ? AND n.status = 'accepted'`,
-		tenantID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []DocumentChunk
-	for rows.Next() {
-		var c DocumentChunk
-		var emb string
-		if err := rows.Scan(&c.ID, &c.NodeID, &c.Ordinal, &c.Content, &emb, &c.DocTitle); err != nil {
-			return nil, err
-		}
-		json.Unmarshal([]byte(emb), &c.Embedding)
-		out = append(out, c)
-	}
-	return out, rows.Err()
 }
 
 // DeleteDocumentData fjerner biter og provenance-rad under en doknode. Kalles
