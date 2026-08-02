@@ -4,6 +4,7 @@ import (
 	"context"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Leveransen: fra modellens utkast til det brukeren faktisk får.
@@ -164,6 +165,15 @@ func (d *Delivery) Deliver(ctx context.Context, turn *Turn, draft string) {
 				answer = strings.TrimRight(answer, " \n") + "\n\n" + note
 			}
 		}
+	}
+
+	// Tidsgulvet: regnbar alder rettes, foreldede årstall på tidsdeiktiske
+	// spørsmål merkes. Etter tallkontrollen — merknader stables nederst.
+	if fixed, changed := TimeFloor(turn.Question, answer, time.Now()); changed {
+		if d.Log != nil {
+			d.Log.Info("motor v6: tidsgulv grep inn", "metode", string(turn.Method))
+		}
+		answer = fixed
 	}
 
 	d.Answer = StripEmphasis(answer)

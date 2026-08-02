@@ -637,3 +637,20 @@ metodeteksten — posisjon har målt effekt (tenk-regelen), så katalogversjonen
 ble validert separat på alle 12 casene før deploy. Strukturtaket i
 methods_test.go ble hevet 1200 → 1800: proben kjørte metodetekst + regel
 samtidig, så samlet last er målt, og taket vokter fortsatt mot glidning.
+
+## Kjøring 19 — tidsgulvet (2026-08-02)
+
+Målt to ganger i prod: kildenes tidsankre slår dagens dato («fristen i år»
+→ 31. mai 2024; alder «19 år» ved siden av fødselsdato som beviser 21).
+Tre kode-eide grep, ingen prompt:
+
+1. Tidsdeiktiske førstesøk får årstallet på søkestrengen (ferske kilder inn).
+2. AgeFix: fødselsdato + alder i samme svar er ren aritmetikk — koden
+   regner og retter. Konservativt: kun ved nøyaktig én av hver.
+3. StaleNote: tidsdeiktisk spørsmål besvart med kun eldre årstall får én
+   ærlig ferskhetsmerknad (dekningsgulvets mønster).
+
+Enhetstestet på prod-casene ordrett (21/20 år rundt bursdag, frist-2024,
+historiske spørsmål urørt). MERK verifiseringsgrense: v6loop-harnesset
+hopper over leveranselaget (collector.Deliver = utkast), så gulvet kan KUN
+røyk-testes i prod eller enhetstest — harness-svar viser rå utkast.

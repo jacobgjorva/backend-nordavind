@@ -1,7 +1,9 @@
 package api
 
 import (
+	"strconv"
 	"strings"
+	"time"
 
 	"context"
 
@@ -60,6 +62,11 @@ func (s *Server) runMotorV6(ctx context.Context, full map[string]any, emit func(
 	var prefetchRefs []sourceRef
 	if turn.Method == motor.MethodLookup {
 		if q := strings.TrimSpace(stripAttachments(turn.Question)); q != "" {
+			// Tidsdeiktiske oppslag («i år», «hvor gammel») får årstallet på
+			// søket — ferske kilder inn er bedre enn merknader ut.
+			if motor.TimeDeictic(q) {
+				q += " " + strconv.Itoa(time.Now().Year())
+			}
 			if res, refs := s.runWebSearch(ctx, q); res != "" && res != "Søket ga ingen resultater." {
 				injectSystem(full, "Søkeresultater for brukerens egne ord «"+q+"» (hentet automatisk):\n"+res)
 				prefetchRefs = refs
