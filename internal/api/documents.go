@@ -127,12 +127,21 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Propositionalisér til atomære RAG-enheter; fall tilbake til naiv
-	// oppdeling så lagring aldri stopper på en AI-feil.
-	parts, err := s.propositionalize(r.Context(), text)
-	if err != nil {
-		s.log.Warn("propositionalisering feilet, bruker naiv oppdeling", "err", err)
-		parts = chunkText(text)
+	// Inngest-formen følger DOKUMENTTYPEN (doctype.go). Kildekode
+	// proposisjonaliseres ALDRI: filens egen dokumentasjon bevares hel, og
+	// koden lagres ordrett. Prosa går den vanlige veien, med naiv oppdeling
+	// som fallback så lagring aldri stopper på en AI-feil.
+	kind := kindOf(req.Filename)
+	var parts []string
+	if kind == kindCode {
+		parts = codeNotes(req.Filename, text)
+	} else {
+		var err error
+		parts, err = s.propositionalize(r.Context(), text)
+		if err != nil {
+			s.log.Warn("propositionalisering feilet, bruker naiv oppdeling", "err", err)
+			parts = chunkText(text)
+		}
 	}
 	if len(parts) == 0 {
 		writeErr(w, http.StatusBadRequest, "fant ikke tekst å lagre")
@@ -167,7 +176,7 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "kunne ikke lagre dokumentet")
 		return
 	}
-	s.log.Info("dokument lagret", "tittel", title, "lapper", len(notes))
+	s.log.Info("dokument lagret", "tittel", title, "type", string(kind), "lapper", len(notes))
 	// G4: destiller dokumentet i bakgrunnen. v2: prosedyrer som hentbare
 	// lapper med scope-arv, liten modell. v1-veien består til del 5.
 	if s.cfg.KnowledgeMode == "v2" {
