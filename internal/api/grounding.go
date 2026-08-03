@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
@@ -87,6 +88,15 @@ func offendersCore(prose string, sources []string, minDigits int, exactNums bool
 			srcNumList = append(srcNumList, d)
 		}
 	}
+	// ISO-tidsstempler i kildene (Graph: «2026-08-03T07:12:45Z») dekker også
+	// sine egne omskrivinger: lokal tid, time- og minutt-tokens. Uten dette
+	// stryker «kl. 09:12» selv om kildens 07:12Z ER samme tidspunkt.
+	for _, tok := range expandTimeTokens(src) {
+		if !srcNums[tok] {
+			srcNums[tok] = true
+			srcNumList = append(srcNumList, tok)
+		}
+	}
 
 	var offenders []string
 	seen := map[string]bool{}
@@ -143,7 +153,7 @@ func offendersCore(prose string, sources []string, minDigits int, exactNums bool
 			offenders = append(offenders, ent)
 		}
 	}
-	for _, ent := range properNouns(prose) {
+	for _, ent := range proseProperNouns(prose) {
 		key := strings.ToLower(ent)
 		if seen[key] {
 			continue
@@ -405,7 +415,15 @@ func (s *Server) regroundAnswer(ctx context.Context, full map[string]any, draft 
 	*promptTokens += usage.PromptTokens
 	*completionTokens += usage.CompletionTokens
 	content = strings.TrimSpace(content)
-	if content == "" || len(strictOffenders(content, toolResults)) > 0 {
+	// Streng tallsjekk KUN når det var tall som felte utkastet
+	// (fødselsnummer-casen). Ved rene navneavvik dømmes omforsøket med den
+	// vanlige gaten — ellers stryker en mail-parafrase på omformaterte
+	// datoer/klokkeslett og brukeren får fallback-teksten.
+	recheck := strictOffenders
+	if !hasNumberOffender(offenders) {
+		recheck = groundingOffenders
+	}
+	if content == "" || len(recheck(content, toolResults)) > 0 {
 		return ""
 	}
 	return content
@@ -451,7 +469,11 @@ func (s *Server) regroundContinuation(ctx context.Context, full map[string]any, 
 	*promptTokens += usage.PromptTokens
 	*completionTokens += usage.CompletionTokens
 	content = strings.TrimRight(content, " \n")
-	if strings.TrimSpace(content) == "" || len(strictOffenders(content, basis)) > 0 {
+	recheck := strictOffenders
+	if !hasNumberOffender(offenders) {
+		recheck = groundingOffenders
+	}
+	if strings.TrimSpace(content) == "" || len(recheck(content, basis)) > 0 {
 		return ""
 	}
 	if shown != "" && !strings.HasSuffix(shown, " ") && !strings.HasPrefix(content, " ") &&
@@ -561,15 +583,100 @@ func roundToSignificant(v float64, n int) float64 {
 	return math.Round(v*mag) / mag
 }
 
+// proseProperNouns finner navnekandidater i SVARETS prosa. properNouns
+// (dbstrategy) er laget for brukermeldinger — én setning, alt etter første ord
+// er kandidat. Kjørt på flerlinje-prosa dømte den setningsstart som egennavn
+// («Prøvde», «Slettet»). Her teller kun ord MIDT i en setning: forrige tegn
+// før skilletegnet må ikke være setningsslutt, linjeskift eller listepunkt,
+// og skilletegnet er space/tab (aldri linjeskift). Bindestrek holdes i
+// tokenet så sammensetninger («PB-oppdateringen») vurderes som helhet.
+var proseNounRe = regexp.MustCompile(`([^.!?:;\n*•\-–][ \t])([A-ZÆØÅ][A-Za-zÆØÅæøå0-9\-]{3,}(?:[ \t][A-ZÆØÅ][A-Za-zÆØÅæøå0-9\-]+)*)`)
+
+func proseProperNouns(text string) []string {
+	var out []string
+	for _, m := range proseNounRe.FindAllStringSubmatch(text, -1) {
+		if ent := strings.Trim(strings.TrimSpace(m[2]), "-"); len([]rune(ent)) >= 4 {
+			out = append(out, ent)
+		}
+	}
+	return out
+}
+
 // entityCovered: finnes minst ett meningsbærende token av entiteten i
-// grunnlaget? Splitter på mellomrom, bindestrek og skråstrek.
+// grunnlaget? Splitter på mellomrom, bindestrek og skråstrek. Norsk bøying
+// («PB-oppdateringen» mot kildens «PB-oppdatering») dekkes via stamme-treff:
+// stryk vanlige endelser og krev en stamme på minst 5 tegn i kilden.
 func entityCovered(ent, lowSrc string) bool {
 	for _, tok := range strings.FieldsFunc(strings.ToLower(ent), func(r rune) bool {
 		return r == ' ' || r == '-' || r == '/'
 	}) {
-		if len([]rune(tok)) >= 3 && strings.Contains(lowSrc, tok) {
+		r := []rune(tok)
+		if len(r) < 3 {
+			continue
+		}
+		if strings.Contains(lowSrc, tok) {
+			return true
+		}
+		for _, suf := range []string{"ene", "ane", "en", "et", "er", "a", "e", "s"} {
+			if !strings.HasSuffix(tok, suf) {
+				continue
+			}
+			if stem := string(r[:len(r)-len([]rune(suf))]); len([]rune(stem)) >= 5 && strings.Contains(lowSrc, stem) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasNumberOffender: minst ett avvik er et tall (speilbildet av
+// hasNameOffender) — da skal omforsøket fortsatt dømmes strengt.
+func hasNumberOffender(offenders []string) bool {
+	for _, o := range offenders {
+		if d := normDigits(o); d != "" && len(d) >= len(strings.ReplaceAll(o, " ", ""))/2 {
 			return true
 		}
 	}
 	return false
+}
+
+var isoTimeRe = regexp.MustCompile(`(\d{4})-(\d{2})-(\d{2})[t ](\d{2}):(\d{2})(?::(\d{2}))?(z|[+-]\d{2}:?\d{2})?`)
+
+// expandTimeTokens leser ISO-tidsstempler ut av (lowercase) kildetekst og gir
+// siffer-tokens for tidspunktet i norsk lokaltid: timeminutt, time, minutt,
+// dag og måned — med og uten ledende null.
+func expandTimeTokens(src string) []string {
+	loc, err := time.LoadLocation("Europe/Oslo")
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, m := range isoTimeRe.FindAllStringSubmatch(src, -1) {
+		y, _ := strconv.Atoi(m[1])
+		mo, _ := strconv.Atoi(m[2])
+		d, _ := strconv.Atoi(m[3])
+		h, _ := strconv.Atoi(m[4])
+		mi, _ := strconv.Atoi(m[5])
+		se, _ := strconv.Atoi(m[6])
+		zone := time.UTC
+		if off := m[7]; off != "" && off != "z" {
+			sign := 1
+			if off[0] == '-' {
+				sign = -1
+			}
+			hh, _ := strconv.Atoi(off[1:3])
+			mm, _ := strconv.Atoi(strings.TrimPrefix(off[3:], ":"))
+			zone = time.FixedZone(off, sign*(hh*3600+mm*60))
+		}
+		t := time.Date(y, time.Month(mo), d, h, mi, se, 0, zone).In(loc)
+		for _, f := range []string{"1504", "15", "04", "02", "01"} {
+			tok := t.Format(f)
+			out = append(out, tok)
+			// Uten ledende null («09» → «9») så «kl. 9» også dekkes.
+			if trimmed := strings.TrimLeft(tok, "0"); trimmed != "" && trimmed != tok {
+				out = append(out, trimmed)
+			}
+		}
+	}
+	return out
 }
