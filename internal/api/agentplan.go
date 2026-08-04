@@ -57,6 +57,11 @@ type agentPlan struct {
 	Watch     string      `json:"watch"`      // hva som skal vurderes i resultatet
 	AlertRule string      `json:"alert_rule"` // når det er verdt å varsle brukeren
 
+	// WatchRules: tallfestede varselregler som evalueres i kode hver kjøring —
+	// se watchrules.go. Finnes de, er det KODEN som avgjør varselet; prosa-
+	// regelen over er reserven for det som ikke kan tallfestes.
+	WatchRules []watchRule `json:"watch_rules,omitempty"`
+
 	Chart     *agentChart `json:"chart,omitempty"`      // valgfri graf
 	ChartSlug string      `json:"chart_slug,omitempty"` // widgeten grafen bor i
 
@@ -187,6 +192,25 @@ var savePlanTool = map[string]any{
 					"type":        "string",
 					"description": "når resultatet er verdt å varsle om, med terskler der det gir mening",
 				},
+				"watch_rules": map[string]any{
+					"type": "array",
+					"description": "tallfestede varselregler — bruk ALLTID når varselet kan uttrykkes som " +
+						"tall. De evalueres i kode og er det som faktisk utløser varsler; alert_rule-teksten " +
+						"er reserven for det som ikke kan tallfestes.",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"step":   map[string]any{"type": "integer", "description": "sql-steget regelen leser (1 = første)"},
+							"column": map[string]any{"type": "string", "description": "kolonnen som måles — MÅ finnes i stegets resultat"},
+							"agg":    map[string]any{"type": "string", "description": "last, first, sum, avg, min, max eller count — utelatt = last"},
+							"op":     map[string]any{"type": "string", "description": ">, >=, <, <=, = eller !="},
+							"value":  map[string]any{"type": "number", "description": "terskelen"},
+							"pct":    map[string]any{"type": "boolean", "description": "true: regelen gjelder prosent-endring siden forrige kjøring, ikke absoluttverdien"},
+							"label":  map[string]any{"type": "string", "description": "hva målingen heter i varselet, f.eks. «omsetning siste 7 dager»"},
+						},
+						"required": []string{"step", "op", "value"},
+					},
+				},
 				"mail": map[string]any{
 					"type": "object",
 					"description": "KUN når oppgaven eksplisitt ber agenten sende e-post: fast mottaker " +
@@ -240,7 +264,9 @@ const planSystem = "Du er i SPINUP: du skal ikke levere svaret på oppgaven, du 
 	"Kroppen skrives automatisk per kjøring. Ikke lag egne steg for e-post.\n" +
 	"AVSLUTT med save_plan: stegene som skal kjøres hver gang, hva som skal vurderes (watch), når " +
 	"det er verdt å varsle brukeren (alert_rule, med konkrete terskler der det gir mening), og " +
-	"eventuelt chart. " +
+	"eventuelt chart. Kan varselet tallfestes (terskel eller prosent-endring), legg det OGSÅ som " +
+	"watch_rules — de evalueres i kode og er det som faktisk utløser varsler; sørg for at steget " +
+	"regelen peker på har kolonnen som måles. " +
 	"Server-siden prøvekjører stegene dine — får du dem i retur med feil, rett dem og lagre på nytt."
 
 // handleGetAgentPlan returnerer agentens kompilerte plan til flyt-visningen.
@@ -568,6 +594,9 @@ func (s *Server) validatePlan(ctx context.Context, dbCtx *dbToolCtx, rawArgs str
 		problems = append(problems, "alert_rule mangler — beskriv når brukeren skal varsles.")
 	}
 
+	// Prøvekjøringens sql-resultater per steg — varselreglene valideres mot
+	// de faktiske kolonnene, ikke mot hva modellen tror finnes.
+	trial := map[int]string{}
 	for i, st := range plan.Steps {
 		n := i + 1
 		switch strings.ToLower(strings.TrimSpace(st.Kind)) {
@@ -584,7 +613,9 @@ func (s *Server) validatePlan(ctx context.Context, dbCtx *dbToolCtx, rawArgs str
 			if !res.ok() {
 				problems = append(problems, fmt.Sprintf("Steg %d (%s) feilet ved prøvekjøring: %s",
 					n, st.Label, truncate(res.text, 600)))
+				continue
 			}
+			trial[n] = res.text
 		case "fetch":
 			if strings.TrimSpace(st.URL) == "" {
 				problems = append(problems, fmt.Sprintf("Steg %d (fetch) mangler url.", n))
@@ -604,6 +635,7 @@ func (s *Server) validatePlan(ctx context.Context, dbCtx *dbToolCtx, rawArgs str
 		}
 	}
 	problems = append(problems, s.validateChart(ctx, dbCtx, plan.Chart)...)
+	problems = append(problems, validateWatchRules(plan.WatchRules, plan, trial)...)
 	if m := plan.Mail; m != nil {
 		if !strings.Contains(m.ToEmail, "@") {
 			problems = append(problems, "Mail-mottakeren mangler gyldig e-postadresse.")
@@ -764,7 +796,19 @@ func planSummary(p agentPlan) string {
 	if p.Approach != "" {
 		b.WriteString("\n" + p.Approach + "\n")
 	}
-	b.WriteString("\nJeg sier fra når: " + p.AlertRule)
+	if len(p.WatchRules) > 0 {
+		b.WriteString("\nJeg sier fra når:\n")
+		for _, r := range p.WatchRules {
+			unit := ""
+			if r.Pct {
+				unit = " % endring"
+			}
+			fmt.Fprintf(&b, "- %s %s %s%s\n", ruleName(r), r.Op, formatMeasure(r.Value), unit)
+		}
+		b.WriteString("Reglene måles i kode mot ferske tall hver kjøring.")
+	} else {
+		b.WriteString("\nJeg sier fra når: " + p.AlertRule)
+	}
 	return b.String()
 }
 
@@ -999,6 +1043,21 @@ func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (planRun, 
 		}
 		if err := json.Unmarshal([]byte(c.args), &rep); err == nil {
 			run.alert = rep.Alert
+			// Kildekontroll på prosaen: en headless rapport har ingen bruker som
+			// kan protestere, så diktede navn byttes med tabellen fra kilden.
+			basis := []string{pd.text, snapshotText(a.LastSnapshot), a.Task, plan.Watch, plan.AlertRule}
+			if !gateAgentSummary(rep.Summary, basis) {
+				s.log.Warn("agent-rapport: prosa holdt tilbake av kildekontrollen", "agent", a.ID)
+				rep.Summary = "Tallene under er hentet direkte fra kildene."
+				if rep.TableStep == 0 {
+					for i, st := range pd.steps {
+						if st.kind == "sql" {
+							rep.TableStep = i + 1
+							break
+						}
+					}
+				}
+			}
 			run.output = composeReport(rep.Summary, rep.Stats, rep.TableStep, pd.steps, plan.ChartSlug)
 			// Mail-plan: send e-posten med kroppen tolkningen skrev.
 			if plan.Mail != nil && strings.TrimSpace(rep.MailBody) != "" {
@@ -1011,6 +1070,19 @@ func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (planRun, 
 			}
 		}
 		break
+	}
+
+	// Vaktbikkja: har planen tallfestede regler, er det KODEN som avgjør
+	// varselet — modellens alert-bool overstyres, og Funn-linjene skrives
+	// deterministisk fra målt verdi mot terskel.
+	if len(plan.WatchRules) > 0 {
+		alert, findings, blind := evaluateWatchRules(plan.WatchRules, pd.steps, a.LastSnapshot)
+		run.alert = alert
+		run.output = funnBlock(findings) + run.output
+		if len(blind) > 0 {
+			s.log.Warn("varselregler kunne ikke måles", "agent", a.ID, "regler", strings.Join(blind, ", "))
+			run.output += "\n\n_Obs: regelen for " + strings.Join(blind, ", ") + " lot seg ikke måle denne kjøringen._"
+		}
 	}
 
 	s.store.SetAgentSnapshot(a.ID, pd.snapshot)
