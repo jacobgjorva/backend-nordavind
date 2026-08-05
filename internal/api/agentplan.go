@@ -1043,6 +1043,9 @@ func (s *Server) executeAgentPlan(ctx context.Context, a store.Agent) (planRun, 
 		}
 		if err := json.Unmarshal([]byte(c.args), &rep); err == nil {
 			run.alert = rep.Alert
+			// Emoji-policyen gjelder også headless rapporter (kun prosaen —
+			// tabeller og stat-kort rendres fra kildedata og røres aldri).
+			rep.Summary = enforceEmojiMessage(rep.Summary)
 			// Kildekontroll på prosaen: en headless rapport har ingen bruker som
 			// kan protestere, så diktede navn byttes med tabellen fra kilden.
 			basis := []string{pd.text, snapshotText(a.LastSnapshot), a.Task, plan.Watch, plan.AlertRule}

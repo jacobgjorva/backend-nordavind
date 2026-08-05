@@ -855,7 +855,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			case trimmed == "" && !actionTool:
 				emit(contentSSE(backstopGraceful))
 			default:
-				final := stripForeignHead(content)
+				final := enforceEmojiMessage(stripForeignHead(content))
 				// Kapitulasjonsvakten FØR kildekontrollen: svargrenene under er
 				// ikke gjensidig utelukkende (målt at vakten aldri traff da den
 				// lå i én av dem). Erklærer modellen oppgaven umulig ETTER at
@@ -931,7 +931,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 					}
 					step, _ := json.Marshal(map[string]any{"nordavind_step": "Dobbeltsjekker mot kildene"})
 					emit("data: " + string(step))
-					final = s.regroundAnswer(ctx, full, final, off, basis, &promptTokens, &completionTokens)
+					final = enforceEmojiMessage(s.regroundAnswer(ctx, full, final, off, basis, &promptTokens, &completionTokens))
 					if final == "" {
 						// Omforsøket holdt heller ikke: vis kilden i stedet for
 						// utrygg prosa — tabellen for data, kildehenvisning ellers.

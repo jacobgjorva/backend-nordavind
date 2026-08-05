@@ -264,15 +264,16 @@ func toolDescriptions(full map[string]any) []string {
 // setningen er komplett og sjekket mot grunnlaget. Ren tekst i minnet —
 // setninger uten slike kandidater får null ekstra ventetid.
 type sentenceGate struct {
-	sources   []string
-	buf       string          // ennå ikke sluppet
-	shown     strings.Builder // alt brukeren har sett
-	held      bool            // udekket påstand funnet — alt videre holdes igjen
-	offenders []string
+	sources     []string
+	buf         string          // ennå ikke sluppet
+	shown       strings.Builder // alt brukeren har sett
+	held        bool            // udekket påstand funnet — alt videre holdes igjen
+	offenders   []string
+	emojiBudget int // gjenstående emoji fra det tillatte settet (emoji.go)
 }
 
 func newSentenceGate(sources []string) *sentenceGate {
-	return &sentenceGate{sources: sources}
+	return &sentenceGate{sources: sources, emojiBudget: emojiPerMessage}
 }
 
 // feed tar imot neste bit av streamen og returnerer det som trygt kan vises nå.
@@ -353,6 +354,7 @@ func (g *sentenceGate) release(s string, out *strings.Builder) {
 	if s == "" {
 		return
 	}
+	s = enforceEmojiPolicy(s, &g.emojiBudget)
 	out.WriteString(s)
 	g.shown.WriteString(s)
 }
