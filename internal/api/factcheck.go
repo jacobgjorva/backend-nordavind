@@ -17,12 +17,22 @@ import (
 const factJudgeSystem = "Du er faktakontrollør for en samtaleassistent. GRUNNLAGET er alt assistenten " +
 	"lovlig kan bygge på: brukerens meldinger, vedlagte dokumenter og verktøydata denne samtalen. " +
 	"Du får også BRUKERENS SPØRSMÅL, assistentens SVARUTKAST og FLAGGEDE VERDIER som ikke ble funnet " +
-	"ordrett i grunnlaget. Vurder hver flagget verdi: (a) grei beregning, telling, omformulering av noe " +
-	"i grunnlaget, eller ukontroversiell allmennkunnskap (etablerte begreper og navn) — eller (b) en " +
-	"påstand uten dekning: dikting. Avrunding, formatering, summering og differanser av tall som står " +
-	"i grunnlaget er ALLTID (a) — aldri flagg et tall fordi det er avrundet eller skrevet annerledes. Fakta om brukeren selv (alder, fødselsår, navn, relasjoner) eller om " +
-	"brukerens virksomhet og data er ALLTID (b) når de ikke står i grunnlaget — å «anslå» slikt er aldri " +
-	"lov. Svar KUN med JSON: {\"ok\":true/false,\"problemer\":[\"kort beskrivelse per udekket påstand\"]}"
+	"ordrett i grunnlaget. Du dømmer KUN de flaggede verdiene — én dom per verdi, aldri noe annet i svaret. " +
+	"For hver flagget verdi: ok=true hvis den er grei beregning, telling, avrunding, omformulering av noe " +
+	"i grunnlaget, eller ukontroversiell allmennkunnskap (etablerte begreper og navn); ok=false kun hvis " +
+	"verdien er en faktapåstand UTEN dekning: dikting. Avrunding, formatering, summering og differanser av " +
+	"tall som står i grunnlaget er ALLTID ok=true — aldri underkjenn et tall fordi det er avrundet eller " +
+	"skrevet annerledes. Fakta om brukeren selv (alder, fødselsår, navn, relasjoner) eller om brukerens " +
+	"virksomhet og data er ALLTID ok=false når de ikke står i grunnlaget — å «anslå» slikt er aldri lov. " +
+	// Drive-stilen (2026-08-06): assistenten SKAL ta stilling. Dommeren
+	// underkjente råd og hypoteser som «uten belegg», og svaret falt til naken
+	// tabell — målt i drive-eval. Vurderinger er ikke faktapåstander.
+	"VIKTIG: assistenten SKAL vurdere, anbefale, prioritere og foreslå. Vurderinger, råd, hypoteser, " +
+	"tilbud om videre arbeid og verdiord («lavt», «svakt», «bør», «neppe verdt») er IKKE faktapåstander — " +
+	"de skal ALDRI underkjennes, heller ikke når begrunnelsen går ut over grunnlaget. Du vurderer bare om " +
+	"selve TALLET eller NAVNET har dekning. " +
+	"Svar KUN med JSON: {\"dommer\":[{\"verdi\":\"<den flaggede verdien ordrett>\",\"ok\":true/false," +
+	"\"grunn\":\"kort, kun ved ok=false\"}]}"
 
 // judgeClaims: ok=true betyr at alle flaggede verdier har dekning (eller er
 // lovlige beregninger). Dommer-feil = slipp gjennom (fail-open som ellers).
@@ -73,12 +83,76 @@ func (s *Server) judgeClaims(ctx context.Context, question, answer string, offen
 	if start < 0 || end <= start {
 		return true, nil
 	}
+	return parseFactVerdicts(raw[start:end+1], offenders)
+}
+
+// parseFactVerdicts leser dommen og HÅNDHEVER mandatet i kode: bare dommer som
+// peker på en faktisk flagget verdi teller. Dommeren gled tidligere ut i å
+// underkjenne anbefalinger og premisser («minstesum på 500 kroner mangler
+// belegg»), og et helt gyldig svar med vurdering falt til naken tabell.
+// Uparsbart eller tomt = slipp gjennom (fail-open som ellers).
+func parseFactVerdicts(jsonBody string, offenders []string) (bool, []string) {
 	var v struct {
-		OK        bool     `json:"ok"`
+		Dommer []struct {
+			Verdi string `json:"verdi"`
+			OK    bool   `json:"ok"`
+			Grunn string `json:"grunn"`
+		} `json:"dommer"`
+		// Bakoverkompatibelt: eldre dommer-svar (ok + problemer).
+		OK        *bool    `json:"ok"`
 		Problemer []string `json:"problemer"`
 	}
-	if json.Unmarshal([]byte(raw[start:end+1]), &v) != nil {
+	if json.Unmarshal([]byte(jsonBody), &v) != nil {
 		return true, nil
 	}
-	return v.OK, v.Problemer
+	if len(v.Dommer) == 0 {
+		if v.OK != nil && !*v.OK && len(v.Problemer) > 0 {
+			// Gammelt format: behold bare problemer som nevner en flagget verdi.
+			kept := filterByOffenders(v.Problemer, offenders)
+			return len(kept) == 0, kept
+		}
+		return true, nil
+	}
+	var problems []string
+	for _, d := range v.Dommer {
+		if d.OK || !mentionsOffender(d.Verdi, offenders) {
+			continue
+		}
+		msg := strings.TrimSpace(d.Verdi)
+		if g := strings.TrimSpace(d.Grunn); g != "" {
+			msg += ": " + g
+		}
+		problems = append(problems, msg)
+	}
+	return len(problems) == 0, problems
+}
+
+// mentionsOffender: gjelder teksten en av verdiene kildekontrollen faktisk
+// flagget? Sammenlignes normalisert, så «453 000» og «453000» er samme verdi.
+func mentionsOffender(text string, offenders []string) bool {
+	low := strings.ToLower(text)
+	lowDigits := normDigits(text)
+	for _, o := range offenders {
+		o = strings.TrimSpace(o)
+		if o == "" {
+			continue
+		}
+		if strings.Contains(low, strings.ToLower(o)) {
+			return true
+		}
+		if d := normDigits(o); d != "" && lowDigits != "" && strings.Contains(lowDigits, d) {
+			return true
+		}
+	}
+	return false
+}
+
+func filterByOffenders(problems, offenders []string) []string {
+	var kept []string
+	for _, p := range problems {
+		if mentionsOffender(p, offenders) {
+			kept = append(kept, p)
+		}
+	}
+	return kept
 }
