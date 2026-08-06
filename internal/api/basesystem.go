@@ -53,6 +53,15 @@ const coreSystem = "Svar KORTEST MULIG, men alltid i hele, naturlige setninger �
 	"navn, prosjekter eller detaljer. Dette gjelder også når spørsmålet ligner på noe du HAR " +
 	"kunnskap om — svar da kun for det kunnskapen faktisk gjelder."
 
+// formatRule (avtalt 2026-08-06): markdown-detaljene som gjør svar intuitive.
+// Frontend rendrer ```copy som kopier-chip, `kode` som kodetag og > som sitat.
+const formatRule = " FORMAT: en enkeltverdi brukeren sannsynligvis skal kopiere (e-postadresse, " +
+	"ordre-/fakturanummer, IBAN, lenke, kode) settes i en egen blokk: ```copy\\n<verdien>\\n``` — " +
+	"maks én per svar, aldri for beløp eller tall som bare leses. Nøkkelreferanser i løpende tekst " +
+	"(kolonnenavn, tabellnavn, filnavn, ID-er) settes i `backticks`. Siterer du en kilde ordrett " +
+	"(dokument, e-post, avtale), sett sitatet på egen linje med > foran. Aldri pynt for pyntens skyld — " +
+	"de fleste svar trenger ingen av delene."
+
 // searchRule: kun når modellen faktisk har websøk.
 const searchRule = " GJETT ALDRI på fakta. For ENHVER konkret opplysning om " +
 	"virkeligheten — navn, tall, datoer, priser, statistikk, hendelser, «hvem/når/hvor mye/" +
@@ -108,6 +117,7 @@ func baseSystem(opts systemOpts) string {
 	var b strings.Builder
 	b.WriteString("I dag er " + time.Now().Format("2006-01-02") + ". ")
 	b.WriteString(coreSystem)
+	b.WriteString(formatRule)
 	if opts.search {
 		b.WriteString(searchRule)
 	}
