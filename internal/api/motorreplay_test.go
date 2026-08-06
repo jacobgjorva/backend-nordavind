@@ -124,16 +124,15 @@ func TestStripEmphasisOnRealAnswers(t *testing.T) {
 	}
 }
 
-// Dekningsgulvet må være STILLE på alle de ti ekte, forankrede svarene —
-// en merknad på et korrekt svar underminerer tilliten gulvet skal bygge.
-func TestCoverageNoteSilentOnRealGroundedAnswers(t *testing.T) {
+// Invarianten må være STILLE på alle de ti ekte, forankrede svarene — et
+// falskt utslag ville nå HOLDT et korrekt svar tilbake, ikke bare merket
+// det. Kravet er derfor hardere enn før: null avvik på forankrede svar.
+func TestVerifierSilentOnRealGroundedAnswers(t *testing.T) {
 	v := motorVerifier{}
 	for _, c := range loadReplay(t) {
 		basis := append(append([]string{}, c.Evidence...), c.Question)
-		off := v.Unsupported(c.Answer, basis)
-		turn := &motor.Turn{Method: motor.MethodAdvice, Evidence: c.Evidence}
-		if note := motor.CoverageNote(motor.MethodAdvice, turn, off); note != "" {
-			t.Errorf("%s: falsk merknad på forankret svar: %q (avvik %v)", c.ID, note, off)
+		if off := v.Unsupported(c.Answer, basis); len(off) > 0 {
+			t.Errorf("%s: falskt avvik på forankret svar: %v", c.ID, off)
 		}
 	}
 }

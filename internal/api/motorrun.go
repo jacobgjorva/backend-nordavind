@@ -69,6 +69,9 @@ func (s *Server) runMotorV6(ctx context.Context, full map[string]any, emit func(
 			}
 			if res, refs := s.runWebSearch(ctx, q); res != "" && res != "Søket ga ingen resultater." {
 				injectSystem(full, "Søkeresultater for brukerens egne ord «"+q+"» (hentet automatisk):\n"+res)
+				// Førstesøket ER verktøybevis: uten dette regnet tallkontrollen
+				// et prefetch-belagt svar som hukommelse.
+				turn.Evidence = append(turn.Evidence, res)
 				prefetchRefs = refs
 				s.log.Info("motor v6: førstesøk", "query", q, "kilder", len(refs))
 			}
@@ -84,6 +87,7 @@ func (s *Server) runMotorV6(ctx context.Context, full map[string]any, emit func(
 	tools := &motorTools{s: s, dbCtx: dbCtx, narr: narr, emit: emit, state: state, floors: floors}
 	out := apiEmitter{emit: emit, narr: narr}
 
+	convo := recentTurn(full)
 	delivery := &motor.Delivery{
 		Out:      out,
 		Floors:   floors,
@@ -94,7 +98,8 @@ func (s *Server) runMotorV6(ctx context.Context, full map[string]any, emit func(
 		Compress: &motorCompress{s: s, promptTokens: promptTokens, completionTokens: completionTokens},
 		Log:      s.log,
 		Limit:    motorAnswerLimit(turn.Method, full),
-		Convo:    recentTurn(full),
+		Convo:    convo,
+		Reground: (&motorReground{s: s, promptTokens: promptTokens, completionTokens: completionTokens}).Reground,
 		EmptyExplain: func() string {
 			return floors.dbExplain()
 		},
@@ -106,6 +111,9 @@ func (s *Server) runMotorV6(ctx context.Context, full map[string]any, emit func(
 		Out:     out,
 		Deliver: delivery,
 		Log:     s.log,
+		Recheck: func(t *motor.Turn, draft string) string {
+			return memoryRecheck(t, draft, convo)
+		},
 	}
 
 	// Førstesøkets kilder inn i kilde-pillen — de ER turens grunnlag.

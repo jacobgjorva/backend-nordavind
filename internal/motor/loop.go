@@ -42,6 +42,13 @@ type Engine struct {
 	Deliver Deliverer
 	// Log er valgfri; nil er lovlig og gjør motoren stille.
 	Log Logger
+
+	// Recheck er hukommelsesvakta (invariant 2026-08-06): når modellen
+	// svarer med tekst, avgjør KODEN på fakta (kildekrevende metode, null
+	// evidens, udekkede tall) om utkastet er et hukommelsessvar. Returnerer
+	// korreksmeldingen som tvinger én verktøyrunde, eller tom streng.
+	// Valgfri; nil = av (fail-open, som alle andre gulv).
+	Recheck func(turn *Turn, draft string) string
 }
 
 // Logger er den lille flaten motoren trenger av en logger.
@@ -82,6 +89,8 @@ func (e *Engine) Run(ctx context.Context, payload map[string]any, turn *Turn) (h
 		turn.Rounds++
 
 		resp, err := e.Model.Call(ctx, ModelRequest{Payload: payload})
+		// Et tvunget verktøyvalg gjelder kun runden det ble satt for.
+		delete(payload, "tool_choice")
 		if err != nil {
 			e.logf(true, "motor v6: upstream feilet", "err", err, "runde", turn.Rounds)
 			// Første runde: ingenting er levert, og turen er trygg å gi
@@ -99,6 +108,22 @@ func (e *Engine) Run(ctx context.Context, payload map[string]any, turn *Turn) (h
 
 		// Ferdig arbeidet: modellen svarer med tekst i stedet for verktøykall.
 		if resp.Done() {
+			// Hukommelsesvakta: fakta-basert (aldri formulering) — ett tvunget
+			// verktøyforsøk når svaret bærer tall ingen kilde dekker. Krever
+			// at payloaden faktisk HAR verktøy (tool_choice uten tools = 422).
+			if e.Recheck != nil && !turn.MemoryRetried && turn.Rounds < budget.Rounds && payloadHasTools(payload) {
+				if corr := e.Recheck(turn, resp.Text); corr != "" {
+					turn.MemoryRetried = true
+					e.logf(true, "motor v6: hukommelsessvar avvist, tvinger verktøyrunde",
+						"metode", string(turn.Method), "runde", turn.Rounds)
+					msgs, _ := payload["messages"].([]any)
+					payload["messages"] = append(msgs,
+						map[string]any{"role": "assistant", "content": resp.Text},
+						map[string]any{"role": "user", "content": corr})
+					payload["tool_choice"] = "required"
+					continue
+				}
+			}
 			e.Deliver.Deliver(ctx, turn, resp.Text)
 			return false
 		}
@@ -125,6 +150,12 @@ func (e *Engine) Run(ctx context.Context, payload map[string]any, turn *Turn) (h
 	e.logf(false, "motor v6: rundetak nådd", "metode", string(turn.Method), "runder", turn.Rounds)
 	e.Deliver.Deliver(ctx, turn, "")
 	return false
+}
+
+// payloadHasTools: har forespørselen faktisk verktøy å tvinge?
+func payloadHasTools(payload map[string]any) bool {
+	tools, ok := payload["tools"].([]any)
+	return ok && len(tools) > 0
 }
 
 // runTools utfører modellens kall og skriver resultatene tilbake i

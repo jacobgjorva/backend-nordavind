@@ -174,6 +174,9 @@ type Turn struct {
 	// UsedTool: turen kalte minst ett verktøy. Skiller «fant ingenting»
 	// fra «prøvde ingenting» i den ærlige bunnen.
 	UsedTool bool
+	// MemoryRetried: hukommelsesvakta har alt tvunget én verktøyrunde
+	// denne turen — den får aldri en runde til (ingen løkker på løkka).
+	MemoryRetried bool
 	// Handoff: turen tilhører en annen løype og er ikke levert her.
 	Handoff bool
 }

@@ -147,6 +147,76 @@ func (motorVerifier) Unsupported(answer string, basis []string) []string {
 	return nums
 }
 
+// memoryRecheck er hukommelsesvakta (invarianten 2026-08-06): fakta-basert
+// avgjørelse om et tekstsvar er hukommelsestall i en kildekrevende metode.
+// Returnerer korreksmeldingen som tvinger én verktøyrunde, ellers tom.
+func memoryRecheck(turn *motor.Turn, draft, convo string) string {
+	if motor.BudgetFor(turn.Method).Searches == 0 || turn.Method == motor.MethodNone {
+		return ""
+	}
+	if len(turn.Evidence) > 0 {
+		return ""
+	}
+	// Grunnlaget er spørsmålet og samtalen — en oppfølging som gjentar
+	// forrige turs tall er ikke hukommelse.
+	if len(motorVerifier{}.Unsupported(draft, []string{turn.Question, convo})) == 0 {
+		return ""
+	}
+	return "STOPP: svaret ditt inneholder tall du ikke har hentet fra noen kilde denne turen. " +
+		"Hent de faktiske tallene med verktøyene FØRST (databasen for bedriftens egne tall, søk for " +
+		"eksterne), og svar deretter KUN med tall som står i verktøyresultatene. Får du ikke hentet " +
+		"dem, si det ærlig — aldri anslå."
+}
+
+// motorReground er leveransens omforsøk: skriv svaret på nytt uten de
+// udekkede tallene. ETT kall; resultatet re-verifiseres i kode av kalleren.
+type motorReground struct {
+	s                              *Server
+	promptTokens, completionTokens *int
+}
+
+func (r *motorReground) Reground(ctx context.Context, turn *motor.Turn, answer string, offenders []string) string {
+	basis := strings.Join(turn.Evidence, "\n---\n")
+	if rr := []rune(basis); len(rr) > 6000 {
+		basis = string(rr[:6000])
+	}
+	payload := map[string]any{
+		"model": router.MidModel,
+		"messages": []any{
+			map[string]any{"role": "system", "content": "Du renskriver et svar så det er kildefast. " +
+				"Behold form, lengde og eventuelle vurderinger/tilbud, men FJERN eller erstatt tallene " +
+				"som ikke står i grunnlaget. Bruk KUN tall som står ordrett i grunnlaget."},
+			map[string]any{"role": "user", "content": "GRUNNLAGET:\n" + basis +
+				"\n\nSVARET:\n" + answer + "\n\nTALL UTEN DEKNING: " + strings.Join(offenders, ", ") +
+				"\n\nSkriv svaret på nytt."},
+		},
+		"stream": false, "temperature": 0, "max_tokens": 600,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return ""
+	}
+	req, err := r.s.newUpstreamRequest(ctx, strings.NewReader(string(body)))
+	if err != nil {
+		return ""
+	}
+	resp, err := r.s.client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	_, usage, content := r.s.relayRound(resp, func(string) {}, false, nil)
+	if r.promptTokens != nil {
+		*r.promptTokens += usage.PromptTokens
+	}
+	if r.completionTokens != nil {
+		*r.completionTokens += usage.CompletionTokens
+	}
+	turn.Usage.PromptTokens += usage.PromptTokens
+	turn.Usage.CompletionTokens += usage.CompletionTokens
+	return strings.TrimSpace(content)
+}
+
 // motorForm er formgulvet: legacys målte isJunkAnswer (sse.go), uendret.
 type motorForm struct{}
 

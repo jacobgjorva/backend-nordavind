@@ -14,52 +14,10 @@ const realMemoryAnswer = "Du kan forvente mellom 20 og 100 kroner per time, avhe
 	"merke bilder eller svare på spørsmål kan gi 0,50 til 5 kroner per oppdrag, mens mer komplekse " +
 	"oppgaver som transkripsjon eller kvalitetssjekk av AI-svar kan gi 10–50 kroner per oppdrag."
 
-// Kjerneklassen: kildekrevende metode, null kilder, tall i svaret → den
-// generelle hukommelses-merknaden.
-func TestCoverageNoteOnMemoryOnlyAnswer(t *testing.T) {
-	turn := &Turn{Method: MethodAdvice} // ingen Evidence
-	note := CoverageNote(MethodAdvice, turn, []string{"100", "0,50"})
-	if !strings.Contains(note, "hukommelse") {
-		t.Errorf("null kilder skal gi hukommelses-merknaden, fikk %q", note)
-	}
-}
-
-// Delvis dekning: noen tall udekket → navngi dem, maks tre.
-func TestCoverageNoteNamesFewOffenders(t *testing.T) {
-	turn := &Turn{Method: MethodAdvice, Evidence: []string{"kildetekst"}}
-	note := CoverageNote(MethodAdvice, turn, []string{"137,7"})
-	if !strings.Contains(note, "137,7") || !strings.Contains(note, "anslag") {
-		t.Errorf("udekket tall skal navngis, fikk %q", note)
-	}
-	many := []string{"100", "200", "300", "400"}
-	note = CoverageNote(MethodAdvice, turn, many)
-	if strings.Contains(note, "400") {
-		t.Errorf("over %d tall skal ikke ramses opp, fikk %q", maxNotedNumbers, note)
-	}
-	if !strings.Contains(note, "flere av tallene") {
-		t.Errorf("mange udekkede skal gi den generelle formen, fikk %q", note)
-	}
-}
-
-// Fail-open: klasser uten kildedeklarasjon får ALDRI merknad. «En meter er
-// 100 cm» i fri chat skal ikke mistenkeliggjøres.
-func TestCoverageNoteNeverFiresWithoutEvidenceDeclaration(t *testing.T) {
-	for _, m := range []MethodKey{MethodNone, MethodSmalltalk, MethodCreative} {
-		if note := CoverageNote(m, &Turn{Method: m}, []string{"100"}); note != "" {
-			t.Errorf("%q deklarerer ikke kilder og skal ikke gi merknad, fikk %q", m, note)
-		}
-	}
-}
-
-func TestCoverageNoteSilentWithoutOffenders(t *testing.T) {
-	if note := CoverageNote(MethodAdvice, &Turn{}, nil); note != "" {
-		t.Errorf("uten avvik skal gulvet tie, fikk %q", note)
-	}
-}
-
-// Hele kjeden gjennom leveransen, med det EKTE prod-svaret: merknaden skal
-// stå i det som sendes brukeren.
-func TestDeliveryAppendsCoverageNote(t *testing.T) {
+// INVARIANTEN (2026-08-06): null evidens + udekkede tall i kildekrevende
+// metode → utkastet leveres ALDRI; brukeren får den ærlige hukommelses-
+// bunnen. Prod-hendelsen: en hel diktet tabell skipret med fotnote.
+func TestDeliveryHoldsMemoryOnlyAnswer(t *testing.T) {
 	out := &fakeOut{}
 	v := &fakeVerifier{unsupported: []string{"100", "0,50"}}
 	d := &Delivery{Out: out, Verifier: v}
@@ -70,18 +28,86 @@ func TestDeliveryAppendsCoverageNote(t *testing.T) {
 	if len(out.content) != 1 {
 		t.Fatalf("forventet ett innhold, fikk %d", len(out.content))
 	}
-	if !strings.Contains(out.content[0], "Merk: dette svaret bygger på hukommelse") {
-		t.Errorf("merknaden mangler i det leverte svaret: %q", out.content[0])
+	if strings.Contains(out.content[0], "20 og 100 kroner") {
+		t.Fatalf("hukommelsestallene skulle ALDRI vært levert: %q", out.content[0])
 	}
-	// Selve svaret skal stå urørt foran merknaden — aldri omskriving.
-	if !strings.Contains(out.content[0], "20 og 100 kroner per time") {
-		t.Error("svaret skal leveres uendret, med merknaden etter")
+	if !strings.Contains(out.content[0], "gjetter ikke") {
+		t.Errorf("den ærlige bunnen mangler: %q", out.content[0])
+	}
+}
+
+// covVerifier: dømmer kun svar som inneholder det diktede tallet — så et
+// vellykket omforsøk re-verifiseres som rent.
+type covVerifier struct{ dirty string }
+
+func (v covVerifier) Unsupported(answer string, _ []string) []string {
+	if strings.Contains(answer, v.dirty) {
+		return []string{v.dirty}
+	}
+	return nil
+}
+
+// Med evidens: ETT omforsøk uten de udekkede tallene; holder det, leveres det.
+func TestDeliveryRegroundsWithEvidence(t *testing.T) {
+	out := &fakeOut{}
+	d := &Delivery{
+		Out:      out,
+		Verifier: covVerifier{dirty: "586"},
+		Reground: func(_ context.Context, _ *Turn, _ string, _ []string) string {
+			return "Mjød er størst med 514 millioner ifølge kildene."
+		},
+	}
+	turn := &Turn{Method: MethodAnalysis, Evidence: []string{"mjød 514 millioner"}}
+
+	d.Deliver(context.Background(), turn, "Øl er størst med 586 millioner.")
+
+	if len(out.content) != 1 || strings.Contains(out.content[0], "586") {
+		t.Fatalf("diktet tall skulle vært skrevet bort: %v", out.content)
+	}
+	if !strings.Contains(out.content[0], "514") {
+		t.Errorf("omforsøket skulle vært levert: %q", out.content[0])
+	}
+}
+
+// Omforsøk som fortsatt er udekket (eller mangler): kildefallbacken, aldri
+// utkastet.
+func TestDeliveryFallsBackWhenRegroundStillDirty(t *testing.T) {
+	out := &fakeOut{}
+	d := &Delivery{
+		Out:      out,
+		Verifier: covVerifier{dirty: "586"},
+		Reground: func(_ context.Context, _ *Turn, _ string, _ []string) string {
+			return "Fortsatt 586 millioner."
+		},
+	}
+	turn := &Turn{Method: MethodAnalysis, Evidence: []string{"mjød 514 millioner"}}
+
+	d.Deliver(context.Background(), turn, "Øl er størst med 586 millioner.")
+
+	if strings.Contains(out.content[0], "586") {
+		t.Fatalf("udekket tall slapp gjennom: %q", out.content[0])
+	}
+	if !strings.Contains(out.content[0], "holder dem") {
+		t.Errorf("kildefallbacken mangler: %q", out.content[0])
+	}
+}
+
+// Fail-open: klasser uten kildedeklarasjon er urørt. «En meter er 100 cm»
+// i fri chat skal aldri holdes tilbake.
+func TestDeliveryLeavesNonSourceMethodsAlone(t *testing.T) {
+	for _, m := range []MethodKey{MethodNone, MethodSmalltalk, MethodCreative} {
+		out := &fakeOut{}
+		v := &fakeVerifier{unsupported: []string{"100"}}
+		d := &Delivery{Out: out, Verifier: v}
+		d.Deliver(context.Background(), &Turn{Method: m}, "En meter er 100 cm.")
+		if len(out.content) != 1 || !strings.Contains(out.content[0], "100 cm") {
+			t.Errorf("%q skal leveres urørt, fikk %v", m, out.content)
+		}
 	}
 }
 
 // Samtalen er gyldig grunnlag: en oppfølging som gjentar forrige turs tall
-// skal IKKE merkes. Verifikatoren får samtalen i basisen, så avvikslista er
-// tom — testen fester at Delivery faktisk sender Convo med.
+// skal IKKE holdes. Verifikatoren får samtalen i basisen.
 func TestDeliveryPassesConvoToVerifier(t *testing.T) {
 	v := &fakeVerifier{}
 	d := &Delivery{Out: &fakeOut{}, Verifier: v, Convo: "Forrige svar: prisen er 17 000 kr per år."}

@@ -346,3 +346,64 @@ func TestNilLoggerIsSafe(t *testing.T) {
 	e.Log = nil
 	e.Run(context.Background(), payload(), &Turn{})
 }
+
+// Hukommelsesvakta: et tekstsvar med udekkede tall og null evidens tvinger
+// ÉN verktøyrunde (tool_choice=required), og bare én — deretter leveres det
+// modellen svarer, uansett.
+func TestRecheckForcesOneToolRound(t *testing.T) {
+	model := &fakeModel{responses: []ModelResponse{
+		{Text: "Omsetningen var 12845321 kroner."},
+		{Calls: []ToolCall{{ID: "1", Name: "web_search", Args: "{}"}}},
+		{Text: "Kildene sier 514 millioner."},
+	}}
+	tools := &fakeTools{}
+	del := &fakeDeliver{}
+	forced := 0
+	e := &Engine{Model: model, Tools: tools, Out: &fakeOut{}, Deliver: del,
+		Recheck: func(turn *Turn, draft string) string {
+			if len(turn.Evidence) == 0 {
+				forced++
+				return "hent tallene først"
+			}
+			return ""
+		}}
+	payload := map[string]any{"messages": []any{}, "tools": []any{map[string]any{}}}
+	turn := &Turn{Method: MethodAnalysis}
+
+	e.Run(context.Background(), payload, turn)
+
+	if forced != 1 {
+		t.Fatalf("vakta skulle utløst nøyaktig én gang, fikk %d", forced)
+	}
+	if !turn.MemoryRetried {
+		t.Error("MemoryRetried skulle vært satt")
+	}
+	if len(tools.ran) != 1 || tools.ran[0] != "web_search" {
+		t.Fatalf("den tvungne runden skulle kjørt verktøy, fikk %v", tools.ran)
+	}
+	if del.draft != "Kildene sier 514 millioner." {
+		t.Fatalf("sluttsvaret etter henting skulle vært levert, fikk %q", del.draft)
+	}
+	if _, ok := payload["tool_choice"]; ok {
+		t.Error("tool_choice skal aldri bli liggende i payloaden")
+	}
+}
+
+// Uten verktøy i payloaden kan ingenting tvinges — vakta skal tie, aldri gi
+// 422 (tool_choice uten tools).
+func TestRecheckNeedsToolsInPayload(t *testing.T) {
+	model := &fakeModel{responses: []ModelResponse{{Text: "Tall: 12845321."}}}
+	del := &fakeDeliver{}
+	e := &Engine{Model: model, Tools: &fakeTools{}, Out: &fakeOut{}, Deliver: del,
+		Recheck: func(*Turn, string) string { return "hent først" }}
+	payload := map[string]any{"messages": []any{}}
+
+	e.Run(context.Background(), payload, &Turn{Method: MethodAnalysis})
+
+	if model.calls != 1 {
+		t.Fatalf("uten verktøy skal det ikke tvinges runder, fikk %d kall", model.calls)
+	}
+	if del.draft != "Tall: 12845321." {
+		t.Fatalf("svaret skulle gått til leveransen (som håndhever invarianten), fikk %q", del.draft)
+	}
+}

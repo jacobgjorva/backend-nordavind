@@ -82,6 +82,11 @@ type Delivery struct {
 	// EmptyExplain er databasens egen redegjørelse når alt feilet.
 	EmptyExplain func() string
 
+	// Reground skriver svaret på nytt UTEN de udekkede tallene (ett kall,
+	// api-laget eier upstream). Resultatet godtas kun når koden har
+	// re-verifisert det. Valgfri; nil hopper rett til kildefallbacken.
+	Reground func(ctx context.Context, turn *Turn, answer string, offenders []string) string
+
 	// Convo er samtaleutdraget (siste turer). Det er GYLDIG grunnlag for
 	// tallkontrollen: en oppfølging som gjentar forrige turs tall skal
 	// aldri merkes som udekket (målt lærdom fra v3 — kildekontrollen
@@ -150,10 +155,16 @@ func (d *Delivery) Deliver(ctx context.Context, turn *Turn, draft string) {
 	// regnet, brukerens eget spørsmål OG samtalen — et tall brukeren selv
 	// oppga eller fikk i forrige tur er ikke dikting.
 	//
-	// Avvik logges som telemetri, og DEKNINGSGULVET (coverage.go) gjør dem
-	// synlige: i en kildekrevende metode får udekkede tall én ærlig
-	// merknad i svaret. Det er hele forskjellen på et anslag brukeren kan
-	// vurdere og et tall hen tar en beslutning på.
+	// INVARIANTEN (2026-08-06, erstatter fotnote-gulvet fra 2026-07-30):
+	// i en kildekrevende metode leveres udekkede tall ALDRI som fakta.
+	// Fotnoten («les som anslag») ble målt i prod: modellen leverte en HEL
+	// diktet tabell med bedriftstall, og brukeren fikk den med en merknad
+	// nederst. Eskaleringen er kode, aldri skjønn:
+	//   null evidens  → den ærlige bunnen — utkastet er ren hukommelse.
+	//   evidens       → ETT omforsøk uten de udekkede tallene, re-verifisert
+	//                   i kode; holder det ikke, leveres kildefallbacken og
+	//                   gulvene viser det kildene faktisk sier.
+	// Metoder uten kildedeklarasjon (samtale, ren logikk) er urørt: fail-open.
 	if d.Verifier != nil {
 		basis := append(append([]string{}, turn.Evidence...), facts, turn.Question, d.Convo)
 		if off := d.Verifier.Unsupported(answer, basis); len(off) > 0 {
@@ -161,8 +172,30 @@ func (d *Delivery) Deliver(ctx context.Context, turn *Turn, draft string) {
 				d.Log.Warn("motor v6: tall uten dekning i verktøydata",
 					"avvik", strings.Join(off, ", "), "metode", string(turn.Method))
 			}
-			if note := CoverageNote(turn.Method, turn, off); note != "" {
-				answer = strings.TrimRight(answer, " \n") + "\n\n" + note
+			if BudgetFor(turn.Method).Searches > 0 && turn.Method != MethodNone {
+				if len(turn.Evidence) == 0 {
+					if d.Log != nil {
+						d.Log.Warn("motor v6: hukommelsessvar holdt tilbake", "metode", string(turn.Method))
+					}
+					answer = MemoryHeld()
+				} else {
+					cleaned := ""
+					if d.Reground != nil {
+						if rw := strings.TrimSpace(d.Reground(ctx, turn, answer, off)); rw != "" &&
+							len(d.Verifier.Unsupported(rw, basis)) == 0 {
+							cleaned = rw
+						}
+					}
+					if cleaned != "" {
+						answer = cleaned
+					} else {
+						if d.Log != nil {
+							d.Log.Warn("motor v6: omforsøk holdt ikke, leverer kildefallback",
+								"metode", string(turn.Method))
+						}
+						answer = CoverageFallback()
+					}
+				}
 			}
 		}
 	}
