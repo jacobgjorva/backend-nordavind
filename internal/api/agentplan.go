@@ -35,6 +35,7 @@ type agentStep struct {
 	SQL          string `json:"sql,omitempty"`
 	Query        string `json:"query,omitempty"`
 	URL          string `json:"url,omitempty"`
+	Table        string `json:"table,omitempty"` // kind=data: tabellen i agentens datalager
 }
 
 // agentChart er grafen agenten viser sammen med rapporten. Den lagres som en
@@ -61,6 +62,11 @@ type agentPlan struct {
 	// se watchrules.go. Finnes de, er det KODEN som avgjør varselet; prosa-
 	// regelen over er reserven for det som ikke kan tallfestes.
 	WatchRules []watchRule `json:"watch_rules,omitempty"`
+
+	// Datastore: agentens eget lille datalager — typede tabeller i appens
+	// Postgres, definert ved spinup (store/agentdata.go). Steg med kind=data
+	// leser fra dem; skriving skjer via chat-verktøyene med generert SQL.
+	Datastore []store.DataTable `json:"datastore,omitempty"`
 
 	Chart     *agentChart `json:"chart,omitempty"`      // valgfri graf
 	ChartSlug string      `json:"chart_slug,omitempty"` // widgeten grafen bor i
@@ -174,7 +180,8 @@ var savePlanTool = map[string]any{
 					"items": map[string]any{
 						"type": "object",
 						"properties": map[string]any{
-							"kind":          map[string]any{"type": "string", "description": "sql | web | fetch"},
+							"kind":          map[string]any{"type": "string", "description": "sql | web | fetch | data (les en tabell fra agentens eget datalager)"},
+							"table":         map[string]any{"type": "string", "description": "kun for kind=data: tabellnavnet i datalageret"},
 							"label":         map[string]any{"type": "string", "description": "kort beskrivelse av hva steget henter"},
 							"connection_id": map[string]any{"type": "string", "description": "kun for kind=sql"},
 							"sql":           map[string]any{"type": "string", "description": "kun for kind=sql, ferdig SELECT"},
@@ -209,6 +216,31 @@ var savePlanTool = map[string]any{
 							"label":  map[string]any{"type": "string", "description": "hva målingen heter i varselet, f.eks. «omsetning siste 7 dager»"},
 						},
 						"required": []string{"step", "op", "value"},
+					},
+				},
+				"datastore": map[string]any{
+					"type": "array",
+					"description": "agentens EGET datalager — bruk KUN når oppgaven krever at agenten (eller " +
+						"brukeren via chat) vedlikeholder egne data over tid: lister, beholdninger, tellinger. " +
+						"Aldri for data som alt finnes i en tilkoblet database. Maks 5 tabeller.",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"name": map[string]any{"type": "string", "description": "tabellnavn: små bokstaver/tall/understrek"},
+							"columns": map[string]any{
+								"type": "array",
+								"items": map[string]any{
+									"type": "object",
+									"properties": map[string]any{
+										"name": map[string]any{"type": "string"},
+										"type": map[string]any{"type": "string", "description": "text, number, date eller bool"},
+									},
+									"required": []string{"name", "type"},
+								},
+							},
+							"key": map[string]any{"type": "string", "description": "kolonnen rader nøkles på ved oppdatering, f.eks. navn eller id"},
+						},
+						"required": []string{"name", "columns"},
 					},
 				},
 				"mail": map[string]any{
@@ -262,6 +294,10 @@ const planSystem = "Du er i SPINUP: du skal ikke levere svaret på oppgaven, du 
 	"være ekte kolonner fra spørringen — grafen skal aldri ha en umerket akse.\n" +
 	"- Ber oppgaven eksplisitt om at agenten sender e-post: sett mail-feltet (mottaker + fast emne). " +
 	"Kroppen skrives automatisk per kjøring. Ikke lag egne steg for e-post.\n" +
+	"- Krever oppgaven at agenten eller brukeren VEDLIKEHOLDER egne data over tid (lister, beholdninger, " +
+	"tellinger som ikke finnes i noen tilkoblet kilde): definer et lite datastore-skjema med typede " +
+	"kolonner og en nøkkel, og les det med steg av kind=data. Aldri datastore for data som alt finnes " +
+	"i databasen.\n" +
 	"AVSLUTT med save_plan: stegene som skal kjøres hver gang, hva som skal vurderes (watch), når " +
 	"det er verdt å varsle brukeren (alert_rule, med konkrete terskler der det gir mening), og " +
 	"eventuelt chart. Kan varselet tallfestes (terskel eller prosent-endring), legg det OGSÅ som " +
@@ -330,6 +366,11 @@ func (s *Server) handleSaveAgentPlan(w http.ResponseWriter, r *http.Request) {
 	}
 	dbCtx := s.buildDBTool(user.TenantID, user.ID, "")
 	plan, problems := s.validatePlan(r.Context(), dbCtx, string(raw))
+	if len(problems) == 0 && len(plan.Datastore) > 0 {
+		if err := s.store.EnsureAgentData(id, plan.Datastore); err != nil {
+			problems = append(problems, "Datalageret kunne ikke opprettes: "+err.Error())
+		}
+	}
 	if len(problems) > 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		writeJSON(w, map[string]any{"problems": problems})
@@ -504,6 +545,13 @@ func (s *Server) buildAgentPlan(ctx context.Context, agentID string) {
 			// save_plan: valider stegene ved å faktisk kjøre dem.
 			if c.name == "save_plan" {
 				plan, problems := s.validatePlan(ctx, dbCtx, c.args)
+				if len(problems) == 0 && len(plan.Datastore) > 0 {
+					// Opprett lageret FØR planen lagres — en plan som peker på
+					// tabeller som ikke finnes skal aldri kunne bli «ready».
+					if err := s.store.EnsureAgentData(a.ID, plan.Datastore); err != nil {
+						problems = append(problems, "Datalageret kunne ikke opprettes: "+err.Error())
+					}
+				}
 				if len(problems) == 0 {
 					s.ensureChartWidget(a, &plan)
 					raw, _ := json.Marshal(plan)
@@ -629,9 +677,19 @@ func (s *Server) validatePlan(ctx context.Context, dbCtx *dbToolCtx, rawArgs str
 			if strings.TrimSpace(st.Query) == "" {
 				problems = append(problems, fmt.Sprintf("Steg %d (web) mangler query.", n))
 			}
+		case "data":
+			if findPlanDataTable(plan, st.Table) == nil {
+				problems = append(problems, fmt.Sprintf("Steg %d (data) peker på tabellen %q som ikke finnes i datastore.", n, st.Table))
+			}
 		default:
-			problems = append(problems, fmt.Sprintf("Steg %d har ukjent kind %q — bruk sql, web eller fetch.",
+			problems = append(problems, fmt.Sprintf("Steg %d har ukjent kind %q — bruk sql, web, fetch eller data.",
 				n, st.Kind))
+		}
+	}
+	if len(plan.Datastore) > 0 {
+		problems = append(problems, store.ValidateDataSchema(plan.Datastore)...)
+		if !s.store.IsPostgres() {
+			problems = append(problems, "Datalageret krever Postgres — fjern datastore eller kjør mot Postgres.")
 		}
 	}
 	problems = append(problems, s.validateChart(ctx, dbCtx, plan.Chart)...)
@@ -645,6 +703,16 @@ func (s *Server) validatePlan(ctx context.Context, dbCtx *dbToolCtx, rawArgs str
 		}
 	}
 	return plan, problems
+}
+
+// findPlanDataTable slår opp en datastore-tabell i planen.
+func findPlanDataTable(plan agentPlan, name string) *store.DataTable {
+	for i := range plan.Datastore {
+		if plan.Datastore[i].Name == name {
+			return &plan.Datastore[i]
+		}
+	}
+	return nil
 }
 
 // chartTypes er grafene widget-motoren rendrer.
@@ -914,6 +982,15 @@ func (s *Server) runPlanSteps(ctx context.Context, a store.Agent, plan agentPlan
 			}
 		case "web":
 			res, _ = s.runWebSearch(ctx, st.Query)
+		case "data":
+			cols, rws, err := s.store.ReadAgentTable(a.ID, plan.Datastore, st.Table)
+			if err != nil {
+				out.failed++
+				res = "Datalager-feil: " + err.Error()
+			} else {
+				raw, _ := json.Marshal(map[string]any{"columns": cols, "rows": rws})
+				res = string(raw)
+			}
 		default:
 			continue
 		}

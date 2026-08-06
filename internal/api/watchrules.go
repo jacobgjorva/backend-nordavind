@@ -232,8 +232,24 @@ func validateWatchRules(rules []watchRule, plan agentPlan, trial map[int]string)
 			problems = append(problems, fmt.Sprintf("Varselregel %d peker på steg %d som ikke finnes.", n, r.Step))
 			continue
 		}
-		if !strings.EqualFold(strings.TrimSpace(plan.Steps[r.Step-1].Kind), "sql") {
-			problems = append(problems, fmt.Sprintf("Varselregel %d peker på steg %d, men bare sql-steg kan måles.", n, r.Step))
+		kind := strings.ToLower(strings.TrimSpace(plan.Steps[r.Step-1].Kind))
+		if kind == "data" {
+			// Datalager-steg: tabellen er nyopprettet og tom ved spinup, så
+			// målingen kan ikke prøvekjøres — men kolonnen må finnes i skjemaet.
+			t := findPlanDataTable(plan, plan.Steps[r.Step-1].Table)
+			colOK := strings.EqualFold(strings.TrimSpace(r.Agg), "count") && strings.TrimSpace(r.Column) == ""
+			if t != nil {
+				for _, c := range t.Columns {
+					colOK = colOK || strings.EqualFold(c.Name, strings.TrimSpace(r.Column))
+				}
+			}
+			if !colOK {
+				problems = append(problems, fmt.Sprintf("Varselregel %d: kolonnen %q finnes ikke i datalager-tabellen for steg %d.", n, r.Column, r.Step))
+			}
+			continue
+		}
+		if kind != "sql" {
+			problems = append(problems, fmt.Sprintf("Varselregel %d peker på steg %d, men bare sql- og data-steg kan måles.", n, r.Step))
 			continue
 		}
 		raw, ok := trial[r.Step]

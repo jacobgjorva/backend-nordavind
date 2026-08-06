@@ -3,6 +3,8 @@ package api
 import (
 	"strings"
 	"testing"
+
+	"github.com/jacobgjorva/backend-nordavind/internal/store"
 )
 
 func sqlStep(raw string) stepResult { return stepResult{label: "test", kind: "sql", raw: raw} }
@@ -92,5 +94,21 @@ func TestFunnBlockDeterministic(t *testing.T) {
 	}
 	if funnBlock(nil) != "" {
 		t.Fatal("ingen funn skal gi tom blokk")
+	}
+}
+
+func TestValidateWatchRulesDataStep(t *testing.T) {
+	plan := agentPlan{
+		Steps: []agentStep{{Kind: "data", Label: "lager", Table: "varer"}},
+		Datastore: []store.DataTable{{Name: "varer", Columns: []store.DataColumn{
+			{Name: "navn", Type: "text"}, {Name: "antall", Type: "number"}}, Key: "navn"}},
+	}
+	ok := validateWatchRules([]watchRule{{Step: 1, Column: "antall", Op: "<", Value: 3}}, plan, nil)
+	if len(ok) != 0 {
+		t.Fatalf("gyldig data-regel skulle passere, fikk %v", ok)
+	}
+	bad := validateWatchRules([]watchRule{{Step: 1, Column: "pris", Op: "<", Value: 3}}, plan, nil)
+	if len(bad) != 1 {
+		t.Fatalf("ukjent kolonne i datalageret skulle avvises, fikk %v", bad)
 	}
 }

@@ -347,9 +347,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 	delete(full, "nordavind_agent_edit")
 	editable := false
 	planning := false
+	var editDatastore []store.DataTable
 	if editID != "" {
 		if user, ok := ctx.Value(userKey).(store.User); ok {
 			if a, err := s.store.GetAgent(editID, user.ID); err == nil {
+				editDatastore = planDatastore(a)
 				if !a.Enabled {
 					// Ferskt utkast: avgjør rutine vs engangsoppdrag og start.
 					// (En aktivert rutine er Enabled uten godkjente kriterier —
@@ -477,6 +479,10 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			}
 			if editable {
 				tools = append(tools, buildAgentEditTools()...)
+				if len(editDatastore) > 0 {
+					tools = append(tools, buildDatastoreTools()...)
+					injectSystem(full, datastoreSystem(editDatastore))
+				}
 			}
 			full["tools"] = tools
 		}
@@ -1174,6 +1180,10 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 				default:
 					result = s.runListAgents(ctx)
 				}
+			case "data_list", "data_upsert", "data_delete":
+				narr.before(c.Name, c.Args.String())
+				result = s.runDataTool(ctx, c.Name, editID, editDatastore, c.Args.String())
+				narr.after(c.Name, result)
 			case "mail_search":
 				narr.before(c.Name, c.Args.String())
 				stopWait := narr.slow(c.Name)
@@ -1538,7 +1548,7 @@ func normalizeImageParts(full map[string]any) {
 var legacyReadTools = map[string]bool{
 	"web_search": true, "fetch_url": true, "query_database": true,
 	"m365_search": true, "m365_read": true, "mail_search": true, "mail_read": true,
-	"list_agents": true, "show_table": true,
+	"list_agents": true, "show_table": true, "data_list": true,
 }
 
 // wallCharLimit: over dette regnes svaret som en «vegg» og komprimeres (nødbrems).
