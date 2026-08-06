@@ -1,0 +1,30 @@
+{"shelf":"data_question","text":"hvor mye solgte vi for i forrige måned?"}
+{"shelf":"data_question","text":"hvor mange ordre kom inn denne uka?"}
+{"shelf":"data_question","text":"hvem er største kunden vår i år?"}
+{"shelf":"data_question","text":"hva er snittordren vår nå?"}
+{"shelf":"data_question","text":"hvor mange nye kunder fikk vi i juli?"}
+{"shelf":"data_analysis","text":"går salget opp eller ned?"}
+{"shelf":"data_analysis","text":"hvorfor var juni så svak?"}
+{"shelf":"data_analysis","text":"er det noen kunder som er i ferd med å falle fra?"}
+{"shelf":"data_analysis","text":"hvilke produkter burde vi satse mer på?"}
+{"shelf":"data_analysis","text":"sammenlign første og andre kvartal for meg"}
+{"shelf":"advice","text":"synes du vi bør øke prisene til høsten?"}
+{"shelf":"advice","text":"hva bør jeg prioritere denne uka?"}
+{"shelf":"advice","text":"burde vi slutte å selge de minste ordrene?"}
+{"shelf":"advice","text":"hvordan kan vi få opp marginen?"}
+{"shelf":"web_fact","text":"hva er sukkeravgiften på i år?"}
+{"shelf":"web_fact","text":"hva ligger styringsrenten på nå?"}
+{"shelf":"web_fact","text":"hva koster det å sende en pall fra Oslo til Bergen?"}
+{"shelf":"mail","text":"har jeg fått noen viktige eposter i dag?"}
+{"shelf":"mail","text":"har Petter svart på tilbudet?"}
+{"shelf":"table","text":"vis meg de ti siste ordrene i en tabell"}
+{"shelf":"table","text":"lag en oversikt over salg per måned i år"}
+{"shelf":"widget","text":"jeg vil ha en graf over omsetningen per uke"}
+{"shelf":"followup","text":"ok, og hvordan ser det ut mot i fjor?"}
+{"shelf":"followup","text":"hva betyr det for oss fremover?"}
+{"shelf":"smalltalk","text":"takk for hjelpen så langt"}
+{"shelf":"vague","text":"det ser litt rart ut med tallene i det siste"}
+{"shelf":"vague","text":"jeg føler vi mister fart"}
+{"shelf":"docs","text":"hva står det i leverandøravtalen med Moestue om oppsigelse?"}
+{"shelf":"export","text":"kan jeg få salgstallene i excel?"}
+{"shelf":"routine","text":"jeg vil ha en ukentlig oppsummering av nye ordre"}

@@ -861,7 +861,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 			case trimmed == "" && !actionTool:
 				emit(contentSSE(backstopGraceful))
 			default:
-				final := enforceEmojiMessage(stripForeignHead(content))
+				final := stripGenericCloser(enforceEmojiMessage(stripForeignHead(content)))
 				// Kapitulasjonsvakten FØR kildekontrollen: svargrenene under er
 				// ikke gjensidig utelukkende (målt at vakten aldri traff da den
 				// lå i én av dem). Erklærer modellen oppgaven umulig ETTER at
