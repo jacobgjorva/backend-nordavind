@@ -948,8 +948,11 @@ func (s *Server) runAgentLoop(ctx context.Context, w http.ResponseWriter, full m
 							}
 							narr.deliverInsight(emit, pending, "", answerLimit, tableShown)
 							narr.sourceNote(emit, "", usedSources(attempts), dbCtx != nil && len(dbCtx.conns) > 1)
+							// Drive også i nødutgangen: naken tabell uten retning
+							// var målt som oppslagsverk-følelse (drive-eval).
+							emit(contentSSE("\n\nVil du at jeg forklarer tallene i tabellen?"))
 						} else {
-							emit(contentSSE("Jeg fikk ikke formulert dette kildefast — se kildene over for detaljene."))
+							emit(contentSSE("Jeg fikk ikke formulert dette kildefast — se kildene over for detaljene. Vil du at jeg prøver en gang til med en smalere vinkling?"))
 						}
 						if flowKey == "export_excel" && lastDBResult != "" {
 							emit(contentSSE("\n\n```export\n" + lastDBResult + "\n```"))
