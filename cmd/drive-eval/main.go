@@ -48,6 +48,36 @@ type driveResult struct {
 
 func (r driveResult) pass() bool { return r.Err == "" && r.Stance && r.Drive && !r.Generic }
 
+// STRUPING (2026-08-06): denne evalen deler Mistral-konto med PROD. En tett
+// serie kall spiste rate-limit-kvoten og ga ekte brukere 429 midt i en
+// samtale. Derfor: ett kall om gangen, alltid pause mellom — evalen skal
+// aldri kunne sulte prod. Tåler at en kjøring tar minutter.
+var evalPause = 6 * time.Second
+
+func pace(what string) {
+	fmt.Printf("   (pause %s før %s)\n", evalPause, what)
+	time.Sleep(evalPause)
+}
+
+// infraNoise: svaret er en infrastruktursvikt eller en tom datakilde, ikke en
+// stilprestasjon. Slike caser skal ALDRI telle som stilfeil — de sier bare at
+// upstream glapp eller at testdataene ikke dekker perioden. De rapporteres for
+// seg, aldri skjult (jf. «no silent caps»).
+func infraNoise(answer string) bool {
+	a := strings.ToLower(answer)
+	switch {
+	case strings.TrimSpace(a) == "":
+		return true
+	case strings.Contains(a, "klarte ikke hente et svar"):
+		return true
+	case strings.Contains(a, "ingen av dem ga rader"):
+		return true
+	case strings.Contains(a, "backend er ikke konfigurert"):
+		return true
+	}
+	return false
+}
+
 // driveRubric er kriteriene VÅRE — dommeren scorer aldri etter egne ideer.
 const driveRubric = `Du vurderer svar fra en norsk bedrifts-AI som skal være en MOTOR som driver brukeren mot målet — aldri et oppslagsverk. Vurder SVARET på BRUKERENS melding, binært:
 - stance: true hvis svaret TAR STILLING der grunnlaget finnes (kaller et tall lavt/høyt/normalt, anbefaler, prioriterer) — ren gjengivelse av fakta uten vurdering er false. Rene faktaspørsmål uten vurderingsrom («hva er adressen») scorer true når svaret er direkte.
@@ -59,7 +89,9 @@ Svar KUN med JSON: {"stance":bool,"drive":bool,"generic":bool,"comment":"én kor
 func main() {
 	base := flag.String("base", "http://localhost:8080", "backend-URL")
 	judgeOnly := flag.String("judge-only", "", "re-scor en tidligere kjøring (run-dir)")
+	pauseSec := flag.Int("pause", 6, "sekunder mellom hvert modellkall (deler kvote med prod)")
 	flag.Parse()
+	evalPause = time.Duration(*pauseSec) * time.Second
 
 	token := os.Getenv("NORDAVIND_TOKEN")
 	if token == "" && *judgeOnly == "" {
@@ -89,16 +121,25 @@ func main() {
 		json.Unmarshal(raw, &results)
 	}
 
-	pass, judged := 0, 0
+	pass, judged, noise := 0, 0, 0
 	for i := range results {
 		if results[i].Err != "" {
-			fmt.Printf("%-18s FEIL: %s\n", results[i].Case.Shelf, results[i].Err)
+			noise++
+			fmt.Printf("-- %-18s FEIL: %s\n", results[i].Case.Shelf, results[i].Err)
+			continue
+		}
+		// Infrastruktursvikt/tom kilde etter tre forsøk: rapporteres, men
+		// dømmes ikke — ellers måler vi upstream i stedet for stil.
+		if infraNoise(results[i].Answer) {
+			noise++
+			fmt.Printf("-- %-18s IKKE MÅLT (infra/tom kilde): %.60q\n", results[i].Case.Shelf, results[i].Answer)
 			continue
 		}
 		judge(client, cfg, &results[i])
 		// Dommer-svikt etter retry er målestøy — ute av nevneren, aldri en dom.
 		if strings.HasPrefix(results[i].Comment, "dommer feilet") ||
 			strings.HasPrefix(results[i].Comment, "uparsbar dom") {
+			noise++
 			fmt.Printf("-- %-18s IKKE MÅLT: %s\n", results[i].Case.Shelf, results[i].Comment)
 			continue
 		}
@@ -118,7 +159,14 @@ func main() {
 	if judged > 0 {
 		pct = pass * 100 / judged
 	}
-	fmt.Printf("\n== drive-eval: %d/%d målt (%d %%) — krav ≥85 %% ==\n", pass, judged, pct)
+	fmt.Printf("\n== drive-eval: %d/%d målt (%d %%) — krav ≥85 %%. %d av %d ikke målt (infra/tom kilde/dommer) ==\n",
+		pass, judged, pct, noise, len(results))
+	// Måler vi for få caser, er tallet ikke til å stole på — like alvorlig som
+	// rødt, og skal aldri leses som grønt.
+	if judged*100/max(len(results), 1) < 70 {
+		fmt.Println("ADVARSEL: for mange caser ble ikke målt — kjøringen er ikke representativ.")
+		os.Exit(1)
+	}
 	if pct < 85 {
 		os.Exit(1)
 	}
@@ -142,15 +190,16 @@ func runSuite(client *http.Client, base, token string) []driveResult {
 			continue
 		}
 		r := driveResult{Case: c}
-		r.Answer, r.TotalMS, r.Err = askBackend(client, base, token, c.Text)
-		// Backstop-svar er infrastrukturstøy, ikke stil: ett nytt forsøk.
-		if strings.Contains(r.Answer, "Klarte ikke hente et svar") {
-			time.Sleep(3 * time.Second)
+		for attempt := 0; attempt < 2; attempt++ {
 			r.Answer, r.TotalMS, r.Err = askBackend(client, base, token, c.Text)
+			if r.Err == "" && !infraNoise(r.Answer) {
+				break
+			}
+			pace("retry")
 		}
 		fmt.Printf("kjørt: %-18s %5dms  %.60q\n", c.Shelf, r.TotalMS, r.Answer)
 		out = append(out, r)
-		time.Sleep(500 * time.Millisecond)
+		pace("case")
 	}
 	return out
 }
@@ -201,13 +250,14 @@ func judge(client *http.Client, cfg config.Config, r *driveResult) {
 	// serie — en tapt dom er målestøy, ikke et funn.
 	var raw string
 	var err error
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := 0; attempt < 2; attempt++ {
 		raw, err = llmJSON(client, cfg, router.MidModel, driveRubric, user, 400)
 		if err == nil && strings.TrimSpace(raw) != "" {
 			break
 		}
-		time.Sleep(time.Duration(2<<attempt) * time.Second)
+		pace("dommer-retry")
 	}
+	pace("dom")
 	if err != nil {
 		r.Comment = "dommer feilet: " + err.Error()
 		return
