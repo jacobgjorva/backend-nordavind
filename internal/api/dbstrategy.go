@@ -73,6 +73,82 @@ var (
 	trailingPctS = "%"
 )
 
+// maxDomainValues: over dette er kolonnen fritekst (kundenavn, adresser),
+// ikke et verdidomene — da hjelper ikke en oppramsing, og nærmeste-verdi-
+// strategien er riktig i stedet.
+const maxDomainValues = 25
+
+// columnDomain henter de FAKTISKE verdiene i kolonnen et likhetsfilter
+// bommet på.
+//
+// MÅLT FELLE (prod 2026-08-07): modellen filtrerte på sektor = 'Pub' — en
+// verdi den aldri hadde sett — fikk null treff, og konkluderte med at
+// bedriften ikke har pub-kunder. nearestValues fanget det ikke: den
+// prefikssøker etter stavefeil («Racamca» → «Racamaca»), og «Pub» ligner
+// ikke på «Utested». Modellen satte altså opp en felle den selv snublet i.
+//
+// Fiksen er å fjerne gjettingen, ikke å be modellen gjette bedre: er
+// kolonnen enum-lignende, får modellen HELE domenet servert og kan ikke
+// bomme. Ett DISTINCT-kall, og bare når en spørring alt har gitt null rader.
+func (s *Server) columnDomain(ctx context.Context, db *sql.DB, dc dbConn, query string) (col string, values []string) {
+	col, table, ok := eqFilterTarget(query, dc)
+	if !ok {
+		return "", nil
+	}
+	q := fmt.Sprintf(`SELECT DISTINCT %s FROM %s WHERE %s IS NOT NULL`, col, table, col)
+	cols, rows, err := connector.SafeQueryViewsN(ctx, db, dc.creds.Driver, q, dc.allowed, dc.views, maxDomainValues+1)
+	if err != nil || len(cols) == 0 || len(rows) == 0 || len(rows) > maxDomainValues {
+		return col, nil
+	}
+	for _, r := range rows {
+		if len(r) > 0 && strings.TrimSpace(r[0]) != "" {
+			values = append(values, strings.TrimSpace(r[0]))
+		}
+	}
+	sort.Strings(values)
+	return col, values
+}
+
+// eqFilterTarget plukker ut kolonne og tabell fra et tekst-likhetsfilter,
+// validert mot tilgangslista. Delt av begge verdistrategiene, så de aldri
+// kan komme til å tolke den samme spørringen ulikt.
+func eqFilterTarget(query string, dc dbConn) (col, table string, ok bool) {
+	m := eqFilterRe.FindStringSubmatch(query)
+	if m == nil {
+		return "", "", false
+	}
+	col = strings.Trim(strings.ToLower(m[1]), `"`)
+	needle := strings.Trim(strings.TrimSpace(m[2]), "%")
+	if needle == "" || col == "" {
+		return "", "", false
+	}
+	// Tall og datoer har ikke et verdidomene å ramse opp.
+	if strings.IndexFunc(needle, func(r rune) bool {
+		return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
+	}) < 0 {
+		return "", "", false
+	}
+	tm := fromTableRe.FindStringSubmatch(query)
+	if tm == nil {
+		return "", "", false
+	}
+	table = strings.Trim(strings.ToLower(tm[1]), `"`)
+	if i := strings.LastIndex(table, "."); i >= 0 {
+		table = table[i+1:]
+	}
+	// Alias-splitten må skje FØR anførselstegnene fjernes helt: «k."sektor"»
+	// trimmes bare i endene, så halen blir «"sektor» uten dette.
+	if i := strings.LastIndex(col, "."); i >= 0 {
+		col = col[i+1:]
+	}
+	col = strings.Trim(col, `"`)
+	table = strings.Trim(table, `"`)
+	if !tableAllowed(dc, table) || !safeIdent(col) || !safeIdent(table) {
+		return "", "", false
+	}
+	return col, table, true
+}
+
 // nearestValues slår opp verdier som ligner det modellen søkte etter.
 // Strategien er bevisst billig: prefikssøk på de første tegnene (stavefeil
 // sitter nesten alltid inne i eller sist i ordet), deretter rangering på

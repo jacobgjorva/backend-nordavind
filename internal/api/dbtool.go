@@ -502,14 +502,31 @@ func (s *Server) runDBQuery(ctx context.Context, t *dbToolCtx, connID, query str
 		att.outcome = dbEmpty
 	}
 
-	// Strategi: bommet et fritekstfilter, slå opp nærmeste verdi FØR modellen
-	// rekker å konkludere med at noe «ikke finnes». Ett lett prefikskall.
+	// Strategi: bommet et tekstfilter, gi modellen fasiten FØR den rekker å
+	// konkludere med at noe «ikke finnes».
+	//
+	// Rekkefølgen er ikke tilfeldig: er kolonnen et lite verdidomene
+	// (sektor, status, kategori), serveres HELE domenet — da er det ingenting
+	// igjen å gjette på. Først når domenet er for stort til å ramses opp
+	// (kundenavn og annen fritekst) faller vi tilbake på nærmeste stavemåte.
 	if att.outcome == dbEmpty {
-		if col, needle, hits := s.nearestValues(ctx, db, dc, query); len(hits) > 0 {
-			att.note = fmt.Sprintf("Ingen rader for %q i %s. Nærmeste verdier som FINNES: %s. "+
-				"Kjør spørringen på nytt med den riktige, og fortell brukeren hvilken du brukte.",
-				needle, col, strings.Join(quoteAll(hits), ", "))
-			s.log.Info("db-strategi: nærmeste verdier", "søkte", needle, "fant", strings.Join(hits, ", "))
+		handled := false
+		if col, values := s.columnDomain(ctx, db, dc, query); len(values) > 0 {
+			att.note = fmt.Sprintf("Filteret traff ingen rader. Kolonnen %s har KUN disse verdiene: %s. "+
+				"Velg den riktige selv og kjør spørringen på nytt NÅ — ikke spør brukeren om lov, og "+
+				"ikke si at noe «ikke finnes» før du har prøvd den rette verdien. Fortell til slutt "+
+				"hvilken verdi du brukte.", col, strings.Join(quoteAll(values), ", "))
+			s.log.Info("db-strategi: verdidomene servert", "kolonne", col, "verdier", strings.Join(values, ", "))
+			handled = true
+		}
+		if !handled {
+			if col, needle, hits := s.nearestValues(ctx, db, dc, query); len(hits) > 0 {
+				att.note = fmt.Sprintf("Ingen rader for %q i %s. Nærmeste verdier som FINNES: %s. "+
+					"Kjør spørringen på nytt med den riktige NÅ — ikke spør brukeren om lov — og "+
+					"fortell hvilken du brukte.",
+					needle, col, strings.Join(quoteAll(hits), ", "))
+				s.log.Info("db-strategi: nærmeste verdier", "søkte", needle, "fant", strings.Join(hits, ", "))
+			}
 		}
 	}
 

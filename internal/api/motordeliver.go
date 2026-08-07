@@ -168,6 +168,39 @@ func memoryRecheck(turn *motor.Turn, draft, convo string) string {
 		"dem, si det ærlig — aldri anslå."
 }
 
+// askedForPermissionRe fanger svar som BER OM LOV til noe assistenten selv
+// kan utføre. Bevisst smal: den treffer bare spørsmål der handlingen er
+// assistentens egen («skal/vil du at jeg …»), aldri et oppklarende spørsmål
+// om hva brukeren mener.
+var askedForPermissionRe = regexp.MustCompile(`(?i)(vil du at jeg (skal )?|skal jeg |ønsker du at jeg |vil du jeg skal )[^?]{0,120}\?`)
+
+// vegringRecheck er vegringsvakta. Utfallet er observerbart, ikke en
+// formuleringsvakt på generelt grunnlag: turen HAR fått et verktøysvar som
+// eksplisitt ba den kjøre videre selv (verdidomene eller nærmeste verdi),
+// og svarer likevel med å be om lov. Da tvinges ÉN runde til.
+//
+// MÅLT (prod 2026-08-07): «Vi har ingen kunder merket sektoren Pub. Vil du
+// at jeg skal sjekke hvilke sektorer som faktisk finnes?» — koden hadde
+// allerede sagt hvilke verdier som fantes.
+func vegringRecheck(turn *motor.Turn, draft string) string {
+	if !askedForPermissionRe.MatchString(draft) {
+		return ""
+	}
+	served := false
+	for _, e := range turn.Evidence {
+		if strings.Contains(e, "har KUN disse verdiene") || strings.Contains(e, "Nærmeste verdier som FINNES") {
+			served = true
+			break
+		}
+	}
+	if !served {
+		return ""
+	}
+	return "STOPP: du spør om lov til noe du selv kan gjøre, og verktøysvaret har alt gitt deg " +
+		"verdiene du trenger. Kjør spørringen på nytt med den riktige verdien NÅ, og svar med " +
+		"resultatet. Aldri spør brukeren om tillatelse til å slå opp noe."
+}
+
 // motorReground er leveransens omforsøk: skriv svaret på nytt uten de
 // udekkede tallene. ETT kall; resultatet re-verifiseres i kode av kalleren.
 type motorReground struct {

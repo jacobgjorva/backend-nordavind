@@ -112,6 +112,11 @@ func (s *Server) runMotorV6(ctx context.Context, full map[string]any, emit func(
 		Deliver: delivery,
 		Log:     s.log,
 		Recheck: func(t *motor.Turn, draft string) string {
+			// Vegring først: den er den mest presise observasjonen (koden har
+			// alt servert verdiene), og krever ingen tallkontroll.
+			if corr := vegringRecheck(t, draft); corr != "" {
+				return corr
+			}
 			return memoryRecheck(t, draft, convo)
 		},
 	}
