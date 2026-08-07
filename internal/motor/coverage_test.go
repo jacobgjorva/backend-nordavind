@@ -57,7 +57,7 @@ func TestDeliveryRegroundsWithEvidence(t *testing.T) {
 			return "Mjød er størst med 514 millioner ifølge kildene."
 		},
 	}
-	turn := &Turn{Method: MethodAnalysis, Evidence: []string{"mjød 514 millioner"}}
+	turn := &Turn{Method: MethodAnalysis, UsedData: true, Evidence: []string{"mjød 514 millioner"}}
 
 	d.Deliver(context.Background(), turn, "Øl er størst med 586 millioner.")
 
@@ -80,7 +80,7 @@ func TestDeliveryFallsBackWhenRegroundStillDirty(t *testing.T) {
 			return "Fortsatt 586 millioner."
 		},
 	}
-	turn := &Turn{Method: MethodAnalysis, Evidence: []string{"mjød 514 millioner"}}
+	turn := &Turn{Method: MethodAnalysis, UsedData: true, Evidence: []string{"mjød 514 millioner"}}
 
 	d.Deliver(context.Background(), turn, "Øl er størst med 586 millioner.")
 
@@ -117,5 +117,37 @@ func TestDeliveryPassesConvoToVerifier(t *testing.T) {
 
 	if !strings.Contains(strings.Join(v.sawBasis, "|"), "17 000 kr per år") {
 		t.Errorf("samtalen skal være del av grunnlaget: %v", v.sawBasis)
+	}
+}
+
+// PROPORSJONALITET (prod-regresjon 2026-08-07): et websvar med kilder skal
+// ALDRI felles fordi ett tall ikke lot seg matche ordrett — det ble målt at
+// «1700» drepte et ellers korrekt svar om en artist.
+func TestDeliveryKeepsWebAnswerAndNotesTheNumber(t *testing.T) {
+	out := &fakeOut{}
+	v := &fakeVerifier{unsupported: []string{"1700"}}
+	d := &Delivery{Out: out, Verifier: v}
+	turn := &Turn{Method: MethodLookup, Evidence: []string{"kilde om Boston"}} // ingen UsedData
+
+	d.Deliver(context.Background(), turn, "Låten ble kjent etter 1700 spillelister på TikTok.")
+
+	if !strings.Contains(out.content[0], "spillelister") {
+		t.Fatalf("websvaret skulle vært levert: %q", out.content[0])
+	}
+	if !strings.Contains(out.content[0], "les det som anslag") {
+		t.Errorf("merknaden mangler: %q", out.content[0])
+	}
+}
+
+// Bedriftstall er den harde klassen: her felles svaret fortsatt.
+func TestDeliveryStillHoldsBusinessNumbers(t *testing.T) {
+	out := &fakeOut{}
+	d := &Delivery{Out: out, Verifier: covVerifier{dirty: "586"}}
+	turn := &Turn{Method: MethodAnalysis, UsedData: true, Evidence: []string{"mjød 514 millioner"}}
+
+	d.Deliver(context.Background(), turn, "Øl er størst med 586 millioner.")
+
+	if strings.Contains(out.content[0], "586") {
+		t.Fatalf("diktet bedriftstall slapp gjennom: %q", out.content[0])
 	}
 }

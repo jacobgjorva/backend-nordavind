@@ -177,6 +177,12 @@ type Turn struct {
 	// MemoryRetried: hukommelsesvakta har alt tvunget én verktøyrunde
 	// denne turen — den får aldri en runde til (ingen løkker på løkka).
 	MemoryRetried bool
+	// UsedData: turen spurte bedriftens egen database. Skiller de to
+	// risikoklassene: BEDRIFTSTALL som ikke står i verktøydataene er
+	// dikting brukeren tar beslutninger på; et tall i et websvar er
+	// kildekontrollens kjente gråsone (avrunding, utledning, tall i tekst
+	// vi ikke matchet ordrett) og skal aldri felle et ellers godt svar.
+	UsedData bool
 	// Handoff: turen tilhører en annen løype og er ikke levert her.
 	Handoff bool
 }
@@ -209,6 +215,8 @@ func (t *Turn) Record(r ToolResult) {
 		t.Searches++
 	case KindFetch:
 		t.Fetches++
+	case KindData:
+		t.UsedData = true
 	}
 	if r.Evidence && strings.TrimSpace(r.Text) != "" {
 		t.Evidence = append(t.Evidence, r.Text)

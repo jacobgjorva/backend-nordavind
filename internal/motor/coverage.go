@@ -1,5 +1,7 @@
 package motor
 
+import "strings"
+
 // Dekningsgulvet, historikk og nåværende form.
 //
 // V1 (2026-07-30): tall uten kildedekning fikk en «les som anslag»-fotnote.
@@ -30,4 +32,36 @@ func CoverageFallback() string {
 func MemoryHeld() string {
 	return "Jeg har ikke fått hentet disse tallene fra noen kilde denne turen, og jeg gjetter " +
 		"ikke på bedriftstall. Vil du at jeg prøver et konkret oppslag?"
+}
+
+// maxNotedNumbers: flere enn dette navngis ikke enkeltvis — da er hele
+// svaret ukildet, og den generelle merknaden sier det bedre.
+const maxNotedNumbers = 3
+
+// CoverageNote er den ærlige merknaden for turer som HAR kilder, men der et
+// enkelttall ikke lot seg matche ordrett. Svaret leveres — å felle det ville
+// kostet mer enn det redder (målt 2026-08-07: «1700» i et ellers korrekt
+// websvar drepte hele svaret).
+func CoverageNote(method MethodKey, turn *Turn, offenders []string) string {
+	if len(offenders) == 0 {
+		return ""
+	}
+	if BudgetFor(method).Searches == 0 || method == MethodNone {
+		return ""
+	}
+	if len(offenders) > maxNotedNumbers {
+		return "Merk: flere av tallene her fant jeg ikke igjen i kildene — les dem som anslag."
+	}
+	return "Merk: " + humanJoin(offenders) + " fant jeg ikke igjen i kildene — les det som anslag."
+}
+
+// humanJoin: «a, b og c».
+func humanJoin(items []string) string {
+	switch len(items) {
+	case 0:
+		return ""
+	case 1:
+		return items[0]
+	}
+	return strings.Join(items[:len(items)-1], ", ") + " og " + items[len(items)-1]
 }

@@ -172,29 +172,48 @@ func (d *Delivery) Deliver(ctx context.Context, turn *Turn, draft string) {
 				d.Log.Warn("motor v6: tall uten dekning i verktøydata",
 					"avvik", strings.Join(off, ", "), "metode", string(turn.Method))
 			}
-			if BudgetFor(turn.Method).Searches > 0 && turn.Method != MethodNone {
-				if len(turn.Evidence) == 0 {
-					if d.Log != nil {
-						d.Log.Warn("motor v6: hukommelsessvar holdt tilbake", "metode", string(turn.Method))
+			// PROPORSJONALITET (rettet 2026-08-07 etter prod-regresjon): et
+			// helt svar felles KUN der risikoen er reell — bedriftens egne
+			// tall. Første versjon felte alt, og et godt websvar om en
+			// artist forsvant fordi «1700» ikke sto ordrett i kildene. Det
+			// er nøyaktig feilen v1-v4-dommerne gjorde, advart om øverst i
+			// denne fila: de felte gode svar oftere enn de reddet dårlige.
+			//
+			// Skillet er det samme som intern-belegg-regelen i systemteksten:
+			// bedriftens forhold krever belegg, verdenskunnskap gjør ikke.
+			switch {
+			case turn.UsedData && len(turn.Evidence) > 0:
+				// Bedriftstall uten dekning i det databasen svarte: ETT
+				// omforsøk, ellers hold tilbake. Her tar brukeren
+				// beslutninger på tallet.
+				cleaned := ""
+				if d.Reground != nil {
+					if rw := strings.TrimSpace(d.Reground(ctx, turn, answer, off)); rw != "" &&
+						len(d.Verifier.Unsupported(rw, basis)) == 0 {
+						cleaned = rw
 					}
-					answer = MemoryHeld()
+				}
+				if cleaned != "" {
+					answer = cleaned
 				} else {
-					cleaned := ""
-					if d.Reground != nil {
-						if rw := strings.TrimSpace(d.Reground(ctx, turn, answer, off)); rw != "" &&
-							len(d.Verifier.Unsupported(rw, basis)) == 0 {
-							cleaned = rw
-						}
+					if d.Log != nil {
+						d.Log.Warn("motor v6: omforsøk holdt ikke, leverer kildefallback",
+							"metode", string(turn.Method))
 					}
-					if cleaned != "" {
-						answer = cleaned
-					} else {
-						if d.Log != nil {
-							d.Log.Warn("motor v6: omforsøk holdt ikke, leverer kildefallback",
-								"metode", string(turn.Method))
-						}
-						answer = CoverageFallback()
-					}
+					answer = CoverageFallback()
+				}
+			case len(turn.Evidence) == 0 && BudgetFor(turn.Method).Searches > 0 && turn.Method != MethodNone:
+				// Ingen kilder i det hele tatt: hele svaret er hukommelse.
+				if d.Log != nil {
+					d.Log.Warn("motor v6: hukommelsessvar holdt tilbake", "metode", string(turn.Method))
+				}
+				answer = MemoryHeld()
+			default:
+				// Turen HAR kilder, men et enkelttall lot seg ikke matche
+				// ordrett. Svaret leveres — med en ærlig merknad, slik at
+				// brukeren kan vurdere tallet selv.
+				if note := CoverageNote(turn.Method, turn, off); note != "" {
+					answer = strings.TrimRight(answer, " \n") + "\n\n" + note
 				}
 			}
 		}
